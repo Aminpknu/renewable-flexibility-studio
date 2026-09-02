@@ -68,9 +68,12 @@ def test_tomorrow_planning_does_not_simulate_future_dispatch(monkeypatch) -> Non
         "transmission_system_demand_mw": 27000.0,
     })
     monkeypatch.setattr(app, "fetch_day_ahead_demand", lambda _date: grid)
-    note, cards, forecast_fig, grid_fig = app.run_tomorrow_planning(1, "mixed", 100, 50, 25, 2, 50, 90)
+    note, cards, forecast_fig, grid_fig = app.run_tomorrow_planning(1, "mixed", 100, 50, 90, 90)
     text = str(note)
     assert "no actual generation or future battery dispatch is assumed" in text
+    assert "25 MW / 200 MWh" in text
     assert "Scheduled renewable export" in [trace.name for trace in forecast_fig.data]
     assert "NESO National Demand Forecast" in [trace.name for trace in grid_fig.data]
+    assert any(card.children[0].children == "Installed design" and "25 MW / 200 MWh" in card.children[1].children for card in cards)
+    assert any(card.children[0].children == "Planned starting SOC" and card.children[1].children == "50%" for card in cards)
     assert any(card.children[0].children == "Peak expected deviation" for card in cards)

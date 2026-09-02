@@ -12,11 +12,13 @@ import plotly.graph_objects as go
 from dash import Dash, Input, Output, State, dcc, html, no_update
 from plotly.subplots import make_subplots
 
+from adapters.design_grid import load_design_grid, scaled_design_grid
 from adapters.forecast_data import available_dates, load_historical_predictions, select_date
 from adapters.grid_context import fetch_day_ahead_demand
 from adapters.imbalance_settlement import load_system_price_history, select_system_prices
 from adapters.latest_forecast import latest_target_date, load_latest_forecast
 from engine.battery import BatteryConfig, simulate_reactive_firming
+from engine.design_sizing import select_stable_design
 from engine.imbalance import apply_imbalance_settlement, summarise_imbalance_settlement
 from engine.metrics import calculate_firming_metrics
 from engine.portfolio import build_virtual_forecast, build_virtual_portfolio
@@ -32,6 +34,7 @@ DATA_PATH = ROOT / "data" / "historical_backtest.csv"
 FULL_BACKTEST_PATH = ROOT / "outputs" / "full_backtest_summary.json"
 EXTENDED_SIZING_PATH = ROOT / "outputs" / "extended_sizing.csv"
 IMBALANCE_SUMMARY_PATH = ROOT / "outputs" / "imbalance_backtest_summary.json"
+DESIGN_GRID_PATH = ROOT / "outputs" / "design_sizing_grid_100mw.csv"
 LATEST_FORECAST_PATH = ROOT / "data" / "latest_forecast.csv"
 SYSTEM_PRICES_PATH = ROOT / "data" / "elexon_system_prices.csv"
 HISTORICAL_DATA = load_historical_predictions(DATA_PATH)
@@ -41,6 +44,7 @@ LATEST_TARGET_DATE = latest_target_date(LATEST_FORECAST)
 FULL_BACKTEST = json.loads(FULL_BACKTEST_PATH.read_text(encoding="utf-8"))
 IMBALANCE_BACKTEST = json.loads(IMBALANCE_SUMMARY_PATH.read_text(encoding="utf-8"))
 EXTENDED_SIZING = pd.read_csv(EXTENDED_SIZING_PATH)
+DESIGN_GRID = load_design_grid(DESIGN_GRID_PATH)
 DATE_OPTIONS = available_dates(HISTORICAL_DATA)
 DEFAULT_DATE = DATE_OPTIONS[-1]
 
@@ -222,6 +226,105 @@ def _imbalance_figure(frame: pd.DataFrame) -> go.Figure:
         xaxis_title="Settlement time (UTC)",
     )
     return figure
+
+
+
+def _design_heatmap(grid: pd.DataFrame, target_pct: float, reliability_pct: float, selected: dict[str, Any] | None) -> go.Figure:
+    target = int(round(float(target_pct)))
+    work = grid.copy()
+    work["worst_overall_pct"] = work[["development_overall_absorbed_pct", "locked_overall_absorbed_pct"]].min(axis=1)
+    work["worst_days_pct"] = work[[f"development_days{target}_pct", f"locked_days{target}_pct"]].min(axis=1)
+    work["display_reliability_pct"] = work["worst_days_pct"].where(work["worst_overall_pct"].ge(target))
+    pivot = work.pivot(index="power_mw", columns="duration_hours", values="display_reliability_pct")
+    overall = work.pivot(index="power_mw", columns="duration_hours", values="worst_overall_pct")
+    figure = go.Figure(go.Heatmap(
+        x=[f"{value:g} h" for value in pivot.columns], y=pivot.index, z=pivot.to_numpy(),
+        customdata=overall.to_numpy(), zmin=0, zmax=100,
+        colorbar={"title": "Days meeting target %"},
+        hovertemplate="Duration %{x}<br>Power %{y:.1f} MW<br>Worst-period days meeting target %{z:.1f}%<br>Worst-period overall absorption %{customdata:.1f}%<extra></extra>",
+    ))
+    if selected is not None:
+        figure.add_trace(go.Scatter(
+            x=[f"{selected['duration_hours']:g} h"], y=[selected["power_mw"]],
+            mode="markers", marker={"symbol": "star", "size": 17}, name="Minimum stable design",
+            hovertemplate="Selected %{y:.1f} MW / " + f"{selected['energy_mwh']:.0f} MWh<extra></extra>",
+        ))
+    figure.add_hline(y=0, line_width=0)
+    figure.update_layout(
+        xaxis_title="Battery duration", yaxis_title="Battery power (MW)", height=465,
+        margin=dict(l=55, r=25, t=55, b=50),
+        title=f"Two-period stability for {target}% firming target · required reliability {reliability_pct:.0f}%",
+    )
+    return figure
+
+
+def _best_standard_design(grid: pd.DataFrame, target_pct: float, reliability_pct: float) -> dict[str, Any]:
+    target = int(round(float(target_pct)))
+    standard = grid.loc[grid["duration_hours"].le(12)].copy()
+    standard["worst_overall_pct"] = standard[["development_overall_absorbed_pct", "locked_overall_absorbed_pct"]].min(axis=1)
+    standard["worst_days_pct"] = standard[[f"development_days{target}_pct", f"locked_days{target}_pct"]].min(axis=1)
+    feasible = standard.loc[
+        standard["worst_overall_pct"].ge(target) & standard["worst_days_pct"].ge(float(reliability_pct))
+    ].sort_values(["energy_mwh", "power_mw", "duration_hours"])
+    if not feasible.empty:
+        result = feasible.iloc[0].to_dict()
+        result["standard_gate_met"] = True
+        return result
+    result = standard.sort_values(["worst_overall_pct", "worst_days_pct", "energy_mwh"], ascending=[False, False, True]).iloc[0].to_dict()
+    result["standard_gate_met"] = False
+    return result
+
+
+def _design_cards_and_note(grid: pd.DataFrame, target_pct: float, reliability_pct: float):
+    target = int(round(float(target_pct)))
+    selected = select_stable_design(grid, target_pct, reliability_pct)
+    standard = _best_standard_design(grid, target_pct, reliability_pct)
+    if selected is None:
+        work = grid.copy()
+        work["worst_overall_pct"] = work[["development_overall_absorbed_pct", "locked_overall_absorbed_pct"]].min(axis=1)
+        work["worst_days_pct"] = work[[f"development_days{target}_pct", f"locked_days{target}_pct"]].min(axis=1)
+        best = work.sort_values(["worst_overall_pct", "worst_days_pct"], ascending=False).iloc[0]
+        note = html.Div([
+            html.Strong("No tested design meets this stability gate."),
+            html.P(f"The strongest tested case reaches {best['worst_overall_pct']:.1f}% overall absorption in the weaker historical period and meets the {target}% daily target on {best['worst_days_pct']:.1f}% of days. Capacity alone is not enough under this operating rule; lower the requirement or change the operating strategy."),
+        ])
+        return [], note, None
+    worst_overall = min(selected["development_overall_absorbed_pct"], selected["locked_overall_absorbed_pct"])
+    worst_days = min(selected[f"development_days{target}_pct"], selected[f"locked_days{target}_pct"])
+    mean_reset = float(selected["grid_reset_import_mwh"]) / 450.0
+    mean_reset_export = float(selected["grid_reset_export_mwh"]) / 450.0
+    cards = [
+        _kpi_card("Design power", f"{selected['power_mw']:.0f} MW", "Minimum-energy tested stable design"),
+        _kpi_card("Design energy", f"{selected['energy_mwh']:.0f} MWh", "Usable sizing benchmark before economics"),
+        _kpi_card("Duration", f"{selected['duration_hours']:.0f} h", str(selected["classification"])),
+        _kpi_card("Worst-period overall", f"{worst_overall:.1f}%", f"Must be at least {target}% in both historical regimes"),
+        _kpi_card("Worst-period reliability", f"{worst_days:.1f}%", f"Share of days meeting the {target}% daily firming target"),
+        _kpi_card("Grid energy to restore SOC", f"{mean_reset:.1f} MWh/day import", "Average pre-day grid import used to restore 50% SOC"),
+        _kpi_card("Grid energy returned", f"{mean_reset_export:.1f} MWh/day export", "Average pre-day export when the battery ends above 50% SOC"),
+    ]
+    duration_warning = (
+        "This result is in long-duration storage territory, not a conventional short-duration lithium-ion BESS."
+        if float(selected["duration_hours"]) > 12 else
+        "This result remains within the tested 1–12 h BESS design envelope."
+    )
+    if standard["standard_gate_met"]:
+        standard_text = (
+            f"The same stability gate is achievable within the ≤12 h BESS envelope. Its minimum tested design is "
+            f"{standard['power_mw']:.0f} MW / {standard['energy_mwh']:.0f} MWh ({standard['duration_hours']:.0f} h)."
+        )
+    else:
+        standard_text = (
+            f"No tested ≤12 h BESS meets the same gate. The strongest ≤12 h case is {standard['power_mw']:.0f} MW / "
+            f"{standard['energy_mwh']:.0f} MWh ({standard['duration_hours']:.0f} h), with worst-period overall absorption "
+            f"{standard['worst_overall_pct']:.1f}% and {standard['worst_days_pct']:.1f}% of days meeting the {target}% daily target."
+        )
+    note = html.Div([
+        html.Strong(f"Minimum tested design stable across both historical regimes: {selected['power_mw']:.0f} MW / {selected['energy_mwh']:.0f} MWh ({selected['duration_hours']:.0f} h)."),
+        html.P(f"Apr 2025–Mar 2026: {selected['development_overall_absorbed_pct']:.1f}% overall, {selected[f'development_days{target}_pct']:.1f}% of days meet target. Apr–Jun 2026: {selected['locked_overall_absorbed_pct']:.1f}% overall, {selected[f'locked_days{target}_pct']:.1f}% of days meet target."),
+        html.P(duration_warning + " " + standard_text),
+        html.P("Sizing mode: grid-connected reserve BESS. SOC is restored to 50% before each day, then the battery reacts only to renewable forecast errors during that day. Grid-restoration energy is tracked, not treated as free."),
+    ])
+    return cards, note, selected
 
 
 def _kpi_card(label: str, value: str, help_text: str) -> html.Div:
@@ -498,9 +601,9 @@ app.layout = html.Div(
                                     id="wind-share-container",
                                 ),
                                 html.Hr(),
-                                html.Label("Battery power (MW)"),
+                                html.Label("Historical scenario battery power (MW)"),
                                 dcc.Input(id="power-input", type="number", min=1, max=250, step=1, value=25),
-                                html.Label("Battery duration"),
+                                html.Label("Historical scenario battery duration"),
                                 dcc.RadioItems(
                                     id="duration-input",
                                     options=[
@@ -512,7 +615,7 @@ app.layout = html.Div(
                                     inline=True,
                                     className="radio-row",
                                 ),
-                                html.Label("Initial battery SOC at start of selected day (%)"),
+                                html.Label("Initial SOC for selected historical day (%)"),
                                 dcc.Slider(
                                     id="soc-input",
                                     min=10,
@@ -523,7 +626,7 @@ app.layout = html.Div(
                                     tooltip={"placement": "bottom", "always_visible": False},
                                 ),
                                 html.Div(id="initial-energy-note", className="control-help"),
-                                html.Label("Round-trip efficiency (%)"),
+                                html.Label("Historical scenario round-trip efficiency (%)"),
                                 dcc.Slider(
                                     id="efficiency-input",
                                     min=80,
@@ -533,7 +636,7 @@ app.layout = html.Div(
                                     marks={80: "80", 90: "90", 100: "100"},
                                     tooltip={"placement": "bottom", "always_visible": False},
                                 ),
-                                html.Label("Sizing target: deviations absorbed"),
+                                html.Label("Selected-day sizing target: deviations absorbed"),
                                 dcc.Dropdown(
                                     id="target-input",
                                     options=[
@@ -548,7 +651,7 @@ app.layout = html.Div(
                                 html.Div(
                                     [
                                         html.Button("Run scenario", id="run-button", n_clicks=0, className="primary-button"),
-                                        html.Button("Find minimum", id="size-button", n_clicks=0, className="secondary-button"),
+                                        html.Button("Size selected day", id="size-button", n_clicks=0, className="secondary-button"),
                                     ],
                                     className="button-row",
                                 ),
@@ -575,6 +678,48 @@ app.layout = html.Div(
                 ),
                 html.Section(
                     [
+                        html.H2("Future battery sizing benchmark"),
+                        html.P(
+                            "This is the main design output. It uses all 450 out-of-sample historical days as future-like evidence and requires the chosen MW/MWh design to remain stable in both Apr 2025–Mar 2026 and Apr–Jun 2026. Portfolio capacity and wind/solar mix come from the controls above.",
+                            className="section-copy",
+                        ),
+                        html.P(
+                            "Practical sizing mode assumes a grid-connected reserve battery: SOC is restored to 50% before each operating day, then the battery reacts only to renewable forecast deviations during that day. The required grid-restoration energy is measured and will be costed in the economics stage.",
+                            className="section-copy",
+                        ),
+                        html.Div(
+                            [
+                                html.Div([
+                                    html.Label("Daily firming target"),
+                                    dcc.Dropdown(
+                                        id="design-target-input",
+                                        options=[{"label": f"{v}% of forecast-error energy", "value": v} for v in (80, 90, 95)],
+                                        value=90, clearable=False,
+                                    ),
+                                ]),
+                                html.Div([
+                                    html.Label("Required reliability across days"),
+                                    dcc.Dropdown(
+                                        id="design-reliability-input",
+                                        options=[{"label": f"At least {v}% of days", "value": v} for v in (80, 90, 95)],
+                                        value=90, clearable=False,
+                                    ),
+                                ]),
+                            ],
+                            className="design-controls",
+                        ),
+                        html.Div(id="design-note", className="recommendation-box"),
+                        html.Div(id="design-kpi-grid", className="kpi-grid"),
+                        dcc.Graph(
+                            id="design-heatmap",
+                            figure=_empty_figure("Future sizing evidence is loading."),
+                            config={"displaylogo": False},
+                        ),
+                    ],
+                    className="download-section design-section",
+                ),
+                html.Section(
+                    [
                         html.Div(
                             [
                                 html.H2("Selected-day battery sizing (exploratory)"),
@@ -583,14 +728,14 @@ app.layout = html.Div(
                                     className="section-copy",
                                 ),
                                 html.Div(
-                                    "No sizing result yet. Choose a historical date and target, then click ‘Find minimum’ in the left-hand controls.",
+                                    "No sizing result yet. Choose a historical date and target, then click ‘Size selected day’ in the left-hand controls.",
                                     id="sizing-recommendation",
                                     className="recommendation-box sizing-placeholder",
                                 ),
                             ],
                             className="sizing-copy",
                         ),
-                        dcc.Graph(id="sizing-chart", figure=_empty_figure("Click ‘Find minimum’ to run the sizing comparison."), config={"displaylogo": False}),
+                        dcc.Graph(id="sizing-chart", figure=_empty_figure("Click ‘Size selected day’ to run the one-day sizing comparison."), config={"displaylogo": False}),
                     ],
                     className="sizing-section",
                 ),
@@ -620,7 +765,7 @@ app.layout = html.Div(
                     [
                         html.H2(f"Tomorrow planning & GB grid context · {LATEST_TARGET_DATE}"),
                         html.P(
-                            "Tomorrow mode uses the latest V2 wind/solar point forecast as an illustrative scheduled export. Actual generation is not known yet, so the Studio does not simulate a future charge/discharge path. Instead it shows the expected forecast range and the battery reserve/headroom available against that uncertainty.",
+                            "Tomorrow mode uses the latest V2 wind/solar point forecast as an illustrative scheduled export and automatically carries forward the battery selected by the Future battery sizing benchmark above. Actual generation is not known yet, so the Studio does not simulate a future charge/discharge path. It shows the expected range plus the installed-design reserve/headroom at the current 50% starting-SOC baseline.",
                             className="section-copy",
                         ),
                         html.Button("Refresh tomorrow planning", id="tomorrow-button", n_clicks=0, className="primary-button"),
@@ -637,14 +782,14 @@ app.layout = html.Div(
                 ),
                 html.Section(
                     [
-                        html.H2("450-day continuous-SOC benchmark"),
+                        html.H2("Renewable-only continuous-SOC stress test"),
                         html.P(
-                            "The cards below use the full out-of-sample V2 archive with one initial SOC only. SOC carries across midnight and is never reset each day. The fixed benchmark uses a 100 MW virtual portfolio, 25 MW / 50 MWh battery, 90% round-trip efficiency and no grid charging.",
+                            "This intentionally harsh stress test prohibits grid SOC restoration. SOC carries across all 450 days and is never reset at midnight. It explains why a renewable-only strategy can require very long energy duration. The fixed comparison uses a 100 MW virtual portfolio, 25 MW / 50 MWh battery, 90% round-trip efficiency and no grid charging.",
                             className="section-copy",
                         ),
                         *_long_run_benchmark_content(),
                         html.P(
-                            "The selected-day controls above remain useful for operational interpretation, but a single day should not be treated as the long-run storage-sizing conclusion.",
+                            "Use the Future battery sizing benchmark above for the practical MW/MWh design. This renewable-only result is retained as a boundary/stress case, while the selected-day controls remain diagnostic only.",
                             className="section-copy",
                         ),
                     ],
@@ -703,6 +848,35 @@ def explain_initial_energy(power_mw: float, duration_hours: float, initial_soc_p
 )
 def show_wind_share(portfolio_type: str) -> str:
     return "control-visible" if portfolio_type == "mixed" else "control-muted"
+
+
+@app.callback(
+    Output("design-note", "children"),
+    Output("design-kpi-grid", "children"),
+    Output("design-heatmap", "figure"),
+    Input("portfolio-input", "value"),
+    Input("capacity-input", "value"),
+    Input("wind-share-input", "value"),
+    Input("design-target-input", "value"),
+    Input("design-reliability-input", "value"),
+)
+def update_future_design(
+    portfolio_type: str,
+    capacity_mw: float,
+    wind_share_pct: float,
+    target_pct: float,
+    reliability_pct: float,
+):
+    try:
+        grid = scaled_design_grid(
+            DESIGN_GRID, portfolio_type, float(capacity_mw), float(wind_share_pct)
+        )
+        cards, note, selected = _design_cards_and_note(grid, target_pct, reliability_pct)
+        figure = _design_heatmap(grid, target_pct, reliability_pct, selected)
+        return note, cards, figure
+    except (TypeError, ValueError, KeyError) as error:
+        message = f"Future battery sizing could not be calculated: {error}"
+        return message, [], _empty_figure(message)
 
 
 @app.callback(
@@ -893,27 +1067,44 @@ def update_imbalance_settlement(stored: str | None, date_value: str):
     State("portfolio-input", "value"),
     State("capacity-input", "value"),
     State("wind-share-input", "value"),
-    State("power-input", "value"),
-    State("duration-input", "value"),
-    State("soc-input", "value"),
-    State("efficiency-input", "value"),
+    State("design-target-input", "value"),
+    State("design-reliability-input", "value"),
 )
 def run_tomorrow_planning(
-    _clicks: int, portfolio_type: str, capacity_mw: float, wind_share_pct: float,
-    battery_power_mw: float, duration_hours: float, initial_soc_pct: float,
-    efficiency_pct: float,
+    _clicks: int,
+    portfolio_type: str,
+    capacity_mw: float,
+    wind_share_pct: float,
+    design_target_pct: float,
+    design_reliability_pct: float,
 ):
     try:
+        design_grid = scaled_design_grid(
+            DESIGN_GRID, portfolio_type, float(capacity_mw), float(wind_share_pct)
+        )
+        selected_design = select_stable_design(
+            design_grid, design_target_pct, design_reliability_pct
+        )
+        if selected_design is None:
+            raise ValueError("No stable future design exists for the selected target/reliability gate.")
         forecast, config, planning = _tomorrow_planning_data(
-            portfolio_type, capacity_mw, wind_share_pct, battery_power_mw,
-            duration_hours, initial_soc_pct, efficiency_pct,
+            portfolio_type, capacity_mw, wind_share_pct,
+            selected_design["power_mw"], selected_design["duration_hours"],
+            50.0, 90.0,
         )
     except (TypeError, ValueError, KeyError) as error:
         message = f"Tomorrow planning could not be calculated: {error}"
         empty = _empty_figure(message)
         return message, [], empty, empty
+
     uncertainty = planning["uncertainty"]
     cards = [
+        _kpi_card(
+            "Installed design",
+            f"{selected_design['power_mw']:.0f} MW / {selected_design['energy_mwh']:.0f} MWh",
+            f"Selected by the {design_target_pct:.0f}% firming / {design_reliability_pct:.0f}% days future-sizing gate",
+        ),
+        _kpi_card("Planned starting SOC", "50%", "Current baseline reserve position; Stage B will optimise this from tomorrow uncertainty"),
         _kpi_card("Forecast energy", f"{planning['forecast_energy_mwh']:.1f} MWh", "Tomorrow's virtual portfolio schedule"),
         _kpi_card("Peak forecast", f"{planning['peak_forecast_mw']:.1f} MW", "Highest scheduled renewable export"),
         _kpi_card("Discharge reserve", f"{planning['discharge_reserve_mwh']:.1f} MWh", "Deliverable energy above the 10% SOC reserve"),
@@ -921,20 +1112,39 @@ def run_tomorrow_planning(
     ]
     if uncertainty.get("available"):
         cards.extend([
-            _kpi_card("Peak expected deviation", f"{planning['peak_interval_deviation_mw']:.1f} MW", "Largest one-sided distance from schedule to expected range"),
-            _kpi_card("Single-period MW coverage", f"{planning['battery_power_coverage_pct']:.0f}%", "Battery MW divided by the peak expected one-period deviation; this does not prove sufficient MWh for the whole day"),
+            _kpi_card(
+                "Peak expected deviation",
+                f"{planning['peak_interval_deviation_mw']:.1f} MW",
+                "Largest one-sided distance from schedule to the expected range",
+            ),
+            _kpi_card(
+                "Single-period MW coverage",
+                f"{planning['battery_power_coverage_pct']:.0f}%",
+                "Installed design MW divided by the peak expected one-period deviation; this does not prove sufficient MWh for the whole day",
+            ),
         ])
     forecast_figure = _tomorrow_forecast_figure(forecast)
 
-    issue = pd.Timestamp(LATEST_FORECAST["forecast_created_utc"].iloc[0]).strftime("%Y-%m-%d %H:%M UTC")
-    note_parts: list[Any] = [html.Div(
-        f"Renewable forecast target {LATEST_TARGET_DATE}; V2 bundle created {issue}. Planning only: no actual generation or future battery dispatch is assumed.",
-        className="scenario-note-line",
-    )]
+    issue = pd.Timestamp(LATEST_FORECAST["forecast_created_utc"].iloc[0]).strftime(
+        "%Y-%m-%d %H:%M UTC"
+    )
+    note_parts: list[Any] = [
+        html.Div(
+            f"Future design in use: {selected_design['power_mw']:.0f} MW / {selected_design['energy_mwh']:.0f} MWh "
+            f"({selected_design['duration_hours']:.0f} h), selected by the {design_target_pct:.0f}% firming / "
+            f"{design_reliability_pct:.0f}% days stability gate. Planned starting SOC is 50%.",
+            className="scenario-note-line",
+        ),
+        html.Div(
+            f"Renewable forecast target {LATEST_TARGET_DATE}; V2 bundle created {issue}. Planning only: no actual generation or future battery dispatch is assumed.",
+            className="scenario-note-line",
+        ),
+    ]
     if uncertainty.get("available"):
         note_parts.append(html.Div(
-            f"Uncertainty band: nominal {uncertainty['nominal_coverage_pct']:.0f}% range calibrated from {uncertainty['history_days']} earlier out-of-sample days "
-            f"({uncertainty['calibration_start']} to {uncertainty['calibration_end']}); mean width {uncertainty['mean_interval_width_mw']:.2f} MW.",
+            f"Uncertainty band: nominal {uncertainty['nominal_coverage_pct']:.0f}% range calibrated from "
+            f"{uncertainty['history_days']} earlier out-of-sample days ({uncertainty['calibration_start']} to "
+            f"{uncertainty['calibration_end']}); mean width {uncertainty['mean_interval_width_mw']:.2f} MW.",
             className="scenario-note-line uncertainty-line",
         ))
     else:
@@ -947,13 +1157,18 @@ def run_tomorrow_planning(
         grid = fetch_day_ahead_demand(LATEST_TARGET_DATE)
         grid_figure = _grid_demand_figure(grid)
         merged = forecast[["settlement_period", "forecast_mw"]].merge(
-            grid[["settlement_period", "national_demand_mw"]], on="settlement_period", validate="one_to_one"
+            grid[["settlement_period", "national_demand_mw"]],
+            on="settlement_period", validate="one_to_one",
         )
-        max_share = float((100.0 * merged["forecast_mw"] / merged["national_demand_mw"]).max())
+        max_share = float(
+            (100.0 * merged["forecast_mw"] / merged["national_demand_mw"]).max()
+        )
         publish = grid["publish_time_utc"].max().strftime("%Y-%m-%d %H:%M UTC")
         note_parts.append(html.Div(
-            f"Grid context: official National Demand Forecast ranges {grid['national_demand_mw'].min()/1000:.1f}–{grid['national_demand_mw'].max()/1000:.1f} GW; "
-            f"latest included publication {publish}. At its largest relative point, this {float(capacity_mw):.0f} MW virtual portfolio schedule is about {max_share:.2f}% of GB National Demand.",
+            f"Grid context: official National Demand Forecast ranges {grid['national_demand_mw'].min()/1000:.1f}–"
+            f"{grid['national_demand_mw'].max()/1000:.1f} GW; latest included publication {publish}. "
+            f"At its largest relative point, this {float(capacity_mw):.0f} MW virtual portfolio schedule is about "
+            f"{max_share:.2f}% of GB National Demand.",
             className="scenario-note-line",
         ))
     except Exception as error:
@@ -962,6 +1177,10 @@ def run_tomorrow_planning(
             "Official grid-demand context could not be loaded; the renewable planning result remains available.",
             className="scenario-note-line uncertainty-warning",
         ))
+    note_parts.append(html.Div(
+        "Stage B will replace the fixed 50% starting-SOC assumption with an uncertainty-aware reserve recommendation for tomorrow.",
+        className="scenario-note-line",
+    ))
     return html.Div(note_parts), cards, forecast_figure, grid_figure
 
 

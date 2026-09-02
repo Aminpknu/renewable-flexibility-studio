@@ -11,7 +11,7 @@ python -m pytest -q
 Latest verified result:
 
 ```text
-34 passed
+44 passed
 ```
 
 Coverage includes historical-bundle validation, complete 46/48/50-period days, wind/solar/mixed portfolio scaling, battery power/SOC/efficiency constraints, no simultaneous charge/discharge, firming metrics, sizing search, V2 manifest integrity, and explicit proof that multi-day SOC carries across midnight without a daily reset.
@@ -36,13 +36,29 @@ The interval is a rolling residual-based uncertainty estimate and should not be 
 
 ## Tomorrow planning and GB grid-context validation
 
-The Studio consumes `data/latest_forecast.csv`, a compact V2 forecast-only bundle containing one complete 46/48/50-period target day. Tomorrow mode never creates an actual generation series or future charge/discharge path. It treats the point forecast as an illustrative scheduled renewable export and reports battery discharge reserve, charge headroom and single-period MW capability against the uncertainty band.
+The Studio consumes `data/latest_forecast.csv`, a compact V2 forecast-only bundle containing one complete 46/48/50-period target day. Tomorrow mode never creates an actual generation series or future charge/discharge path. It treats the point forecast as an illustrative scheduled renewable export, automatically uses the battery selected by the current future-sizing target/reliability gate, and reports that installed design's discharge reserve, charge headroom and single-period MW capability against the uncertainty band. The current baseline starts tomorrow at 50% SOC; uncertainty-aware SOC optimisation is Stage B.
 
 For the current 3 September 2026 bundle, the default 100 MW mixed portfolio forecasts 638.4 MWh of daily renewable energy and a 42.0 MW peak. Its nominal 80% future range is calibrated from 115 earlier out-of-sample days (7 March–30 June 2026) using a 180-day lookback; mean band width is 8.00 MW.
 
 The 180-day setting was checked on all 90 locked Apr–Jun 2026 dates: wind coverage 82.31%, solar 85.83% and mixed 82.38%. It is somewhat conservative relative to the nominal 80% target.
 
 The official Elexon Insights day-ahead demand endpoint was tested directly. It returned 48 settlement periods for 3 September 2026 after explicit target-date filtering, with NESO National Demand Forecast values used only as grid-scale context. Tests mock the endpoint and enforce the 46/48/50-period contract.
+
+## Future battery-sizing validation
+
+The main design grid contains **2,541** precomputed configurations: 21 wind-share mixes × 11 power fractions × 11 durations. It uses the grid-connected reserve mode with 50% pre-day SOC restoration, 10–90% SOC bounds and 90% round-trip efficiency. Grid restoration energy is recorded separately. Canonical grid SHA-256: `3c4a3063cc97fb23f0ded7fc85f21fd3d81a54abbb21df08335eecb040573463`.
+
+A stable design must meet both the selected overall firming target and the selected daily reliability target in Apr 2025–Mar 2026 **and** Apr–Jun 2026. For the default 90%/90% gate on a 100 MW portfolio:
+
+| Portfolio | Minimum stable tested design | Apr25–Mar26 overall / days | Apr–Jun26 overall / days |
+|---|---:|---:|---:|
+| Solar | 25 MW / 150 MWh (6 h) | 95.42% / 93.89% | 96.09% / 91.11% |
+| Mixed 50/50 | **25 MW / 200 MWh (8 h)** | **96.30% / 93.33%** | **97.53% / 95.56%** |
+| Wind | 15 MW / 360 MWh (24 h) | 95.08% / 91.11% | 98.31% / 95.56% |
+
+For the default mixed design, restoring SOC to 50% requires on average about **21.1 MWh/day grid import** and **15.4 MWh/day grid export** across the 450-day evidence set. Those flows are inputs to the future economics stage and are not assumed to be free.
+
+The earlier renewable-only continuous design scan is retained as a stress test. Without pre-day grid SOC restoration, even the largest tested mixed cases reached only about **78.9% overall absorption in Apr–Jun 2026**, so no 80% two-period stability design existed. This is why the practical sizing mode is explicitly grid-connected rather than disguising an infeasible no-grid requirement as a battery-sizing answer.
 
 ## Historical Elexon imbalance-settlement validation
 
@@ -60,7 +76,7 @@ For the mixed portfolio, mean daily gross exposure falls from £4,533 to £2,497
 
 For the 30 June 2026 wind example used in the interface review, gross exposure falls from about £13,276 to £10,826 (18.46%) while System Price ranges from about £67 to £175/MWh.
 
-## 450-day continuous-SOC benchmark
+## Renewable-only continuous-SOC stress test
 
 Configuration: 100 MW virtual portfolio, 25 MW / 50 MWh battery, 90% round-trip efficiency, 50% initial SOC, 10–90% SOC limits, 30-minute intervals, reactive firming and no grid charging.
 

@@ -28,13 +28,21 @@ Explicit source exclusions are 6–10 August 2025 and 24 June 2026. They are not
 
 ## Latest forecast bundle
 
-Tomorrow planning reads `data/latest_forecast.csv`, validated separately from the historical archive. Required fields are forecast creation time, one target date, settlement period, valid time, wind/solar predicted capacity factors and embedded capacities. The bundle must contain exactly one complete 46/48/50-period target day. `data/latest_forecast_manifest.json` records target date, creation time, row count and SHA-256 checksum.
+Tomorrow planning reads `data/latest_forecast.csv`, validated separately from the historical archive. The battery shown in Tomorrow planning is resolved from `outputs/design_sizing_grid_100mw.csv` using the currently selected future-design target/reliability gate; the historical battery controls do not determine tomorrow's installed design. Required fields are forecast creation time, one target date, settlement period, valid time, wind/solar predicted capacity factors and embedded capacities. The bundle must contain exactly one complete 46/48/50-period target day. `data/latest_forecast_manifest.json` records target date, creation time, row count and SHA-256 checksum.
 
 The standalone Studio does not run or import the forecasting ML models. The forecasting project remains the producer of the forecast bundle; `scripts/sync_latest_forecast.py` is the local/manual handoff until automated cross-repository publishing is enabled.
 
 ## Live grid context
 
 Tomorrow mode may query the official Elexon Insights day-ahead demand API and then explicitly filter to the target settlement date. The grid adapter validates one complete 46/48/50-period National Demand Forecast series. This grid context is external public data and is not part of the renewable forecast bundle.
+
+## Future sizing design grid
+
+`outputs/design_sizing_grid_100mw.csv` is the precomputed practical future-sizing evidence for a 100 MW reference portfolio. It contains 2,541 rows covering every 5% wind-share step, 11 power fractions and 11 durations. Required performance fields include development/Apr–Jun overall absorption, daily reliability at 80/90/95% targets, grid SOC-restoration import/export, limitation counts and operating-mode label.
+
+`outputs/design_sizing_grid_manifest.json` locks the candidate grid, SOC/efficiency assumptions, selection rule, default 90%/90% designs and a line-ending-independent SHA-256. Power, MWh and grid-restoration energy scale linearly with portfolio nameplate MW; duration and percentage performance remain unchanged.
+
+The operating-mode value is `grid_connected_daily_soc_restore_50pct`. This means SOC is restored to 50% before each operating day; no intraday grid charging is included in the firming simulation.
 
 ## Historical Elexon settlement bundle
 

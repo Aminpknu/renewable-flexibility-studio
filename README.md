@@ -15,6 +15,7 @@ A user can:
 - inspect renewable delivery, charge/discharge and state of charge;
 - compare forecast error before and after the battery;
 - inspect a leakage-safe rolling **80% prediction interval** and see which historical periods fell outside the expected range;
+- size a battery for **future operation** using a 2,541-cell stability grid across 450 out-of-sample days, with 80/90/95% firming and reliability targets;
 - inspect the latest **tomorrow** V2 renewable forecast as a planning schedule with a future uncertainty band;
 - place that schedule in real GB grid context using the official half-hourly NESO National Demand Forecast served by Elexon Insights;
 - translate each historical forecast deviation into a BSC-style imbalance volume and official Elexon System-Price cashflow, before and after battery firming;
@@ -87,7 +88,23 @@ The UI also reports **gross cash-out exposure**, defined as the absolute size of
 
 The frozen Elexon archive covers the same 450 target days and all 21,600 half-hours as the V2 forecast-error bundle.
 
-## Current 450-day continuous-SOC evidence
+## Future battery sizing benchmark
+
+This is now the main design layer. The practical sizing mode assumes a **grid-connected reserve BESS**: SOC is restored to 50% before each operating day, then the battery reacts only to renewable forecast deviations during that day. Grid energy used to restore SOC is measured explicitly and is not treated as free. Intraday grid charging remains excluded.
+
+The design grid tests 11 power levels (5–100% of portfolio MW) and 11 durations (1–72 h) for every 5% wind-share step. A candidate must meet the selected overall firming target and the selected percentage-of-days reliability target in both Apr 2025–Mar 2026 and Apr–Jun 2026. The minimum-energy tested candidate is selected, then lower MW and duration break ties. Because the later period has already been examined in this project, it is described as a second-period stability check, not a new sealed battery-sizing holdout.
+
+For the default **90% firming / 90% of days** gate on a 100 MW portfolio:
+
+| Portfolio | Minimum stable tested design | Development overall / days | Apr–Jun 2026 overall / days |
+|---|---:|---:|---:|
+| Solar | 25 MW / 150 MWh (6 h) | 95.4% / 93.9% | 96.1% / 91.1% |
+| Mixed 50/50 | **25 MW / 200 MWh (8 h)** | **96.3% / 93.3%** | **97.5% / 95.6%** |
+| Wind | 15 MW / 360 MWh (24 h) | 95.1% / 91.1% | 98.3% / 95.6% |
+
+Power and energy scale linearly with portfolio nameplate capacity; duration and percentage performance do not. Mixed-portfolio evidence is precomputed at every 5% wind-share value supported by the UI. Durations above 12 h are labelled **long-duration storage territory** rather than conventional short-duration BESS.
+
+## Renewable-only continuous-SOC stress test
 
 For a 100 MW virtual portfolio with a 25 MW / 50 MWh battery, 90% round-trip efficiency, 10–90% SOC limits and no grid charging, continuous operation absorbs about **33.5% of wind**, **50.2% of solar** and **44.4% of 50/50 mixed** absolute forecast-deviation energy. SOC ends at its minimum bound, showing that energy availability and conversion losses matter across long horizons.
 

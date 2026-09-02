@@ -1,0 +1,114 @@
+{
+  "schema_version": "1.0",
+  "purpose": "future_battery_sizing_benchmark",
+  "reference_portfolio_capacity_mw": 100.0,
+  "wind_share_steps_pct": [
+    0,
+    5,
+    10,
+    15,
+    20,
+    25,
+    30,
+    35,
+    40,
+    45,
+    50,
+    55,
+    60,
+    65,
+    70,
+    75,
+    80,
+    85,
+    90,
+    95,
+    100
+  ],
+  "power_fractions_of_portfolio": [
+    0.05,
+    0.1,
+    0.15,
+    0.2,
+    0.25,
+    0.3,
+    0.4,
+    0.5,
+    0.6,
+    0.75,
+    1.0
+  ],
+  "duration_candidates_hours": [
+    1,
+    2,
+    4,
+    6,
+    8,
+    12,
+    16,
+    24,
+    36,
+    48,
+    72
+  ],
+  "candidate_cells_per_mix": 121,
+  "rows": 2541,
+  "operating_mode": "grid_connected_daily_soc_restore_50pct",
+  "initial_and_daily_target_soc_pct": 50.0,
+  "soc_bounds_pct": [
+    10.0,
+    90.0
+  ],
+  "round_trip_efficiency_pct": 90.0,
+  "intraday_grid_charging": false,
+  "pre_day_soc_restoration_energy_tracked": true,
+  "design_targets_pct": [
+    80,
+    90,
+    95
+  ],
+  "reliability_targets_pct": [
+    80,
+    90,
+    95
+  ],
+  "stability_periods": [
+    "development_oof",
+    "locked_test"
+  ],
+  "selection_rule": "minimum energy_mwh, then power_mw, then duration_hours, while meeting overall and daily reliability gates in both historical periods",
+  "sha256": "3c4a3063cc97fb23f0ded7fc85f21fd3d81a54abbb21df08335eecb040573463",
+  "sha256_normalisation": "UTF-8 text with LF line endings",
+  "default_90_90_designs_100mw": {
+    "solar": {
+      "power_mw": 25.0,
+      "energy_mwh": 150.0,
+      "duration_hours": 6.0,
+      "classification": "extended-duration BESS",
+      "development_overall_absorbed_pct": 95.41564236636304,
+      "locked_overall_absorbed_pct": 96.08890671297353,
+      "development_days90_pct": 93.88888888888889,
+      "locked_days90_pct": 91.11111111111111
+    },
+    "mixed_50_50": {
+      "power_mw": 25.0,
+      "energy_mwh": 200.0,
+      "duration_hours": 8.0,
+      "classification": "extended-duration BESS",
+      "development_overall_absorbed_pct": 96.29748584147316,
+      "locked_overall_absorbed_pct": 97.53419115884356,
+      "development_days90_pct": 93.33333333333331,
+      "locked_days90_pct": 95.55555555555556
+    },
+    "wind": {
+      "power_mw": 15.0,
+      "energy_mwh": 360.0,
+      "duration_hours": 24.0,
+      "classification": "long-duration storage territory",
+      "development_overall_absorbed_pct": 95.07640010730545,
+      "locked_overall_absorbed_pct": 98.31303246320408,
+      "development_days90_pct": 91.11111111111111,
+      "locked_days90_pct": 95.55555555555556
+    }
+  }
+}

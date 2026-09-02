@@ -87,3 +87,8 @@ footer { text-align: center; padding: 28px 20px 44px; color: var(--muted); font-
 .uncertainty-line { color: var(--accent-dark); }
 .uncertainty-warning { color: #7a4d00; font-weight: 650; }
 .sizing-placeholder { background: #f7fafb; color: var(--muted); border: 1px dashed var(--line); }
+
+.design-section { border-top: 4px solid var(--accent); }
+.design-controls { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 18px; margin: 12px 0 18px; }
+.design-controls label { margin-top: 8px; }
+@media (max-width: 720px) { .design-controls { grid-template-columns: 1fr; } }

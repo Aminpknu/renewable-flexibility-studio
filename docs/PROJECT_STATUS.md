@@ -12,7 +12,10 @@
 - decision-oriented error, energy, cycling and limitation metrics;
 - interactive 1h/2h/4h sizing grid;
 - 450-day continuous-SOC benchmark;
-- extended 4–48h energy-duration diagnostic;
+- extended 4–48h renewable-only energy-duration diagnostic;
+- main future-sizing engine: 2,541 precomputed grid-connected designs across all 5% wind-share steps;
+- 80/90/95% firming targets and 80/90/95% daily reliability gates across two historical regimes;
+- tracked pre-day grid import/export required to restore 50% SOC;
 - leakage-safe rolling 80% forecast-uncertainty interval with historical/locked coverage validation;
 - out-of-range historical markers and selected-day uncertainty summary in the generation chart;
 - Tomorrow planning from the latest V2 forecast bundle, with no future actual/dispatch assumption;
@@ -32,13 +35,12 @@ Forecasting V2 is packaged separately on branch `feature/v2-spatial-production`,
 
 ## Next analytical stages
 
-1. add date-range, seasonal and weather-regime comparison to the Studio interface;
-2. quantify performance by OOF versus locked-test segment and by wind/solar mix;
-3. upgrade Tomorrow planning to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty and compare it with the residual-based range;
-4. backtest and refine uncertainty-aware initial SOC/reserve allocation;
-5. extend the Risk & Value layer with a contracted/day-ahead reference price, battery CAPEX/OPEX/degradation, NPV, BCR, switching values and sensitivity;
-6. add Monte Carlo/block-bootstrap downside metrics after the deterministic value layer is stable;
-7. deploy the public standalone GitHub repository as a separate Render service after the current UI review.
+1. **Operational planner:** use tomorrow's forecast uncertainty plus the selected design to recommend starting SOC, upward/downward reserve and highest-risk periods.
+2. Add date-range, seasonal and weather-regime comparison and quantify design sensitivity by wind/solar mix.
+3. Upgrade Tomorrow planning to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty.
+4. **Economics:** price pre-day SOC restoration, add contracted/day-ahead reference price, battery CAPEX/OPEX/degradation, NPV, BCR, payback and switching values.
+5. Add Monte Carlo/block-bootstrap downside metrics, P10/P50/P90 value, VaR/CVaR and availability/derating stress cases.
+6. Deploy the public standalone GitHub repository as a separate Render service after the current UI review.
 
 ## Learning fixture
 

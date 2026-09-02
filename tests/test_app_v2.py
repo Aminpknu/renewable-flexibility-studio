@@ -95,3 +95,13 @@ def test_selected_day_elexon_exposure_is_visible() -> None:
     assert "Imbalance before battery" in names
     assert "Residual after battery" in names
     assert "Elexon System Price" in names
+
+
+def test_future_design_is_primary_and_returns_default_practical_size() -> None:
+    note, cards, figure = app.update_future_design("mixed", 100, 50, 90, 90)
+    text = _text(note) + " " + _text(cards)
+    assert "25 MW / 200 MWh (8 h)" in text
+    assert "93.3%" in text
+    assert "95.6%" in text
+    assert "Grid energy to restore SOC" in text
+    assert any(trace.name == "Minimum stable design" for trace in figure.data)

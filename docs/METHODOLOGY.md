@@ -100,7 +100,21 @@ The selected day's actual output is **not** used to construct its own interval. 
 
 This is a rolling residual-based uncertainty estimate. It is not yet an ECMWF ensemble forecast or a dedicated probabilistic P10/P50/P90 model, and temporal dependence means the usual exchangeable-data conformal guarantee should not be claimed literally.
 
-## 9. GB imbalance settlement exposure
+## 9. Future battery sizing benchmark
+
+The main future-design mode is separate from the renewable-only continuous-SOC stress test. It represents a grid-connected reserve battery whose SOC is restored to 50% immediately before each operating day. During the day, the battery still follows the same reactive renewable-error rule and does not charge from the grid.
+
+If stored energy before the daily reset is below the 50% target, required grid import is $(E_{target}-E_{SOC})/\eta_c$. If it is above target, potential grid export is $(E_{SOC}-E_{target})\eta_d$. These pre-day import/export quantities are recorded for later economics; the present sizing stage does not assume they are free. The timing, power constraint and market cost of the pre-day reset are not yet optimised.
+
+For a 100 MW reference portfolio, the design grid contains power fractions {5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100}% and durations {1, 2, 4, 6, 8, 12, 16, 24, 36, 48, 72} h. The same 121 cells are precomputed for wind-share values from 0% to 100% in 5% increments, giving 2,541 rows. Results scale linearly with portfolio capacity.
+
+A design target is one of 80%, 90% or 95% absorbed forecast-error energy. Reliability is the percentage of target days whose own absolute forecast-error energy is reduced by at least that target. A stable candidate must satisfy both the overall target and the requested daily reliability in **both** historical regimes: development OOF (Apr 2025–Mar 2026) and Apr–Jun 2026. Candidates are ranked by minimum MWh, then MW, then duration.
+
+The Apr–Jun period is a robustness regime, not a new sealed battery-design holdout, because it has already been examined during this project. The objective is stability across materially different out-of-sample forecast-error periods, not a claim of untouched future validation.
+
+Durations ≤4 h are labelled short-duration BESS, 6–12 h extended-duration BESS, and >12 h long-duration storage territory. The renewable-only continuous-SOC analysis remains as a stress test showing what happens if grid SOC restoration is prohibited entirely.
+
+## 10. GB imbalance settlement exposure
 
 For each historical settlement period, the V2 point forecast is treated as an illustrative contracted/scheduled export. With a 30-minute interval, the portfolio energy imbalance is:
 
@@ -120,6 +134,6 @@ The reported **gross cash-out exposure** is \(\sum_t |C_t^{imb}|\). It is used a
 
 The frozen Elexon System Price/NIV archive covers all 450 historical target days and 21,600 settlement periods. A proper trading-value calculation still requires a contracted/day-ahead reference price and battery operating/degradation costs.
 
-## 10. Current exclusions
+## 11. Current exclusions
 
-The current release excludes grid charging, revenue stacking, a contracted/day-ahead price benchmark for trading P&L, detailed degradation, grid-connection limits, perfect-foresight optimisation, weather-ensemble probabilistic forecasts and site-specific network conditions. The historical evidence is national forecast-error behaviour scaled to a virtual portfolio, not an individual asset's error process.
+The current release excludes intraday or optimised grid charging beyond the tracked pre-day SOC restoration, revenue stacking, a contracted/day-ahead price benchmark for trading P&L, detailed degradation, grid-connection limits, perfect-foresight optimisation, weather-ensemble probabilistic forecasts and site-specific network conditions. The historical evidence is national forecast-error behaviour scaled to a virtual portfolio, not an individual asset's error process.
