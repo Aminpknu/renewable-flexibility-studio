@@ -1,0 +1,23 @@
+{
+  "wind": {
+    "eligible_days": 420,
+    "rows": 20160,
+    "overall_coverage_pct": 80.5952380952381,
+    "locked_test_coverage_pct": 80.74074074074075,
+    "mean_interval_width_mw_100mw_portfolio": 13.56201162653539
+  },
+  "solar": {
+    "eligible_days": 420,
+    "rows": 20160,
+    "overall_coverage_pct": 76.9890873015873,
+    "locked_test_coverage_pct": 81.13425925925925,
+    "mean_interval_width_mw_100mw_portfolio": 4.182757940785247
+  },
+  "mixed": {
+    "eligible_days": 420,
+    "rows": 20160,
+    "overall_coverage_pct": 79.91567460317461,
+    "locked_test_coverage_pct": 80.78703703703704,
+    "mean_interval_width_mw_100mw_portfolio": 7.615818600758633
+  }
+}

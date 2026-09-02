@@ -14,6 +14,7 @@ A user can:
 - simulate a deployable **reactive firming** strategy for any of 450 out-of-sample historical days;
 - inspect renewable delivery, charge/discharge and state of charge;
 - compare forecast error before and after the battery;
+- inspect a leakage-safe rolling **80% prediction interval** and see which historical periods fell outside the expected range;
 - identify power-limited and energy-limited periods;
 - search a controlled 1h/2h/4h battery grid for the smallest tested configuration meeting a target;
 - download every half-hourly calculation as CSV;
@@ -67,6 +68,12 @@ Battery energy capacity is:
 ```text
 energy capacity (MWh) = power (MW) × duration (hours)
 ```
+
+## Forecast uncertainty
+
+The historical generation chart includes a nominal **80% rolling prediction interval** around the point forecast. For each selected day, the interval is calibrated only from earlier out-of-sample forecast residuals, using a 90-day lookback and forecast-level-local residual matching. The selected day's actual output is never used to construct its own band; actuals are used only afterward to assess coverage and mark periods outside the expected range.
+
+Backtesting over eligible dates gives about **80.6% wind**, **77.0% solar** and **79.9% mixed** overall coverage. On the locked Apr–Jun 2026 period, coverage is **80.7%**, **81.1%** and **80.8%**, respectively. This is a residual-based uncertainty band, not yet an ECMWF weather-ensemble or dedicated P10/P50/P90 probabilistic forecast.
 
 ## Current 450-day continuous-SOC evidence
 

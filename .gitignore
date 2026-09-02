@@ -11,6 +11,7 @@ venv/
 outputs/*
 !outputs/full_backtest_summary.json
 !outputs/extended_sizing.csv
+!outputs/uncertainty_validation.json
 
 # Versioned V2 evidence committed for standalone operation.
 data/*.parquet

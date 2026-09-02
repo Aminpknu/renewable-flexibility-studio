@@ -13,9 +13,11 @@
 - interactive 1h/2h/4h sizing grid;
 - 450-day continuous-SOC benchmark;
 - extended 4–48h energy-duration diagnostic;
+- leakage-safe rolling 80% forecast-uncertainty interval with historical/locked coverage validation;
+- out-of-range historical markers and selected-day uncertainty summary in the generation chart;
 - one-page Dash interface and CSV export;
 - Render/GitHub Actions configuration;
-- 15 passing automated tests;
+- 22 passing automated tests;
 - successful local Dash HTTP/layout smoke test;
 - methodology, schema 2.0 data contract, validation report and learning checkpoint.
 
@@ -27,10 +29,11 @@ Forecasting V2 is packaged separately on branch `feature/v2-spatial-production`,
 
 1. add date-range, seasonal and weather-regime comparison to the Studio interface;
 2. quantify performance by OOF versus locked-test segment and by wind/solar mix;
-3. add uncertainty bundles (P10/P50/P90) and uncertainty-aware reserve/SOC logic;
-4. build the Risk & Value decision layer: consequence value, avoided exposure, CAPEX/OPEX, NPV, BCR, switching values and sensitivity;
-5. add Monte Carlo/block-bootstrap downside metrics after the deterministic value layer is stable;
-6. create a standalone Git repository/service for the Flexibility Studio and deploy separately.
+3. add dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty for tomorrow planning, then compare it with the current residual-based 80% historical interval;
+4. add uncertainty-aware reserve/SOC logic;
+5. build the Risk & Value decision layer: consequence value, avoided exposure, CAPEX/OPEX, NPV, BCR, switching values and sensitivity;
+6. add Monte Carlo/block-bootstrap downside metrics after the deterministic value layer is stable;
+7. publish the already-initialized standalone Git repository and deploy the Flexibility Studio separately.
 
 ## Learning fixture
 

@@ -39,9 +39,26 @@ def test_initial_energy_assumption_is_explicit() -> None:
     assert "no usable prior energy above the reserve" in conservative
 
 
-def test_selected_day_note_identifies_forecast_quality_and_prior_energy() -> None:
-    _g, _b, _cards, note, _stored = app.run_scenario(1, "2026-06-30", "wind", 100, 50, 25, 2, 50, 90)
-    assert "selected-day forecast MAE" in note
-    assert "450-day out-of-sample average" in note
-    assert "starts with 25.0 MWh stored" in note
-    assert "assumed available from prior periods" in note
+def test_selected_day_note_identifies_forecast_quality_prior_energy_and_uncertainty() -> None:
+    _g, _b, _cards, note, _stored = app.run_scenario(
+        1, "2026-06-30", "wind", 100, 50, 25, 2, 50, 90
+    )
+    text = _text(note)
+    assert "selected-day forecast MAE" in text
+    assert "450-day out-of-sample average" in text
+    assert "starts with 25.0 MWh stored" in text
+    assert "assumed available from prior periods" in text
+    assert "Forecast uncertainty: nominal 80% rolling expected range" in text
+    assert "Actual output was outside the expected range" in text
+
+
+def test_generation_chart_contains_uncertainty_band_and_outside_markers() -> None:
+    generation, _battery, _cards, _note, _stored = app.run_scenario(
+        1, "2026-06-30", "wind", 100, 50, 25, 2, 50, 90
+    )
+    names = [trace.name for trace in generation.data]
+    assert "Nominal 80% expected range" in names
+    assert "Forecast" in names
+    assert "Actual" in names
+    assert "After battery" in names
+    assert "Actual outside range" in names

@@ -82,3 +82,7 @@ footer { text-align: center; padding: 28px 20px 44px; color: var(--muted); font-
 .chart-title { margin: 24px 0 2px; font-size: 1.04rem; font-weight: 800; color: var(--ink); }
 .control-help { margin-top: 10px; padding: 10px 11px; border-radius: 9px; background: #f7fafb; border: 1px solid var(--line); color: var(--muted); font-size: .78rem; line-height: 1.45; }
 .scenario-note { line-height: 1.5; }
+.chart-subtitle { margin: 2px 0 6px; color: var(--muted); font-size: .80rem; line-height: 1.45; }
+.scenario-note-line + .scenario-note-line { margin-top: 6px; }
+.uncertainty-line { color: var(--accent-dark); }
+.uncertainty-warning { color: #7a4d00; font-weight: 650; }

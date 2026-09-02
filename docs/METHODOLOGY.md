@@ -84,6 +84,22 @@ This is an operational throughput indicator, not a detailed degradation model.
 
 The interactive sizing view evaluates a controlled grid of battery power and 1h/2h/4h durations. The 450-day benchmark applies the same rule with continuous SOC. Because the 1h/2h/4h grid does not reach 80% long-run absorption, `scripts/run_extended_sizing.py` separately explores 4–48h energy-duration cases as a diagnostic. Feasible configurations are ranked by energy capacity first, followed by power and duration.
 
-## 8. Current exclusions
+## 8. Forecast uncertainty band
 
-The current release excludes grid charging, market prices, revenue stacking, detailed degradation, grid-connection limits, perfect-foresight optimisation, probabilistic forecasts and site-specific network conditions. The historical evidence is national forecast-error behaviour scaled to a virtual portfolio, not an individual asset's error process.
+The historical chart includes a nominal **80% rolling prediction interval** around the point forecast when sufficient prior evidence exists. The interval is built only from out-of-sample forecast errors on target dates strictly earlier than the selected day.
+
+For each selected settlement-period forecast, the method looks back up to 90 target days, requires at least 30 prior days, and selects up to 600 prior forecast points with the most similar forecast capacity factor. The calibration score is the absolute capacity-factor residual:
+
+\[
+s_i=|CF_i^{actual}-\widehat{CF}_i|
+\]
+
+The interval half-width uses the conservative finite-sample empirical quantile at the requested 80% coverage level. Bounds are clipped to the physical capacity-factor range [0,1] and then scaled to the selected virtual portfolio capacity.
+
+The selected day's actual output is **not** used to construct its own interval. Actual output is used only afterward to report how many periods landed inside the range and to mark historical misses on the chart. Across eligible historical dates, achieved coverage is 80.6% for wind, 77.0% for solar and 79.9% for a 50/50 mixed portfolio; on the locked Apr-Jun 2026 period coverage is 80.7%, 81.1% and 80.8%, respectively.
+
+This is a rolling residual-based uncertainty estimate. It is not yet an ECMWF ensemble forecast or a dedicated probabilistic P10/P50/P90 model, and temporal dependence means the usual exchangeable-data conformal guarantee should not be claimed literally.
+
+## 9. Current exclusions
+
+The current release excludes grid charging, market prices, revenue stacking, detailed degradation, grid-connection limits, perfect-foresight optimisation, weather-ensemble probabilistic forecasts and site-specific network conditions. The historical evidence is national forecast-error behaviour scaled to a virtual portfolio, not an individual asset's error process.

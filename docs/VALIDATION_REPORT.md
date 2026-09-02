@@ -11,7 +11,7 @@ python -m pytest -q
 Latest verified result:
 
 ```text
-15 passed
+22 passed
 ```
 
 Coverage includes historical-bundle validation, complete 46/48/50-period days, wind/solar/mixed portfolio scaling, battery power/SOC/efficiency constraints, no simultaneous charge/discharge, firming metrics, sizing search, V2 manifest integrity, and explicit proof that multi-day SOC carries across midnight without a daily reset.
@@ -19,6 +19,20 @@ Coverage includes historical-bundle validation, complete 46/48/50-period days, w
 ## V2 historical evidence
 
 The installed bundle contains 21,600 half-hour observations across 450 out-of-sample target days from 1 April 2025 to 30 June 2026. It combines 360 expanding-window out-of-fold development days and 90 frozen locked-test days. Final-refit in-sample predictions are not used for the battery backtest.
+
+## Forecast-uncertainty interval validation
+
+The generation chart now uses a nominal 80% rolling prediction interval calibrated only from earlier out-of-sample residuals. The method uses a 90-day lookback, requires at least 30 prior target days, and uses up to 600 prior forecasts with the closest forecast capacity factor for the local residual scale.
+
+| Portfolio | Eligible-history coverage | Locked Apr-Jun 2026 coverage | Mean interval width for 100 MW portfolio |
+|---|---:|---:|---:|
+| Wind | 80.60% | 80.74% | 13.56 MW |
+| Solar | 76.99% | 81.13% | 4.18 MW |
+| Mixed 50/50 | 79.92% | 80.79% | 7.62 MW |
+
+The selected target day's actual output is not used to construct its own band. Tests explicitly verify that calibration ends before the selected date and that dates with fewer than 30 prior days show no interval. For 30 June 2026 wind, the expected range contains actual output in only 21 of 48 periods (43.75%), with 27 periods outside the band; this supports the interpretation that the day was an unusually difficult forecast realization.
+
+The interval is a rolling residual-based uncertainty estimate and should not be described as a true ECMWF ensemble P10/P50/P90 forecast or as having an exact exchangeable-data conformal guarantee under time-series dependence.
 
 ## 450-day continuous-SOC benchmark
 

@@ -17,6 +17,7 @@ from engine.battery import BatteryConfig, simulate_reactive_firming
 from engine.metrics import calculate_firming_metrics
 from engine.portfolio import build_virtual_portfolio
 from engine.sizing import find_minimum_battery
+from engine.uncertainty import build_rolling_prediction_interval
 
 ROOT = Path(__file__).resolve().parent
 DATA_PATH = ROOT / "data" / "historical_backtest.csv"
@@ -50,12 +51,42 @@ def _empty_figure(message: str) -> go.Figure:
 
 def _generation_figure(simulation: pd.DataFrame) -> go.Figure:
     figure = go.Figure()
+    band_columns = {
+        "prediction_interval_lower_mw",
+        "prediction_interval_upper_mw",
+        "actual_inside_prediction_interval",
+    }
+    has_band = band_columns.issubset(simulation.columns)
+    if has_band:
+        figure.add_trace(
+            go.Scatter(
+                x=simulation["valid_time_utc"],
+                y=simulation["prediction_interval_lower_mw"],
+                mode="lines",
+                line={"width": 0},
+                hoverinfo="skip",
+                showlegend=False,
+                name="Interval lower",
+            )
+        )
+        figure.add_trace(
+            go.Scatter(
+                x=simulation["valid_time_utc"],
+                y=simulation["prediction_interval_upper_mw"],
+                mode="lines",
+                line={"width": 0},
+                fill="tonexty",
+                fillcolor="rgba(99,110,250,0.16)",
+                name="Nominal 80% expected range",
+                hovertemplate="Expected upper %{y:.2f} MW<extra></extra>",
+            )
+        )
     figure.add_trace(
         go.Scatter(
             x=simulation["valid_time_utc"],
             y=simulation["forecast_mw"],
             mode="lines",
-            name="Day-ahead forecast",
+            name="Forecast",
             line={"dash": "dash", "width": 2.4},
         )
     )
@@ -64,7 +95,7 @@ def _generation_figure(simulation: pd.DataFrame) -> go.Figure:
             x=simulation["valid_time_utc"],
             y=simulation["actual_mw"],
             mode="lines",
-            name="Actual renewable output",
+            name="Actual",
             line={"width": 2.4},
         )
     )
@@ -73,17 +104,29 @@ def _generation_figure(simulation: pd.DataFrame) -> go.Figure:
             x=simulation["valid_time_utc"],
             y=simulation["firmed_delivery_mw"],
             mode="lines",
-            name="Delivery after battery",
+            name="After battery",
             line={"width": 2.8},
         )
     )
+    if has_band:
+        outside = ~simulation["actual_inside_prediction_interval"].astype(bool)
+        if outside.any():
+            figure.add_trace(
+                go.Scatter(
+                    x=simulation.loc[outside, "valid_time_utc"],
+                    y=simulation.loc[outside, "actual_mw"],
+                    mode="markers",
+                    marker={"symbol": "x", "size": 9},
+                    name="Actual outside range",
+                )
+            )
     figure.update_layout(
         xaxis_title="Settlement time (UTC)",
         yaxis_title="Power (MW)",
         hovermode="x unified",
-        margin=dict(l=45, r=20, t=58, b=45),
-        legend={"orientation": "h", "y": 1.02, "yanchor": "bottom", "x": 0, "xanchor": "left", "bgcolor": "rgba(255,255,255,0.94)", "bordercolor": "#dbe3e8", "borderwidth": 1, "font": {"size": 12}},
-        height=430,
+        margin=dict(l=45, r=20, t=72, b=45),
+        legend={"orientation": "h", "y": 1.03, "yanchor": "bottom", "x": 0, "xanchor": "left", "bgcolor": "rgba(255,255,255,0.96)", "bordercolor": "#dbe3e8", "borderwidth": 1, "font": {"size": 11}},
+        height=450,
     )
     return figure
 
@@ -194,13 +237,21 @@ def _scenario(
     duration_hours: float,
     initial_soc_pct: float,
     round_trip_efficiency_pct: float,
-) -> tuple[pd.DataFrame, BatteryConfig, dict[str, Any]]:
-    evidence = select_date(HISTORICAL_DATA, date_value)
-    portfolio = build_virtual_portfolio(
-        evidence,
+) -> tuple[pd.DataFrame, BatteryConfig, dict[str, Any], dict[str, Any]]:
+    full_portfolio = build_virtual_portfolio(
+        HISTORICAL_DATA,
         portfolio_type=portfolio_type,  # type: ignore[arg-type]
         capacity_mw=float(capacity_mw),
         wind_share=float(wind_share_pct) / 100,
+    )
+    target = pd.Timestamp(date_value).normalize()
+    portfolio = full_portfolio.loc[
+        full_portfolio["settlement_date"].eq(target)
+    ].copy().reset_index(drop=True)
+    if portfolio.empty:
+        raise KeyError(f"No historical evidence is available for {target.date()}.")
+    interval, uncertainty = build_rolling_prediction_interval(
+        full_portfolio, target
     )
     config = BatteryConfig(
         power_mw=float(battery_power_mw),
@@ -209,8 +260,18 @@ def _scenario(
         initial_soc_fraction=float(initial_soc_pct) / 100,
     )
     simulation = simulate_reactive_firming(portfolio, config)
+    if uncertainty.get("available"):
+        columns = [
+            "settlement_period",
+            "prediction_interval_lower_mw",
+            "prediction_interval_upper_mw",
+            "actual_inside_prediction_interval",
+        ]
+        simulation = simulation.merge(
+            interval[columns], on="settlement_period", how="left", validate="one_to_one"
+        )
     metrics = calculate_firming_metrics(simulation, config)
-    return simulation, config, metrics
+    return simulation, config, metrics, uncertainty
 
 
 app.layout = html.Div(
@@ -342,7 +403,11 @@ app.layout = html.Div(
                             [
                                 html.Div(id="scenario-note", className="scenario-note"),
                                 html.Div(id="kpi-grid", className="kpi-grid"),
-                                html.Div("Renewable delivery before and after battery firming", className="chart-title"),
+                                html.Div("Forecast uncertainty and battery firming", className="chart-title"),
+                                html.Div(
+                                    "Shaded band = nominal 80% rolling prediction interval calibrated only from earlier out-of-sample forecast errors. It is not yet a weather-ensemble P10/P50/P90 forecast.",
+                                    className="chart-subtitle",
+                                ),
                                 dcc.Graph(id="generation-chart", config={"displaylogo": False}),
                                 html.Div("Battery operation and state of charge", className="chart-title"),
                                 dcc.Graph(id="battery-chart", config={"displaylogo": False}),
@@ -467,7 +532,7 @@ def run_scenario(
     efficiency_pct: float,
 ):
     try:
-        simulation, config, metrics = _scenario(
+        simulation, config, metrics, uncertainty = _scenario(
             date_value,
             portfolio_type,
             capacity_mw,
@@ -493,12 +558,45 @@ def run_scenario(
     archive_mae = float((archive_portfolio["actual_mw"] - archive_portfolio["forecast_mw"]).abs().mean())
     day_delta_pct = 100.0 * (metrics["mae_before_mw"] / archive_mae - 1.0) if archive_mae > 0 else 0.0
     quality = "higher" if day_delta_pct >= 0 else "lower"
-    note = (
-        f"{date_value} · {capacity_mw:.0f} MW {portfolio_label} · selected-day forecast MAE {metrics['mae_before_mw']:.2f} MW "
-        f"({abs(day_delta_pct):.0f}% {quality} than the 450-day out-of-sample average of {archive_mae:.2f} MW) · "
-        f"{config.power_mw:.0f} MW / {config.energy_capacity_mwh:.0f} MWh battery · "
-        f"starts with {config.initial_soc_mwh:.1f} MWh stored ({initial_soc_pct:.0f}% SOC), assumed available from prior periods."
-    )
+    note_lines: list[Any] = [
+        html.Div(
+            f"{date_value} · {capacity_mw:.0f} MW {portfolio_label} · selected-day forecast MAE {metrics['mae_before_mw']:.2f} MW "
+            f"({abs(day_delta_pct):.0f}% {quality} than the 450-day out-of-sample average of {archive_mae:.2f} MW).",
+            className="scenario-note-line",
+        ),
+        html.Div(
+            f"Battery: {config.power_mw:.0f} MW / {config.energy_capacity_mwh:.0f} MWh · starts with {config.initial_soc_mwh:.1f} MWh stored "
+            f"({initial_soc_pct:.0f}% SOC), assumed available from prior periods.",
+            className="scenario-note-line",
+        ),
+    ]
+    if uncertainty.get("available"):
+        inside_periods = int(uncertainty["period_count"]) - int(uncertainty["outside_periods"])
+        note_lines.append(
+            html.Div(
+                f"Forecast uncertainty: nominal {uncertainty['nominal_coverage_pct']:.0f}% rolling expected range, calibrated only from the previous "
+                f"{uncertainty['history_days']} out-of-sample days ({uncertainty['calibration_start']} to {uncertainty['calibration_end']}). "
+                f"Average band width {uncertainty['mean_interval_width_mw']:.2f} MW; actual output fell inside the range for "
+                f"{inside_periods}/{uncertainty['period_count']} periods ({uncertainty['observed_day_coverage_pct']:.0f}%).",
+                className="scenario-note-line uncertainty-line",
+            )
+        )
+        if int(uncertainty["outside_periods"]) > 0:
+            note_lines.append(
+                html.Div(
+                    f"Actual output was outside the expected range in {uncertainty['outside_periods']} periods; those points are marked × on the chart.",
+                    className="scenario-note-line uncertainty-warning",
+                )
+            )
+    else:
+        note_lines.append(
+            html.Div(
+                f"Forecast uncertainty band unavailable: only {uncertainty.get('history_days', 0)} prior days are available; "
+                f"at least {uncertainty.get('minimum_history_days', 30)} are required.",
+                className="scenario-note-line uncertainty-warning",
+            )
+        )
+    note = html.Div(note_lines)
     store_columns = [
         "settlement_date",
         "settlement_period",
@@ -520,6 +618,13 @@ def run_scenario(
         "power_limited",
         "energy_limited",
     ]
+    for optional_column in (
+        "prediction_interval_lower_mw",
+        "prediction_interval_upper_mw",
+        "actual_inside_prediction_interval",
+    ):
+        if optional_column in simulation.columns:
+            store_columns.append(optional_column)
     stored = simulation[store_columns].to_json(orient="split", date_format="iso")
     return (
         _generation_figure(simulation),
