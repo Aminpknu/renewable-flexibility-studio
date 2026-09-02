@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: renewable-flexibility-studio
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:server
+    healthCheckPath: /
+    autoDeploy: true

@@ -1,0 +1,57 @@
+{
+  "schema_version": "2.0",
+  "bundle_type": "out_of_sample_historical_backtest",
+  "source_project": "Aminpknu/gb-renewable-forecast",
+  "source_model_version": "v2-spatial-2026-09",
+  "target_date_start": "2025-04-01",
+  "target_date_end": "2026-06-30",
+  "target_days": 450,
+  "row_count": 21600,
+  "interval_minutes": 30,
+  "evaluation_segments": {
+    "development_oof": {
+      "days": 360,
+      "rows": 17280
+    },
+    "locked_test": {
+      "days": 90,
+      "rows": 4320
+    }
+  },
+  "sha256": "845b03d8b3d8e99738af73cd67407b3d6d569c35627418ba0d7ebe9f93f85e59",
+  "columns": [
+    "settlement_date",
+    "settlement_period",
+    "valid_time_utc",
+    "evaluation_segment",
+    "fold",
+    "wind_cf",
+    "solar_cf",
+    "wind_pred_cf",
+    "solar_pred_cf",
+    "wind_actual_mw",
+    "wind_forecast_mw",
+    "solar_actual_mw",
+    "solar_forecast_mw",
+    "embedded_wind_capacity_mw",
+    "embedded_solar_capacity_mw"
+  ],
+  "models": {
+    "wind": "wind_spatial_xgb",
+    "solar": "solar_spatial_xgb_compact"
+  },
+  "methodology": "Development rows are expanding-window out-of-fold predictions; Apr-Jun 2026 rows are frozen locked-test predictions. No final-refit in-sample predictions are used for battery backtesting.",
+  "excluded_target_dates": [
+    "2025-08-06",
+    "2025-08-07",
+    "2025-08-08",
+    "2025-08-09",
+    "2025-08-10",
+    "2026-06-24"
+  ],
+  "limitations": [
+    "National capacity-factor evidence is scaled to a virtual portfolio and is not site-specific.",
+    "No probabilistic P10/P50/P90 forecast is included yet.",
+    "Reactive battery dispatch uses current measured forecast error only and excludes grid charging."
+  ]
+}

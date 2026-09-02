@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.env
+.DS_Store
+*.log
+
+# Generated analysis outputs are ignored except the compact files read by the app.
+outputs/*
+!outputs/full_backtest_summary.json
+!outputs/extended_sizing.csv
+
+# Versioned V2 evidence committed for standalone operation.
+data/*.parquet
+!data/sample_historical.csv
+!data/historical_backtest.csv
+!data/data_manifest.json

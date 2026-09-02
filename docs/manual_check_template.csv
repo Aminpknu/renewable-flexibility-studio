@@ -1,0 +1,5 @@
+settlement_period,actual_mw,forecast_mw,forecast_error_mw,requested_response_mw,power_limited_response_mw,soc_limited_response_mw,charge_mw,discharge_mw,soc_start_mwh,soc_end_mwh,firmed_delivery_mw,residual_error_mw,explanation
+surplus_period,,,,,,,,,,,,,
+deficit_period,,,,,,,,,,,,,
+power_limited_period,,,,,,,,,,,,,
+energy_limited_period,,,,,,,,,,,,,
