@@ -56,7 +56,7 @@ def _generation_figure(simulation: pd.DataFrame) -> go.Figure:
             y=simulation["forecast_mw"],
             mode="lines",
             name="Day-ahead forecast",
-            line={"dash": "dash"},
+            line={"dash": "dash", "width": 2.4},
         )
     )
     figure.add_trace(
@@ -65,6 +65,7 @@ def _generation_figure(simulation: pd.DataFrame) -> go.Figure:
             y=simulation["actual_mw"],
             mode="lines",
             name="Actual renewable output",
+            line={"width": 2.4},
         )
     )
     figure.add_trace(
@@ -73,15 +74,15 @@ def _generation_figure(simulation: pd.DataFrame) -> go.Figure:
             y=simulation["firmed_delivery_mw"],
             mode="lines",
             name="Delivery after battery",
+            line={"width": 2.8},
         )
     )
     figure.update_layout(
-        title="Renewable delivery before and after battery firming",
         xaxis_title="Settlement time (UTC)",
         yaxis_title="Power (MW)",
         hovermode="x unified",
-        margin=dict(l=45, r=20, t=55, b=45),
-        legend={"orientation": "h", "y": 1.12},
+        margin=dict(l=45, r=20, t=58, b=45),
+        legend={"orientation": "h", "y": 1.02, "yanchor": "bottom", "x": 0, "xanchor": "left", "bgcolor": "rgba(255,255,255,0.94)", "bordercolor": "#dbe3e8", "borderwidth": 1, "font": {"size": 12}},
         height=430,
     )
     return figure
@@ -117,12 +118,11 @@ def _battery_figure(simulation: pd.DataFrame) -> go.Figure:
     figure.update_yaxes(title_text="Battery power (MW)", secondary_y=False)
     figure.update_yaxes(title_text="State of charge (%)", range=[0, 100], secondary_y=True)
     figure.update_layout(
-        title="Battery operation",
         xaxis_title="Settlement time (UTC)",
         barmode="relative",
         hovermode="x unified",
-        margin=dict(l=45, r=45, t=55, b=45),
-        legend={"orientation": "h", "y": 1.12},
+        margin=dict(l=45, r=45, t=58, b=45),
+        legend={"orientation": "h", "y": 1.02, "yanchor": "bottom", "x": 0, "xanchor": "left", "bgcolor": "rgba(255,255,255,0.94)", "bordercolor": "#dbe3e8", "borderwidth": 1, "font": {"size": 12}},
         height=390,
     )
     return figure
@@ -169,6 +169,20 @@ def _long_run_benchmark_content() -> list[html.Div | html.P]:
         html.Div(cards, className="kpi-grid"),
         html.P("First tested configurations reaching 80% in the conservative start-at-minimum-SOC no-grid diagnostic: " + "; ".join(recommendations) + ".", className="section-copy"),
     ]
+
+
+def _initial_energy_explanation(power_mw: float, duration_hours: float, initial_soc_pct: float, efficiency_pct: float) -> str:
+    energy_mwh = float(power_mw) * float(duration_hours)
+    stored_mwh = energy_mwh * float(initial_soc_pct) / 100.0
+    minimum_mwh = energy_mwh * 0.10
+    usable_above_minimum = max(stored_mwh - minimum_mwh, 0.0)
+    discharge_efficiency = (float(efficiency_pct) / 100.0) ** 0.5
+    deliverable_mwh = usable_above_minimum * discharge_efficiency
+    if usable_above_minimum <= 1e-9:
+        return f"Start of selected day: {stored_mwh:.1f} MWh stored at the 10% minimum SOC, so there is no usable prior energy above the reserve."
+    return (f"Start of selected day: {stored_mwh:.1f} MWh is assumed already stored. "
+            f"That leaves {usable_above_minimum:.1f} MWh above the 10% reserve (about {deliverable_mwh:.1f} MWh deliverable after discharge efficiency). "
+            "This energy must come from earlier periods; it is not created on the selected day.")
 
 
 def _scenario(
@@ -281,7 +295,7 @@ app.layout = html.Div(
                                     inline=True,
                                     className="radio-row",
                                 ),
-                                html.Label("Initial state of charge (%)"),
+                                html.Label("Initial battery SOC at start of selected day (%)"),
                                 dcc.Slider(
                                     id="soc-input",
                                     min=10,
@@ -291,6 +305,7 @@ app.layout = html.Div(
                                     marks={10: "10", 50: "50", 90: "90"},
                                     tooltip={"placement": "bottom", "always_visible": False},
                                 ),
+                                html.Div(id="initial-energy-note", className="control-help"),
                                 html.Label("Round-trip efficiency (%)"),
                                 dcc.Slider(
                                     id="efficiency-input",
@@ -327,7 +342,9 @@ app.layout = html.Div(
                             [
                                 html.Div(id="scenario-note", className="scenario-note"),
                                 html.Div(id="kpi-grid", className="kpi-grid"),
+                                html.Div("Renewable delivery before and after battery firming", className="chart-title"),
                                 dcc.Graph(id="generation-chart", config={"displaylogo": False}),
+                                html.Div("Battery operation and state of charge", className="chart-title"),
                                 dcc.Graph(id="battery-chart", config={"displaylogo": False}),
                             ],
                             className="results-panel",
@@ -401,6 +418,20 @@ app.layout = html.Div(
 
 
 @app.callback(
+    Output("initial-energy-note", "children"),
+    Input("power-input", "value"),
+    Input("duration-input", "value"),
+    Input("soc-input", "value"),
+    Input("efficiency-input", "value"),
+)
+def explain_initial_energy(power_mw: float, duration_hours: float, initial_soc_pct: float, efficiency_pct: float) -> str:
+    try:
+        return _initial_energy_explanation(power_mw, duration_hours, initial_soc_pct, efficiency_pct)
+    except (TypeError, ValueError):
+        return "Enter a valid battery configuration to calculate starting stored energy."
+
+
+@app.callback(
     Output("wind-share-container", "className"),
     Input("portfolio-input", "value"),
 )
@@ -453,10 +484,20 @@ def run_scenario(
     portfolio_label = portfolio_type.title()
     if portfolio_type == "mixed":
         portfolio_label += f" ({wind_share_pct:.0f}% wind / {100-wind_share_pct:.0f}% solar)"
+    archive_portfolio = build_virtual_portfolio(
+        HISTORICAL_DATA,
+        portfolio_type=portfolio_type,  # type: ignore[arg-type]
+        capacity_mw=float(capacity_mw),
+        wind_share=float(wind_share_pct) / 100,
+    )
+    archive_mae = float((archive_portfolio["actual_mw"] - archive_portfolio["forecast_mw"]).abs().mean())
+    day_delta_pct = 100.0 * (metrics["mae_before_mw"] / archive_mae - 1.0) if archive_mae > 0 else 0.0
+    quality = "higher" if day_delta_pct >= 0 else "lower"
     note = (
-        f"{date_value} · {capacity_mw:.0f} MW {portfolio_label} portfolio · "
+        f"{date_value} · {capacity_mw:.0f} MW {portfolio_label} · selected-day forecast MAE {metrics['mae_before_mw']:.2f} MW "
+        f"({abs(day_delta_pct):.0f}% {quality} than the 450-day out-of-sample average of {archive_mae:.2f} MW) · "
         f"{config.power_mw:.0f} MW / {config.energy_capacity_mwh:.0f} MWh battery · "
-        f"initial SOC {initial_soc_pct:.0f}%"
+        f"starts with {config.initial_soc_mwh:.1f} MWh stored ({initial_soc_pct:.0f}% SOC), assumed available from prior periods."
     )
     store_columns = [
         "settlement_date",
