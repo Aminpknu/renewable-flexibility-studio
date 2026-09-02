@@ -33,4 +33,6 @@ def test_elexon_system_price_archive_integrity() -> None:
     assert len(frame) == 21600
     assert frame["settlement_date"].nunique() == 450
     assert not frame.duplicated(["settlement_date", "settlement_period"]).any()
-    assert hashlib.sha256(csv_path.read_bytes()).hexdigest() == manifest["sha256"]
+    canonical = csv_path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    assert manifest["sha256_normalisation"] == "UTF-8 text with LF line endings"
+    assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == manifest["sha256"]

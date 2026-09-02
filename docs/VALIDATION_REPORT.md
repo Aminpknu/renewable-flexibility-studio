@@ -46,7 +46,7 @@ The official Elexon Insights day-ahead demand endpoint was tested directly. It r
 
 ## Historical Elexon imbalance-settlement validation
 
-A frozen Elexon System Price/Net Imbalance Volume archive was built for exactly the same 450 target days and 21,600 settlement periods as the V2 forecast-error bundle. API retrieval completed for all 450 dates with zero request failures. A subsequent CSV-integrity scan detected two local OneDrive line-write collisions; 22 August 2025 and 22 November 2025 were re-fetched, and the full archive was rebuilt atomically and revalidated to 21,600 rows, 450 dates, one 46-period day, 448 48-period days and one 50-period day. Final SHA-256: `39f02e63c49173299742743e8d2c6d32038fb0b99df96386ab04c425948e2813`.
+A frozen Elexon System Price/Net Imbalance Volume archive was built for exactly the same 450 target days and 21,600 settlement periods as the V2 forecast-error bundle. API retrieval completed for all 450 dates with zero request failures. A subsequent CSV-integrity scan detected two local OneDrive line-write collisions; 22 August 2025 and 22 November 2025 were re-fetched, and the full archive was rebuilt atomically and revalidated to 21,600 rows, 450 dates, one 46-period day, 448 48-period days and one 50-period day. Canonical SHA-256 (UTF-8 with LF line endings): `2d566f53f3274d259f7587746039546b88912563437d7ae8b146b458e97e20fd`.
 
 Tests verify 30-minute MW-to-MWh conversion, BSC-style cashflow signs, missing-price rejection and date+settlement-period keys for multi-day joins. For the default 100 MW / 25 MW-50 MWh continuous-SOC benchmark, gross System-Price cash-out exposure changes as follows:
 

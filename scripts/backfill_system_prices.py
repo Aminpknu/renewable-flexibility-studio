@@ -64,7 +64,8 @@ def main() -> None:
         time.sleep(0.08)
     combined = pd.concat(parts, ignore_index=True)
     _write(combined)
-    payload = OUTPUT.read_bytes()
+    canonical_text = OUTPUT.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    payload = canonical_text.encode("utf-8")
     manifest = {
         "schema_version": "1.0",
         "source": "Elexon Insights DISEBSP system-prices endpoint",
@@ -76,6 +77,7 @@ def main() -> None:
         "rows": len(combined),
         "failures": failures,
         "sha256": hashlib.sha256(payload).hexdigest(),
+        "sha256_normalisation": "UTF-8 text with LF line endings",
     }
     MANIFEST.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print(json.dumps(manifest, indent=2))

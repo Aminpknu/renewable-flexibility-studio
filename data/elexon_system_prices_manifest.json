@@ -8,6 +8,7 @@
   "retrieved_target_days": 450,
   "rows": 21600,
   "failures": {},
-  "sha256": "39f02e63c49173299742743e8d2c6d32038fb0b99df96386ab04c425948e2813",
+  "sha256": "2d566f53f3274d259f7587746039546b88912563437d7ae8b146b458e97e20fd",
+  "sha256_normalisation": "UTF-8 text with LF line endings",
   "repair_note": "Atomic rebuild after two OneDrive line-write collisions; 2025-08-22 and 2025-11-22 re-fetched and full file revalidated."
 }
