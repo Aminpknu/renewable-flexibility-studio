@@ -86,3 +86,4 @@ footer { text-align: center; padding: 28px 20px 44px; color: var(--muted); font-
 .scenario-note-line + .scenario-note-line { margin-top: 6px; }
 .uncertainty-line { color: var(--accent-dark); }
 .uncertainty-warning { color: #7a4d00; font-weight: 650; }
+.sizing-placeholder { background: #f7fafb; color: var(--muted); border: 1px dashed var(--line); }

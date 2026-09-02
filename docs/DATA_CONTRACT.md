@@ -36,6 +36,14 @@ The standalone Studio does not run or import the forecasting ML models. The fore
 
 Tomorrow mode may query the official Elexon Insights day-ahead demand API and then explicitly filter to the target settlement date. The grid adapter validates one complete 46/48/50-period National Demand Forecast series. This grid context is external public data and is not part of the renewable forecast bundle.
 
+## Historical Elexon settlement bundle
+
+Historical grid-settlement analysis reads `data/elexon_system_prices.csv`. It contains one official Elexon System Price and Net Imbalance Volume record for every settlement period in the same 450 target days as `historical_backtest.csv`: 21,600 rows in total, including the one 46-period and one 50-period daylight-saving days.
+
+The key is `(settlement_date, settlement_period)`. Required fields are System Price, System Buy Price, System Sell Price, Net Imbalance Volume and system direction. The adapter verifies the current single-price condition (System Buy Price = System Sell Price) and rejects missing or duplicate settlement keys. `data/elexon_system_prices_manifest.json` records the endpoint, coverage, row count and SHA-256 checksum.
+
+The final frozen archive was rebuilt atomically after a write-integrity check identified two local OneDrive line collisions. The affected dates were re-fetched independently and the full 21,600-row file was revalidated before use.
+
 ## Independence rule
 
 The flexibility website reads a versioned file bundle. It must not call the forecasting Dash service or import its page modules. A later automated publishing workflow may replace the bundle, but the standalone product retains its own schema validation, checksum and deployment lifecycle.

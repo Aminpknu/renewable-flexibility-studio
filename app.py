@@ -14,8 +14,10 @@ from plotly.subplots import make_subplots
 
 from adapters.forecast_data import available_dates, load_historical_predictions, select_date
 from adapters.grid_context import fetch_day_ahead_demand
+from adapters.imbalance_settlement import load_system_price_history, select_system_prices
 from adapters.latest_forecast import latest_target_date, load_latest_forecast
 from engine.battery import BatteryConfig, simulate_reactive_firming
+from engine.imbalance import apply_imbalance_settlement, summarise_imbalance_settlement
 from engine.metrics import calculate_firming_metrics
 from engine.portfolio import build_virtual_forecast, build_virtual_portfolio
 from engine.sizing import find_minimum_battery
@@ -29,11 +31,15 @@ ROOT = Path(__file__).resolve().parent
 DATA_PATH = ROOT / "data" / "historical_backtest.csv"
 FULL_BACKTEST_PATH = ROOT / "outputs" / "full_backtest_summary.json"
 EXTENDED_SIZING_PATH = ROOT / "outputs" / "extended_sizing.csv"
+IMBALANCE_SUMMARY_PATH = ROOT / "outputs" / "imbalance_backtest_summary.json"
 LATEST_FORECAST_PATH = ROOT / "data" / "latest_forecast.csv"
+SYSTEM_PRICES_PATH = ROOT / "data" / "elexon_system_prices.csv"
 HISTORICAL_DATA = load_historical_predictions(DATA_PATH)
+SYSTEM_PRICES = load_system_price_history(SYSTEM_PRICES_PATH)
 LATEST_FORECAST = load_latest_forecast(LATEST_FORECAST_PATH)
 LATEST_TARGET_DATE = latest_target_date(LATEST_FORECAST)
 FULL_BACKTEST = json.loads(FULL_BACKTEST_PATH.read_text(encoding="utf-8"))
+IMBALANCE_BACKTEST = json.loads(IMBALANCE_SUMMARY_PATH.read_text(encoding="utf-8"))
 EXTENDED_SIZING = pd.read_csv(EXTENDED_SIZING_PATH)
 DATE_OPTIONS = available_dates(HISTORICAL_DATA)
 DEFAULT_DATE = DATE_OPTIONS[-1]
@@ -180,6 +186,44 @@ def _battery_figure(simulation: pd.DataFrame) -> go.Figure:
     return figure
 
 
+def _imbalance_figure(frame: pd.DataFrame) -> go.Figure:
+    """Show portfolio imbalance before/after battery against Elexon System Price."""
+    figure = make_subplots(specs=[[{"secondary_y": True}]])
+    figure.add_trace(
+        go.Bar(
+            x=frame["valid_time_utc"], y=frame["imbalance_before_mwh"],
+            name="Imbalance before battery",
+            hovertemplate="Before %{y:.2f} MWh<extra></extra>",
+        ), secondary_y=False,
+    )
+    figure.add_trace(
+        go.Bar(
+            x=frame["valid_time_utc"], y=frame["imbalance_after_mwh"],
+            name="Residual after battery",
+            hovertemplate="After %{y:.2f} MWh<extra></extra>",
+        ), secondary_y=False,
+    )
+    custom = frame[["net_imbalance_volume_mwh", "system_direction"]].to_numpy()
+    figure.add_trace(
+        go.Scatter(
+            x=frame["valid_time_utc"], y=frame["system_price_gbp_per_mwh"],
+            mode="lines", name="Elexon System Price", customdata=custom,
+            hovertemplate=("System Price £%{y:.2f}/MWh<br>GB NIV %{customdata[0]:.1f} MWh "
+                           "(%{customdata[1]})<extra></extra>"),
+        ), secondary_y=True,
+    )
+    figure.add_hline(y=0, line_width=1, line_dash="dot", secondary_y=False)
+    figure.update_yaxes(title_text="Portfolio imbalance (MWh)", secondary_y=False)
+    figure.update_yaxes(title_text="System Price (£/MWh)", secondary_y=True)
+    figure.update_layout(
+        barmode="group", hovermode="x unified", height=430,
+        margin=dict(l=50, r=55, t=65, b=45),
+        legend={"orientation": "h", "y": 1.03, "yanchor": "bottom", "x": 0},
+        xaxis_title="Settlement time (UTC)",
+    )
+    return figure
+
+
 def _kpi_card(label: str, value: str, help_text: str) -> html.Div:
     return html.Div(
         [html.Div(label, className="kpi-label"), html.Div(value, className="kpi-value"), html.Div(help_text, className="kpi-help")],
@@ -217,9 +261,26 @@ def _long_run_benchmark_content() -> list[html.Div | html.P]:
             recommendations.append(
                 f"{label}: {best['power_mw']:.0f} MW / {best['energy_mwh']:.0f} MWh ({best['duration_hours']:.0f} h)"
             )
+    exposure_cards = []
+    for kind, label in (("wind", "Wind"), ("solar", "Solar"), ("mixed", "Mixed 50/50")):
+        risk = IMBALANCE_BACKTEST[kind]
+        exposure_cards.append(_kpi_card(
+            label,
+            f"{risk['gross_exposure_reduction_pct']:.1f}%",
+            "Reduction in 450-day gross Elexon System-Price cash-out exposure for the same 25 MW / 50 MWh battery",
+        ))
+    mixed_risk = IMBALANCE_BACKTEST["mixed"]
     return [
         html.Div(cards, className="kpi-grid"),
         html.P("First tested configurations reaching 80% in the conservative start-at-minimum-SOC no-grid diagnostic: " + "; ".join(recommendations) + ".", className="section-copy"),
+        html.Div("450-day grid-settlement exposure", className="chart-title"),
+        html.Div(exposure_cards, className="kpi-grid"),
+        html.P(
+            f"For the default 100 MW mixed portfolio, mean daily gross cash-out exposure falls from £{mixed_risk['mean_daily_gross_exposure_before_gbp']:,.0f} to £{mixed_risk['mean_daily_gross_exposure_after_gbp']:,.0f}; "
+            f"the 95th-percentile day falls from £{mixed_risk['p95_daily_gross_exposure_before_gbp']:,.0f} to £{mixed_risk['p95_daily_gross_exposure_after_gbp']:,.0f}, and exposure is lower on {mixed_risk['days_with_lower_gross_exposure']}/450 days. "
+            "These are imbalance-risk magnitudes, not battery profit or avoided cost.",
+            className="section-copy",
+        ),
     ]
 
 
@@ -516,18 +577,44 @@ app.layout = html.Div(
                     [
                         html.Div(
                             [
-                                html.H2("Find a practical battery size"),
+                                html.H2("Selected-day battery sizing (exploratory)"),
                                 html.P(
-                                    "The search compares 1h, 2h and 4h systems over a controlled power grid and returns the smallest candidate that meets the selected firming target.",
+                                    "This quick search applies only to the historical day selected above. It tests 1h, 2h and 4h batteries across a controlled MW grid and returns the smallest tested candidate that reaches your chosen deviation-absorption target. It is not the long-run battery recommendation; use the 450-day continuous-SOC evidence below for that.",
                                     className="section-copy",
                                 ),
-                                html.Div(id="sizing-recommendation", className="recommendation-box"),
+                                html.Div(
+                                    "No sizing result yet. Choose a historical date and target, then click ‘Find minimum’ in the left-hand controls.",
+                                    id="sizing-recommendation",
+                                    className="recommendation-box sizing-placeholder",
+                                ),
                             ],
                             className="sizing-copy",
                         ),
                         dcc.Graph(id="sizing-chart", figure=_empty_figure("Click ‘Find minimum’ to run the sizing comparison."), config={"displaylogo": False}),
                     ],
                     className="sizing-section",
+                ),
+                html.Section(
+                    [
+                        html.H2("Historical grid imbalance & System Price"),
+                        html.P(
+                            "For the selected historical day, the point forecast is treated as an illustrative contracted/scheduled export. Actual-minus-schedule energy is then settled at the official Elexon System Price. This is a BSC-style virtual benchmark, not an actual registered trading account or profit calculation.",
+                            className="section-copy",
+                        ),
+                        html.Div(id="imbalance-note", className="scenario-note"),
+                        html.Div(id="imbalance-kpi-grid", className="kpi-grid"),
+                        html.Div("Portfolio imbalance versus Elexon System Price", className="chart-title"),
+                        html.Div(
+                            "Positive portfolio imbalance means the portfolio was long (generated more than scheduled); negative means short. The price line is the official single System Price for each settlement period.",
+                            className="chart-subtitle",
+                        ),
+                        dcc.Graph(
+                            id="imbalance-chart",
+                            figure=_empty_figure("Run a historical scenario above to calculate grid imbalance settlement."),
+                            config={"displaylogo": False},
+                        ),
+                    ],
+                    className="download-section",
                 ),
                 html.Section(
                     [
@@ -747,6 +834,54 @@ def run_scenario(
         note,
         stored,
     )
+
+
+@app.callback(
+    Output("imbalance-note", "children"),
+    Output("imbalance-kpi-grid", "children"),
+    Output("imbalance-chart", "figure"),
+    Input("scenario-store", "data"),
+    State("date-input", "value"),
+)
+def update_imbalance_settlement(stored: str | None, date_value: str):
+    if not stored:
+        message = "Run a historical scenario above to calculate BSC-style imbalance settlement."
+        return message, [], _empty_figure(message)
+    try:
+        simulation = pd.read_json(StringIO(stored), orient="split")
+        simulation["valid_time_utc"] = pd.to_datetime(simulation["valid_time_utc"], utc=True)
+        prices = select_system_prices(SYSTEM_PRICES, date_value)
+        settled = apply_imbalance_settlement(simulation, prices)
+        summary = summarise_imbalance_settlement(settled)
+    except (TypeError, ValueError, KeyError) as error:
+        message = f"Imbalance settlement could not be calculated: {error}"
+        return message, [], _empty_figure(message)
+
+    def cashflow(value: float) -> str:
+        sign = "+" if value >= 0 else "−"
+        return f"{sign}£{abs(value):,.0f}"
+
+    cards = [
+        _kpi_card("Gross cash-out exposure", f"£{summary['gross_exposure_before_gbp']:,.0f}", "Absolute BSC-style imbalance cashflow before battery"),
+        _kpi_card("After battery", f"£{summary['gross_exposure_after_gbp']:,.0f}", "Absolute residual cash-out exposure"),
+        _kpi_card("Exposure reduction", f"{summary['gross_exposure_reduction_pct']:.1f}%", "Reduction in absolute cash-out exposure; not the same as profit"),
+        _kpi_card("Signed cashflow before", cashflow(summary['signed_cashflow_before_gbp']), "Positive = payment by portfolio; negative = receipt to portfolio"),
+        _kpi_card("Signed cashflow after", cashflow(summary['signed_cashflow_after_gbp']), "Same Elexon sign convention after battery firming"),
+        _kpi_card("System Price range", f"£{summary['min_system_price_gbp_per_mwh']:.0f}–£{summary['max_system_price_gbp_per_mwh']:.0f}/MWh", "Official Elexon single imbalance price on this day"),
+    ]
+    note = html.Div([
+        html.Div(
+            f"GB system state: short in {summary['system_short_periods']} periods and long in {summary['system_long_periods']} periods. "
+            f"Before battery, the portfolio deviation was directionally supportive of the system in {summary['direction_helpful_before_periods']}/{summary['period_count']} periods.",
+            className="scenario-note-line",
+        ),
+        html.Div(
+            "Interpretation: the point forecast is only an illustrative contracted schedule. Gross cash-out exposure measures settlement-risk magnitude. "
+            "It is not profit, avoided cost, or a trading recommendation because we have not yet included the contracted/day-ahead reference price.",
+            className="scenario-note-line uncertainty-warning",
+        ),
+    ])
+    return note, cards, _imbalance_figure(settled)
 
 
 @app.callback(

@@ -100,6 +100,26 @@ The selected day's actual output is **not** used to construct its own interval. 
 
 This is a rolling residual-based uncertainty estimate. It is not yet an ECMWF ensemble forecast or a dedicated probabilistic P10/P50/P90 model, and temporal dependence means the usual exchangeable-data conformal guarantee should not be claimed literally.
 
-## 9. Current exclusions
+## 9. GB imbalance settlement exposure
 
-The current release excludes grid charging, market prices, revenue stacking, detailed degradation, grid-connection limits, perfect-foresight optimisation, weather-ensemble probabilistic forecasts and site-specific network conditions. The historical evidence is national forecast-error behaviour scaled to a virtual portfolio, not an individual asset's error process.
+For each historical settlement period, the V2 point forecast is treated as an illustrative contracted/scheduled export. With a 30-minute interval, the portfolio energy imbalance is:
+
+\[
+Q_t^{imb}=(G_t^{actual}-G_t^{schedule})\times0.5
+\]
+
+A positive value means the portfolio is long (more generation than scheduled); a negative value means it is short. Under the current GB single-price imbalance design, System Buy Price and System Sell Price are equal to the System Price. The Studio preserves the BSC cashflow sign convention:
+
+\[
+C_t^{imb}=-Q_t^{imb}\,P_t^{system}
+\]
+
+so positive cashflow is a payment by the portfolio and negative cashflow is a receipt to the portfolio. The same calculation is repeated using the residual imbalance after battery firming.
+
+The reported **gross cash-out exposure** is \(\sum_t |C_t^{imb}|\). It is used as a measure of settlement-risk magnitude. A reduction in this quantity is not automatically profit or avoided cost because a long or short imbalance can itself create a favourable settlement receipt. The Studio therefore reports signed cashflow separately and does not label gross exposure reduction as battery savings.
+
+The frozen Elexon System Price/NIV archive covers all 450 historical target days and 21,600 settlement periods. A proper trading-value calculation still requires a contracted/day-ahead reference price and battery operating/degradation costs.
+
+## 10. Current exclusions
+
+The current release excludes grid charging, revenue stacking, a contracted/day-ahead price benchmark for trading P&L, detailed degradation, grid-connection limits, perfect-foresight optimisation, weather-ensemble probabilistic forecasts and site-specific network conditions. The historical evidence is national forecast-error behaviour scaled to a virtual portfolio, not an individual asset's error process.

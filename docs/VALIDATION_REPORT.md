@@ -11,7 +11,7 @@ python -m pytest -q
 Latest verified result:
 
 ```text
-26 passed
+34 passed
 ```
 
 Coverage includes historical-bundle validation, complete 46/48/50-period days, wind/solar/mixed portfolio scaling, battery power/SOC/efficiency constraints, no simultaneous charge/discharge, firming metrics, sizing search, V2 manifest integrity, and explicit proof that multi-day SOC carries across midnight without a daily reset.
@@ -43,6 +43,22 @@ For the current 3 September 2026 bundle, the default 100 MW mixed portfolio fore
 The 180-day setting was checked on all 90 locked Apr–Jun 2026 dates: wind coverage 82.31%, solar 85.83% and mixed 82.38%. It is somewhat conservative relative to the nominal 80% target.
 
 The official Elexon Insights day-ahead demand endpoint was tested directly. It returned 48 settlement periods for 3 September 2026 after explicit target-date filtering, with NESO National Demand Forecast values used only as grid-scale context. Tests mock the endpoint and enforce the 46/48/50-period contract.
+
+## Historical Elexon imbalance-settlement validation
+
+A frozen Elexon System Price/Net Imbalance Volume archive was built for exactly the same 450 target days and 21,600 settlement periods as the V2 forecast-error bundle. API retrieval completed for all 450 dates with zero request failures. A subsequent CSV-integrity scan detected two local OneDrive line-write collisions; 22 August 2025 and 22 November 2025 were re-fetched, and the full archive was rebuilt atomically and revalidated to 21,600 rows, 450 dates, one 46-period day, 448 48-period days and one 50-period day. Final SHA-256: `39f02e63c49173299742743e8d2c6d32038fb0b99df96386ab04c425948e2813`.
+
+Tests verify 30-minute MW-to-MWh conversion, BSC-style cashflow signs, missing-price rejection and date+settlement-period keys for multi-day joins. For the default 100 MW / 25 MW-50 MWh continuous-SOC benchmark, gross System-Price cash-out exposure changes as follows:
+
+| Portfolio | 450-day gross exposure before | After battery | Reduction |
+|---|---:|---:|---:|
+| Wind | £3.554m | £2.303m | 35.21% |
+| Solar | £1.192m | £0.614m | 48.47% |
+| Mixed 50/50 | £2.040m | £1.124m | 44.90% |
+
+For the mixed portfolio, mean daily gross exposure falls from £4,533 to £2,497, the 95th-percentile day falls from £8,711 to £7,186, and exposure is lower on 440 of 450 days. These figures are **settlement-risk magnitudes, not profit or avoided cost**. Signed settlement cashflow is reported separately because some imbalances can produce receipts; a proper trading-value calculation still requires a contracted/day-ahead reference price and battery operating/degradation costs.
+
+For the 30 June 2026 wind example used in the interface review, gross exposure falls from about £13,276 to £10,826 (18.46%) while System Price ranges from about £67 to £175/MWh.
 
 ## 450-day continuous-SOC benchmark
 

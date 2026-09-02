@@ -62,3 +62,36 @@ def test_generation_chart_contains_uncertainty_band_and_outside_markers() -> Non
     assert "Actual" in names
     assert "After battery" in names
     assert "Actual outside range" in names
+
+
+def test_sizing_section_has_clear_initial_placeholder() -> None:
+    text = _text(app.app.layout)
+    assert "Selected-day battery sizing (exploratory)" in text
+    assert "No sizing result yet" in text
+    assert "not the long-run battery recommendation" in text
+
+
+def test_long_run_benchmark_includes_grid_settlement_exposure() -> None:
+    text = _text(app._long_run_benchmark_content())
+    assert "35.2%" in text
+    assert "48.5%" in text
+    assert "44.9%" in text
+    assert "£4,533" in text
+    assert "£2,497" in text
+    assert "not battery profit" in text
+
+
+def test_selected_day_elexon_exposure_is_visible() -> None:
+    _g, _b, _cards, _note, stored = app.run_scenario(
+        1, "2026-06-30", "wind", 100, 50, 25, 2, 50, 90
+    )
+    note, cards, figure = app.update_imbalance_settlement(stored, "2026-06-30")
+    text = _text([note, cards])
+    assert "£13,276" in text
+    assert "£10,826" in text
+    assert "18.5%" in text
+    assert "not profit" in text
+    names = [trace.name for trace in figure.data]
+    assert "Imbalance before battery" in names
+    assert "Residual after battery" in names
+    assert "Elexon System Price" in names

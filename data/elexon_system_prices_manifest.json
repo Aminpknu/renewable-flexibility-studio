@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "source": "Elexon Insights DISEBSP system-prices endpoint",
+  "source_endpoint": "https://data.elexon.co.uk/bmrs/api/v1/balancing/settlement/system-prices/{settlementDate}",
+  "date_start": "2025-04-01",
+  "date_end": "2026-06-30",
+  "requested_target_days": 450,
+  "retrieved_target_days": 450,
+  "rows": 21600,
+  "failures": {},
+  "sha256": "39f02e63c49173299742743e8d2c6d32038fb0b99df96386ab04c425948e2813",
+  "repair_note": "Atomic rebuild after two OneDrive line-write collisions; 2025-08-22 and 2025-11-22 re-fetched and full file revalidated."
+}

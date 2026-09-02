@@ -17,6 +17,8 @@ A user can:
 - inspect a leakage-safe rolling **80% prediction interval** and see which historical periods fell outside the expected range;
 - inspect the latest **tomorrow** V2 renewable forecast as a planning schedule with a future uncertainty band;
 - place that schedule in real GB grid context using the official half-hourly NESO National Demand Forecast served by Elexon Insights;
+- translate each historical forecast deviation into a BSC-style imbalance volume and official Elexon System-Price cashflow, before and after battery firming;
+- inspect gross imbalance-settlement exposure separately from signed settlement cashflow, without labelling exposure reduction as profit;
 - identify power-limited and energy-limited periods;
 - search a controlled 1h/2h/4h battery grid for the smallest tested configuration meeting a target;
 - download every half-hourly calculation as CSV;
@@ -76,6 +78,14 @@ energy capacity (MWh) = power (MW) × duration (hours)
 The historical generation chart includes a nominal **80% rolling prediction interval** around the point forecast. For each selected day, the interval is calibrated only from earlier out-of-sample forecast residuals, using a 90-day lookback and forecast-level-local residual matching. The selected day's actual output is never used to construct its own band; actuals are used only afterward to assess coverage and mark periods outside the expected range.
 
 Backtesting over eligible dates gives about **80.6% wind**, **77.0% solar** and **79.9% mixed** overall coverage. On the locked Apr–Jun 2026 period, coverage is **80.7%**, **81.1%** and **80.8%**, respectively. This is a residual-based uncertainty band, not yet an ECMWF weather-ensemble or dedicated P10/P50/P90 probabilistic forecast.
+
+## GB imbalance-settlement context
+
+For historical dates, the point forecast is treated as an illustrative contracted/scheduled renewable export. The portfolio imbalance is actual minus scheduled energy for each 30-minute settlement period. The Studio joins the matching official Elexon System Price and Net Imbalance Volume and calculates the corresponding BSC-style signed settlement cashflow. Positive cashflow means a payment by the virtual portfolio; negative means a receipt to it.
+
+The UI also reports **gross cash-out exposure**, defined as the absolute size of those settlement cashflows. This is a risk/volatility measure, not profit or avoided cost. A proper economic value calculation still needs a contracted/day-ahead reference price and should account for battery operating costs and degradation.
+
+The frozen Elexon archive covers the same 450 target days and all 21,600 half-hours as the V2 forecast-error bundle.
 
 ## Current 450-day continuous-SOC evidence
 

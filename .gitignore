@@ -12,6 +12,8 @@ outputs/*
 !outputs/full_backtest_summary.json
 !outputs/extended_sizing.csv
 !outputs/uncertainty_validation.json
+!outputs/imbalance_backtest_summary.json
+!outputs/daily_imbalance_exposure.csv
 
 # Versioned V2 evidence committed for standalone operation.
 data/*.parquet
@@ -21,3 +23,5 @@ data/*.parquet
 !data/latest_forecast.csv
 !data/latest_forecast_summary.json
 !data/latest_forecast_manifest.json
+!data/elexon_system_prices.csv
+!data/elexon_system_prices_manifest.json

@@ -17,9 +17,12 @@
 - out-of-range historical markers and selected-day uncertainty summary in the generation chart;
 - Tomorrow planning from the latest V2 forecast bundle, with no future actual/dispatch assumption;
 - live half-hourly GB National Demand Forecast context from Elexon/NESO;
+- frozen 450-day Elexon System Price/Net Imbalance Volume archive aligned to all 21,600 V2 historical periods;
+- selected-day BSC-style imbalance settlement view before/after battery firming;
+- 450-day gross cash-out exposure and daily tail-risk benchmark, explicitly separated from profit;
 - one-page Dash interface and CSV export;
-- Render/GitHub Actions configuration;
-- 26 passing automated tests;
+- public GitHub repository with GitHub Actions configuration;
+- automated test suite covering physical, uncertainty, tomorrow-planning and settlement logic;
 - successful local Dash HTTP/layout smoke test;
 - methodology, schema 2.0 data contract, validation report and learning checkpoint.
 
@@ -33,9 +36,9 @@ Forecasting V2 is packaged separately on branch `feature/v2-spatial-production`,
 2. quantify performance by OOF versus locked-test segment and by wind/solar mix;
 3. upgrade Tomorrow planning to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty and compare it with the residual-based range;
 4. backtest and refine uncertainty-aware initial SOC/reserve allocation;
-5. build the Risk & Value decision layer: consequence value, avoided exposure, CAPEX/OPEX, NPV, BCR, switching values and sensitivity;
+5. extend the Risk & Value layer with a contracted/day-ahead reference price, battery CAPEX/OPEX/degradation, NPV, BCR, switching values and sensitivity;
 6. add Monte Carlo/block-bootstrap downside metrics after the deterministic value layer is stable;
-7. publish the already-initialized standalone Git repository and deploy the Flexibility Studio separately.
+7. deploy the public standalone GitHub repository as a separate Render service after the current UI review.
 
 ## Learning fixture
 
