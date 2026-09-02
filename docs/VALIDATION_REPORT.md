@@ -11,7 +11,7 @@ python -m pytest -q
 Latest verified result:
 
 ```text
-22 passed
+26 passed
 ```
 
 Coverage includes historical-bundle validation, complete 46/48/50-period days, wind/solar/mixed portfolio scaling, battery power/SOC/efficiency constraints, no simultaneous charge/discharge, firming metrics, sizing search, V2 manifest integrity, and explicit proof that multi-day SOC carries across midnight without a daily reset.
@@ -33,6 +33,16 @@ The generation chart now uses a nominal 80% rolling prediction interval calibrat
 The selected target day's actual output is not used to construct its own band. Tests explicitly verify that calibration ends before the selected date and that dates with fewer than 30 prior days show no interval. For 30 June 2026 wind, the expected range contains actual output in only 21 of 48 periods (43.75%), with 27 periods outside the band; this supports the interpretation that the day was an unusually difficult forecast realization.
 
 The interval is a rolling residual-based uncertainty estimate and should not be described as a true ECMWF ensemble P10/P50/P90 forecast or as having an exact exchangeable-data conformal guarantee under time-series dependence.
+
+## Tomorrow planning and GB grid-context validation
+
+The Studio consumes `data/latest_forecast.csv`, a compact V2 forecast-only bundle containing one complete 46/48/50-period target day. Tomorrow mode never creates an actual generation series or future charge/discharge path. It treats the point forecast as an illustrative scheduled renewable export and reports battery discharge reserve, charge headroom and single-period MW capability against the uncertainty band.
+
+For the current 3 September 2026 bundle, the default 100 MW mixed portfolio forecasts 638.4 MWh of daily renewable energy and a 42.0 MW peak. Its nominal 80% future range is calibrated from 115 earlier out-of-sample days (7 March–30 June 2026) using a 180-day lookback; mean band width is 8.00 MW.
+
+The 180-day setting was checked on all 90 locked Apr–Jun 2026 dates: wind coverage 82.31%, solar 85.83% and mixed 82.38%. It is somewhat conservative relative to the nominal 80% target.
+
+The official Elexon Insights day-ahead demand endpoint was tested directly. It returned 48 settlement periods for 3 September 2026 after explicit target-date filtering, with NESO National Demand Forecast values used only as grid-scale context. Tests mock the endpoint and enforce the 46/48/50-period contract.
 
 ## 450-day continuous-SOC benchmark
 

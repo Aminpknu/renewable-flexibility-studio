@@ -26,6 +26,16 @@ The 360 development days use expanding-window out-of-fold predictions. The 90 Ap
 
 Explicit source exclusions are 6–10 August 2025 and 24 June 2026. They are not synthetically filled.
 
+## Latest forecast bundle
+
+Tomorrow planning reads `data/latest_forecast.csv`, validated separately from the historical archive. Required fields are forecast creation time, one target date, settlement period, valid time, wind/solar predicted capacity factors and embedded capacities. The bundle must contain exactly one complete 46/48/50-period target day. `data/latest_forecast_manifest.json` records target date, creation time, row count and SHA-256 checksum.
+
+The standalone Studio does not run or import the forecasting ML models. The forecasting project remains the producer of the forecast bundle; `scripts/sync_latest_forecast.py` is the local/manual handoff until automated cross-repository publishing is enabled.
+
+## Live grid context
+
+Tomorrow mode may query the official Elexon Insights day-ahead demand API and then explicitly filter to the target settlement date. The grid adapter validates one complete 46/48/50-period National Demand Forecast series. This grid context is external public data and is not part of the renewable forecast bundle.
+
 ## Independence rule
 
 The flexibility website reads a versioned file bundle. It must not call the forecasting Dash service or import its page modules. A later automated publishing workflow may replace the bundle, but the standalone product retains its own schema validation, checksum and deployment lifecycle.

@@ -18,3 +18,6 @@ data/*.parquet
 !data/sample_historical.csv
 !data/historical_backtest.csv
 !data/data_manifest.json
+!data/latest_forecast.csv
+!data/latest_forecast_summary.json
+!data/latest_forecast_manifest.json

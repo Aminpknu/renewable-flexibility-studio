@@ -15,9 +15,11 @@
 - extended 4–48h energy-duration diagnostic;
 - leakage-safe rolling 80% forecast-uncertainty interval with historical/locked coverage validation;
 - out-of-range historical markers and selected-day uncertainty summary in the generation chart;
+- Tomorrow planning from the latest V2 forecast bundle, with no future actual/dispatch assumption;
+- live half-hourly GB National Demand Forecast context from Elexon/NESO;
 - one-page Dash interface and CSV export;
 - Render/GitHub Actions configuration;
-- 22 passing automated tests;
+- 26 passing automated tests;
 - successful local Dash HTTP/layout smoke test;
 - methodology, schema 2.0 data contract, validation report and learning checkpoint.
 
@@ -29,8 +31,8 @@ Forecasting V2 is packaged separately on branch `feature/v2-spatial-production`,
 
 1. add date-range, seasonal and weather-regime comparison to the Studio interface;
 2. quantify performance by OOF versus locked-test segment and by wind/solar mix;
-3. add dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty for tomorrow planning, then compare it with the current residual-based 80% historical interval;
-4. add uncertainty-aware reserve/SOC logic;
+3. upgrade Tomorrow planning to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty and compare it with the residual-based range;
+4. backtest and refine uncertainty-aware initial SOC/reserve allocation;
 5. build the Risk & Value decision layer: consequence value, avoided exposure, CAPEX/OPEX, NPV, BCR, switching values and sensitivity;
 6. add Monte Carlo/block-bootstrap downside metrics after the deterministic value layer is stable;
 7. publish the already-initialized standalone Git repository and deploy the Flexibility Studio separately.

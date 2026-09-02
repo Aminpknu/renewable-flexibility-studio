@@ -15,6 +15,8 @@ A user can:
 - inspect renewable delivery, charge/discharge and state of charge;
 - compare forecast error before and after the battery;
 - inspect a leakage-safe rolling **80% prediction interval** and see which historical periods fell outside the expected range;
+- inspect the latest **tomorrow** V2 renewable forecast as a planning schedule with a future uncertainty band;
+- place that schedule in real GB grid context using the official half-hourly NESO National Demand Forecast served by Elexon Insights;
 - identify power-limited and energy-limited periods;
 - search a controlled 1h/2h/4h battery grid for the smallest tested configuration meeting a target;
 - download every half-hourly calculation as CSV;
@@ -135,7 +137,7 @@ A valid GB target day has 46, 48 or 50 settlement periods. Duplicate or incomple
 
 - P10/P50/P90 forecast bundles;
 - uncertainty-aware initial SOC and reserve allocation;
-- a separate tomorrow-planning mode with careful forecast-time wording.
+- upgrade the current Tomorrow planning band to dedicated P10/P50/P90 or weather-ensemble probabilistic forecasts.
 
 ### Release 4
 

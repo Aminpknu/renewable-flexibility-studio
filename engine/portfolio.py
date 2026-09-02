@@ -108,3 +108,45 @@ def build_virtual_portfolio(
     result["forecast_mw"] = forecast_cf * float(capacity_mw)
     result["forecast_error_mw"] = result["actual_mw"] - result["forecast_mw"]
     return result
+
+
+def build_virtual_forecast(
+    frame: pd.DataFrame,
+    portfolio_type: PortfolioType,
+    capacity_mw: float,
+    wind_share: float = 0.5,
+) -> pd.DataFrame:
+    """Scale a forecast-only wind/solar bundle to a virtual portfolio."""
+    required = {"target_date", "settlement_period", "valid_time_utc", "wind_pred_cf", "solar_pred_cf"}
+    missing = sorted(required.difference(frame.columns))
+    if missing:
+        raise ValueError(f"Latest forecast data is missing columns: {missing}")
+    kind = str(portfolio_type).strip().lower()
+    if kind not in {"wind", "solar", "mixed"}:
+        raise ValueError("portfolio_type must be 'wind', 'solar' or 'mixed'.")
+    if not np.isfinite(capacity_mw) or capacity_mw <= 0:
+        raise ValueError("capacity_mw must be a positive finite number.")
+    if not np.isfinite(wind_share) or not 0 <= wind_share <= 1:
+        raise ValueError("wind_share must be between 0 and 1.")
+    result = frame.copy().sort_values("settlement_period").reset_index(drop=True)
+    result["valid_time_utc"] = pd.to_datetime(result["valid_time_utc"], utc=True)
+    result["settlement_date"] = pd.to_datetime(result["target_date"]).dt.normalize()
+    if kind == "wind":
+        forecast_cf = result["wind_pred_cf"].to_numpy(dtype=float)
+        effective_wind_share = 1.0
+    elif kind == "solar":
+        forecast_cf = result["solar_pred_cf"].to_numpy(dtype=float)
+        effective_wind_share = 0.0
+    else:
+        forecast_cf = (
+            wind_share * result["wind_pred_cf"].to_numpy(dtype=float)
+            + (1 - wind_share) * result["solar_pred_cf"].to_numpy(dtype=float)
+        )
+        effective_wind_share = float(wind_share)
+    forecast_cf = np.clip(forecast_cf, 0.0, 1.0)
+    result["portfolio_type"] = kind
+    result["portfolio_capacity_mw"] = float(capacity_mw)
+    result["wind_share"] = effective_wind_share
+    result["forecast_cf"] = forecast_cf
+    result["forecast_mw"] = forecast_cf * float(capacity_mw)
+    return result

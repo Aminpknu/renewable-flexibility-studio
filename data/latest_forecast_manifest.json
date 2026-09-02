@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "bundle_type": "latest_day_ahead_forecast",
+  "source_path": "C:\\Users\\mz0013\\gb-renewable-forecast-v2-worktree\\outputs\\forecasts\\latest_forecast.csv",
+  "target_date": "2026-09-03",
+  "forecast_created_utc": "2026-09-02T10:20:51+0000",
+  "row_count": 48,
+  "sha256": "e8c3ff45269658cfa5031e7d5f7eb0682ae9cf68cf6a5623ff06425d59c5f87a",
+  "source_summary": "C:\\Users\\mz0013\\gb-renewable-forecast-v2-worktree\\outputs\\forecasts\\latest_forecast_summary.json"
+}

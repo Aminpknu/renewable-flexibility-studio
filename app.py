@@ -13,17 +13,26 @@ from dash import Dash, Input, Output, State, dcc, html, no_update
 from plotly.subplots import make_subplots
 
 from adapters.forecast_data import available_dates, load_historical_predictions, select_date
+from adapters.grid_context import fetch_day_ahead_demand
+from adapters.latest_forecast import latest_target_date, load_latest_forecast
 from engine.battery import BatteryConfig, simulate_reactive_firming
 from engine.metrics import calculate_firming_metrics
-from engine.portfolio import build_virtual_portfolio
+from engine.portfolio import build_virtual_forecast, build_virtual_portfolio
 from engine.sizing import find_minimum_battery
-from engine.uncertainty import build_rolling_prediction_interval
+from engine.uncertainty import (
+    PredictionIntervalConfig,
+    build_forecast_only_prediction_interval,
+    build_rolling_prediction_interval,
+)
 
 ROOT = Path(__file__).resolve().parent
 DATA_PATH = ROOT / "data" / "historical_backtest.csv"
 FULL_BACKTEST_PATH = ROOT / "outputs" / "full_backtest_summary.json"
 EXTENDED_SIZING_PATH = ROOT / "outputs" / "extended_sizing.csv"
+LATEST_FORECAST_PATH = ROOT / "data" / "latest_forecast.csv"
 HISTORICAL_DATA = load_historical_predictions(DATA_PATH)
+LATEST_FORECAST = load_latest_forecast(LATEST_FORECAST_PATH)
+LATEST_TARGET_DATE = latest_target_date(LATEST_FORECAST)
 FULL_BACKTEST = json.loads(FULL_BACKTEST_PATH.read_text(encoding="utf-8"))
 EXTENDED_SIZING = pd.read_csv(EXTENDED_SIZING_PATH)
 DATE_OPTIONS = available_dates(HISTORICAL_DATA)
@@ -226,6 +235,92 @@ def _initial_energy_explanation(power_mw: float, duration_hours: float, initial_
     return (f"Start of selected day: {stored_mwh:.1f} MWh is assumed already stored. "
             f"That leaves {usable_above_minimum:.1f} MWh above the 10% reserve (about {deliverable_mwh:.1f} MWh deliverable after discharge efficiency). "
             "This energy must come from earlier periods; it is not created on the selected day.")
+
+
+def _tomorrow_planning_data(
+    portfolio_type: str,
+    capacity_mw: float,
+    wind_share_pct: float,
+    battery_power_mw: float,
+    duration_hours: float,
+    initial_soc_pct: float,
+    efficiency_pct: float,
+) -> tuple[pd.DataFrame, BatteryConfig, dict[str, Any]]:
+    history = build_virtual_portfolio(
+        HISTORICAL_DATA, portfolio_type=portfolio_type, capacity_mw=float(capacity_mw),
+        wind_share=float(wind_share_pct) / 100,
+    )
+    forecast = build_virtual_forecast(
+        LATEST_FORECAST, portfolio_type=portfolio_type, capacity_mw=float(capacity_mw),
+        wind_share=float(wind_share_pct) / 100,
+    )
+    interval, uncertainty = build_forecast_only_prediction_interval(
+        history, forecast, LATEST_TARGET_DATE,
+        PredictionIntervalConfig(lookback_days=180, minimum_history_days=30, neighbour_count=600),
+    )
+    config = BatteryConfig(
+        power_mw=float(battery_power_mw), duration_hours=float(duration_hours),
+        round_trip_efficiency=float(efficiency_pct) / 100,
+        initial_soc_fraction=float(initial_soc_pct) / 100,
+    )
+    planning: dict[str, Any] = {"uncertainty": uncertainty}
+    if uncertainty.get("available"):
+        down = interval["forecast_mw"] - interval["prediction_interval_lower_mw"]
+        up = interval["prediction_interval_upper_mw"] - interval["forecast_mw"]
+        peak_deviation = float(max(down.max(), up.max()))
+        planning.update({
+            "peak_downward_reserve_mw": float(down.max()),
+            "peak_upward_headroom_mw": float(up.max()),
+            "peak_interval_deviation_mw": peak_deviation,
+            "battery_power_coverage_pct": min(100.0, 100.0 * config.power_mw / peak_deviation) if peak_deviation > 0 else 100.0,
+        })
+    planning["forecast_energy_mwh"] = float(interval["forecast_mw"].sum() * 0.5)
+    planning["peak_forecast_mw"] = float(interval["forecast_mw"].max())
+    planning["discharge_reserve_mwh"] = float(
+        max(config.initial_soc_mwh - config.minimum_soc_mwh, 0.0) * config.discharge_efficiency
+    )
+    planning["charge_headroom_mwh"] = float(
+        max(config.maximum_soc_mwh - config.initial_soc_mwh, 0.0) / config.charge_efficiency
+    )
+    return interval, config, planning
+
+
+def _tomorrow_forecast_figure(frame: pd.DataFrame) -> go.Figure:
+    figure = go.Figure()
+    if {"prediction_interval_lower_mw", "prediction_interval_upper_mw"}.issubset(frame.columns):
+        figure.add_trace(go.Scatter(
+            x=frame["valid_time_utc"], y=frame["prediction_interval_lower_mw"],
+            mode="lines", line={"width": 0}, hoverinfo="skip", showlegend=False,
+        ))
+        figure.add_trace(go.Scatter(
+            x=frame["valid_time_utc"], y=frame["prediction_interval_upper_mw"],
+            mode="lines", line={"width": 0}, fill="tonexty",
+            fillcolor="rgba(99,110,250,0.16)", name="Nominal 80% expected range",
+        ))
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"], y=frame["forecast_mw"],
+        mode="lines", name="Scheduled renewable export", line={"dash": "dash", "width": 2.6},
+    ))
+    figure.update_layout(
+        xaxis_title="Settlement time (UTC)", yaxis_title="Virtual portfolio power (MW)",
+        hovermode="x unified", margin=dict(l=45, r=20, t=65, b=45),
+        legend={"orientation": "h", "y": 1.03, "yanchor": "bottom", "x": 0}, height=390,
+    )
+    return figure
+
+
+def _grid_demand_figure(frame: pd.DataFrame) -> go.Figure:
+    figure = go.Figure()
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"], y=frame["national_demand_mw"] / 1000.0,
+        mode="lines", name="NESO National Demand Forecast", line={"width": 2.6},
+    ))
+    figure.update_layout(
+        xaxis_title="Settlement time (UTC)", yaxis_title="GB National Demand Forecast (GW)",
+        hovermode="x unified", margin=dict(l=55, r=20, t=55, b=45),
+        legend={"orientation": "h", "y": 1.03, "yanchor": "bottom", "x": 0}, height=330,
+    )
+    return figure
 
 
 def _scenario(
@@ -436,6 +531,25 @@ app.layout = html.Div(
                 ),
                 html.Section(
                     [
+                        html.H2(f"Tomorrow planning & GB grid context · {LATEST_TARGET_DATE}"),
+                        html.P(
+                            "Tomorrow mode uses the latest V2 wind/solar point forecast as an illustrative scheduled export. Actual generation is not known yet, so the Studio does not simulate a future charge/discharge path. Instead it shows the expected forecast range and the battery reserve/headroom available against that uncertainty.",
+                            className="section-copy",
+                        ),
+                        html.Button("Refresh tomorrow planning", id="tomorrow-button", n_clicks=0, className="primary-button"),
+                        html.Div(id="tomorrow-note", className="scenario-note"),
+                        html.Div(id="tomorrow-kpi-grid", className="kpi-grid"),
+                        html.Div("Tomorrow renewable schedule and expected range", className="chart-title"),
+                        html.Div("The dashed line is the planned renewable export from the V2 forecast. The shaded range comes from prior out-of-sample forecast errors; tomorrow's actual output is unknown.", className="chart-subtitle"),
+                        dcc.Graph(id="tomorrow-forecast-chart", figure=_empty_figure("Tomorrow planning will load automatically."), config={"displaylogo": False}),
+                        html.Div("Official GB day-ahead demand context", className="chart-title"),
+                        html.Div("National Demand Forecast is official NESO data served through Elexon Insights. It provides system-scale context; the virtual portfolio is not claimed to be a physical national battery.", className="chart-subtitle"),
+                        dcc.Graph(id="grid-demand-chart", figure=_empty_figure("GB demand context will load automatically."), config={"displaylogo": False}),
+                    ],
+                    className="download-section",
+                ),
+                html.Section(
+                    [
                         html.H2("450-day continuous-SOC benchmark"),
                         html.P(
                             "The cards below use the full out-of-sample V2 archive with one initial SOC only. SOC carries across midnight and is never reset each day. The fixed benchmark uses a 100 MW virtual portfolio, 25 MW / 50 MWh battery, 90% round-trip efficiency and no grid charging.",
@@ -468,7 +582,7 @@ app.layout = html.Div(
                             className="section-copy",
                         ),
                         html.P(
-                            "The full 450-day out-of-sample archive is installed for historical analysis. P10/P50/P90 forecasts will later support a separate uncertainty-aware tomorrow-planning mode without making this site dependent on the forecasting dashboard.",
+                            "The full 450-day out-of-sample archive supports historical analysis, while Tomorrow planning consumes the latest V2 forecast bundle and official grid-demand context. A later upgrade will replace the residual-based future range with dedicated P10/P50/P90 or weather-ensemble probabilistic forecasts.",
                             className="section-copy",
                         ),
                     ],
@@ -633,6 +747,87 @@ def run_scenario(
         note,
         stored,
     )
+
+
+@app.callback(
+    Output("tomorrow-note", "children"),
+    Output("tomorrow-kpi-grid", "children"),
+    Output("tomorrow-forecast-chart", "figure"),
+    Output("grid-demand-chart", "figure"),
+    Input("tomorrow-button", "n_clicks"),
+    State("portfolio-input", "value"),
+    State("capacity-input", "value"),
+    State("wind-share-input", "value"),
+    State("power-input", "value"),
+    State("duration-input", "value"),
+    State("soc-input", "value"),
+    State("efficiency-input", "value"),
+)
+def run_tomorrow_planning(
+    _clicks: int, portfolio_type: str, capacity_mw: float, wind_share_pct: float,
+    battery_power_mw: float, duration_hours: float, initial_soc_pct: float,
+    efficiency_pct: float,
+):
+    try:
+        forecast, config, planning = _tomorrow_planning_data(
+            portfolio_type, capacity_mw, wind_share_pct, battery_power_mw,
+            duration_hours, initial_soc_pct, efficiency_pct,
+        )
+    except (TypeError, ValueError, KeyError) as error:
+        message = f"Tomorrow planning could not be calculated: {error}"
+        empty = _empty_figure(message)
+        return message, [], empty, empty
+    uncertainty = planning["uncertainty"]
+    cards = [
+        _kpi_card("Forecast energy", f"{planning['forecast_energy_mwh']:.1f} MWh", "Tomorrow's virtual portfolio schedule"),
+        _kpi_card("Peak forecast", f"{planning['peak_forecast_mw']:.1f} MW", "Highest scheduled renewable export"),
+        _kpi_card("Discharge reserve", f"{planning['discharge_reserve_mwh']:.1f} MWh", "Deliverable energy above the 10% SOC reserve"),
+        _kpi_card("Charge headroom", f"{planning['charge_headroom_mwh']:.1f} MWh", "Renewable surplus energy absorbable before 90% SOC"),
+    ]
+    if uncertainty.get("available"):
+        cards.extend([
+            _kpi_card("Peak expected deviation", f"{planning['peak_interval_deviation_mw']:.1f} MW", "Largest one-sided distance from schedule to expected range"),
+            _kpi_card("Single-period MW coverage", f"{planning['battery_power_coverage_pct']:.0f}%", "Battery MW divided by the peak expected one-period deviation; this does not prove sufficient MWh for the whole day"),
+        ])
+    forecast_figure = _tomorrow_forecast_figure(forecast)
+
+    issue = pd.Timestamp(LATEST_FORECAST["forecast_created_utc"].iloc[0]).strftime("%Y-%m-%d %H:%M UTC")
+    note_parts: list[Any] = [html.Div(
+        f"Renewable forecast target {LATEST_TARGET_DATE}; V2 bundle created {issue}. Planning only: no actual generation or future battery dispatch is assumed.",
+        className="scenario-note-line",
+    )]
+    if uncertainty.get("available"):
+        note_parts.append(html.Div(
+            f"Uncertainty band: nominal {uncertainty['nominal_coverage_pct']:.0f}% range calibrated from {uncertainty['history_days']} earlier out-of-sample days "
+            f"({uncertainty['calibration_start']} to {uncertainty['calibration_end']}); mean width {uncertainty['mean_interval_width_mw']:.2f} MW.",
+            className="scenario-note-line uncertainty-line",
+        ))
+    else:
+        note_parts.append(html.Div(
+            "Uncertainty band is unavailable because the verified historical archive does not contain enough prior calibration days.",
+            className="scenario-note-line uncertainty-warning",
+        ))
+
+    try:
+        grid = fetch_day_ahead_demand(LATEST_TARGET_DATE)
+        grid_figure = _grid_demand_figure(grid)
+        merged = forecast[["settlement_period", "forecast_mw"]].merge(
+            grid[["settlement_period", "national_demand_mw"]], on="settlement_period", validate="one_to_one"
+        )
+        max_share = float((100.0 * merged["forecast_mw"] / merged["national_demand_mw"]).max())
+        publish = grid["publish_time_utc"].max().strftime("%Y-%m-%d %H:%M UTC")
+        note_parts.append(html.Div(
+            f"Grid context: official National Demand Forecast ranges {grid['national_demand_mw'].min()/1000:.1f}–{grid['national_demand_mw'].max()/1000:.1f} GW; "
+            f"latest included publication {publish}. At its largest relative point, this {float(capacity_mw):.0f} MW virtual portfolio schedule is about {max_share:.2f}% of GB National Demand.",
+            className="scenario-note-line",
+        ))
+    except Exception as error:
+        grid_figure = _empty_figure(f"Official grid context unavailable: {error}")
+        note_parts.append(html.Div(
+            "Official grid-demand context could not be loaded; the renewable planning result remains available.",
+            className="scenario-note-line uncertainty-warning",
+        ))
+    return html.Div(note_parts), cards, forecast_figure, grid_figure
 
 
 @app.callback(
