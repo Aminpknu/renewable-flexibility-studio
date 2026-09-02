@@ -72,7 +72,7 @@ energy capacity (MWh) = power (MW) × duration (hours)
 
 For a 100 MW virtual portfolio with a 25 MW / 50 MWh battery, 90% round-trip efficiency, 10–90% SOC limits and no grid charging, continuous operation absorbs about **33.5% of wind**, **50.2% of solar** and **44.4% of 50/50 mixed** absolute forecast-deviation energy. SOC ends at its minimum bound, showing that energy availability and conversion losses matter across long horizons.
 
-The initial 1h/2h/4h sizing grid does **not** reach an 80% long-run target. An explicit extended diagnostic finds the first tested 80% solutions at roughly **1,800 MWh for wind**, **400 MWh for solar** and **800 MWh for the mixed portfolio**. These are virtual benchmark results, not site-design recommendations.
+The initial 1h/2h/4h sizing grid does **not** reach an 80% long-run target. With the standard 50% starting SOC, the first tested 80% solutions use about **1,800 MWh wind**, **400 MWh solar** and **800 MWh mixed**. A conservative sensitivity that starts at the 10% minimum SOC removes the one-time initial-energy reserve: wind and solar remain about **1,800 MWh** and **400 MWh**, while mixed rises modestly to **900 MWh**. These are virtual benchmark results, not site-design recommendations.
 
 ## Run locally
 

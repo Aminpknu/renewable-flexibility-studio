@@ -40,11 +40,11 @@ Because the standard grid misses 80%, `scripts/run_extended_sizing.py` tests 25/
 
 | Portfolio | First tested ≥80% | Reduction |
 |---|---:|---:|
-| Wind | 50 MW / 1,800 MWh (36 h) | 82.62% |
-| Solar | 25 MW / 400 MWh (16 h) | 80.54% |
-| Mixed 50/50 | 50 MW / 800 MWh (16 h) | 80.66% |
+| Wind | 50 MW / 1,800 MWh (36 h) | 81.11% |
+| Solar | 25 MW / 400 MWh (16 h) | 80.55% |
+| Mixed 50/50 | 25 MW / 900 MWh (36 h) | 80.10% |
 
-These results show that, under the current no-grid-charging reactive strategy, long-horizon firming is primarily an energy/SOC problem. They are virtual portfolio benchmarks, not site-specific battery recommendations.
+The table uses the conservative start-at-minimum-SOC sensitivity so no one-time initial stored-energy reserve is available. With the standard 50% initial SOC, wind and solar require the same tested energy capacities, while mixed first reaches 80% at 800 MWh. These results show that, under the current no-grid-charging reactive strategy, long-horizon firming is primarily an energy/SOC problem. They are virtual portfolio benchmarks, not site-specific battery recommendations.
 
 ## Runtime smoke validation
 

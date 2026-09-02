@@ -26,4 +26,4 @@ def test_long_run_benchmark_is_visible() -> None:
     assert "44.4%" in text
     assert "Wind: 50 MW / 1800 MWh (36 h)" in text
     assert "Solar: 25 MW / 400 MWh (16 h)" in text
-    assert "Mixed: 50 MW / 800 MWh (16 h)" in text
+    assert "Mixed: 25 MW / 900 MWh (36 h)" in text

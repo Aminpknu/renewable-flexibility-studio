@@ -159,7 +159,7 @@ def _long_run_benchmark_content() -> list[html.Div | html.P]:
         ))
     recommendations = []
     for kind, label in (("wind", "Wind"), ("solar", "Solar"), ("mixed", "Mixed")):
-        rows = EXTENDED_SIZING[(EXTENDED_SIZING["portfolio_type"] == kind) & EXTENDED_SIZING["meets_target"]]
+        rows = EXTENDED_SIZING[(EXTENDED_SIZING["portfolio_type"] == kind) & (EXTENDED_SIZING["initial_soc_case"] == "start_at_minimum_10pct") & EXTENDED_SIZING["meets_target"]]
         if not rows.empty:
             best = rows.sort_values(["energy_mwh", "power_mw", "duration_hours"]).iloc[0]
             recommendations.append(
@@ -167,7 +167,7 @@ def _long_run_benchmark_content() -> list[html.Div | html.P]:
             )
     return [
         html.Div(cards, className="kpi-grid"),
-        html.P("First tested configurations reaching 80% in the extended no-grid diagnostic: " + "; ".join(recommendations) + ".", className="section-copy"),
+        html.P("First tested configurations reaching 80% in the conservative start-at-minimum-SOC no-grid diagnostic: " + "; ".join(recommendations) + ".", className="section-copy"),
     ]
 
 
