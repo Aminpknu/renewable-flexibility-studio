@@ -181,3 +181,18 @@ Validation: full repository suite passes 164 tests; deterministic finance UI, fi
 Default evidence: wholesale base project NPV ~-£20.87m, equity IRR ~-31.1%, minimum DSCR 0.22x, LLCR 0.27x; Stage 11 non-BM upside project NPV ~+£3.30m, equity IRR ~15.7%, minimum DSCR 1.61x, LLCR 1.79x
 Known limitations: screening tax only; no loss carry-forward, VAT, group relief, legal allowance opinion, refinancing, hedging, debt sculpting, reserve accounts, working capital or bankable ancillary-service acceptance
 Next allowed stage: issue-time multi-service/acceptance modelling, probabilistic renewables, regime analysis and final automation/product release
+
+## Stage 13 — Issue-time multi-service and acceptance calibration
+
+Stage: Stage 13 issue-time multi-service strategy
+Decision: EVIDENCE READY
+Decision date: 2026-09-03
+Branch: feature/stage13-issue-time-multiservice
+Primary evidence: 12-product prior-date EAC price forecast, Stage B reserve corridor, opportunity-cost bid floor, NESO Sell Orders acceptance calibration and 60-date May-Jun 2026 backtest
+Acceptance result: PASS for issue-time expected-acceptance screening
+Reason: target-day clearing price/volume are excluded from capacity/bid decisions; held-out acceptance calibration improves Brier score 22.8% versus product baseline; all service/wholesale commitments share one BESS MW/SOC budget
+Default evidence: non-BM £2.22m/yr total, £1.17m/yr ancillary, 47.9% capture of matching Stage 11 upper bound, +£1.08m/yr versus reserve-aware wholesale; BM-eligible £2.21m/yr
+Finance implication: Stage 13 non-BM gives project NPV ~-£13.06m, equity IRR ~-10.4%, minimum DSCR 0.66x and LLCR 0.75x under the frozen Stage 12 assumptions; Stage 11 remains the optimistic upper bound
+Validation: 60 eligible dates, 24 June excluded for missing V2 target evidence; 514,583 held-out acceptance orders; full repository suite passes 175 tests
+Known limitations: counterfactual exact acceptance is unobservable; rejected offers are not re-optimised into wholesale; utilisation/performance payments remain excluded; opportunity-cost bids approximate standalone contract displacement
+Next allowed stage: probabilistic renewable forecasts, seasonal/regime analysis, automated cross-repository bundle handoff and final product release

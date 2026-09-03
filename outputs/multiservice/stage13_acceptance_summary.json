@@ -1,0 +1,116 @@
+{
+  "schema_version": "1.0",
+  "stage": "13_issue_time_acceptance_calibration",
+  "training_rule": "May uses April only; June uses April+May",
+  "order_proxy": "non-looped PARENT; standalone parent-only basket preferred by hierarchy",
+  "identity_fields_retained": false,
+  "features": [
+    "product",
+    "bid price minus previous same-product/window clearing price",
+    "quantity bin"
+  ],
+  "validation": {
+    "orders": 514583,
+    "brier_score": 0.17370184747623013,
+    "product_baseline_brier_score": 0.2250592027014936,
+    "brier_improvement_vs_product_baseline_pct": 22.81948687669577,
+    "weighted_calibration_mae": 0.05526744649429908,
+    "by_product": {
+      "DCH": {
+        "orders": 111,
+        "actual_acceptance_pct": 37.83783783783784,
+        "predicted_acceptance_pct": 41.02319617572796,
+        "brier_score": 0.25373238034534973,
+        "baseline_brier_score": 0.25629593180004295
+      },
+      "DCL": {
+        "orders": 415,
+        "actual_acceptance_pct": 60.0,
+        "predicted_acceptance_pct": 61.558830938235346,
+        "brier_score": 0.24035120988095438,
+        "baseline_brier_score": 0.24035120988095438
+      },
+      "DMH": {
+        "orders": 1108,
+        "actual_acceptance_pct": 17.870036101083034,
+        "predicted_acceptance_pct": 23.336857533862837,
+        "brier_score": 0.14961480556229656,
+        "baseline_brier_score": 0.1609072138162766
+      },
+      "DML": {
+        "orders": 2659,
+        "actual_acceptance_pct": 2.6325686348251223,
+        "predicted_acceptance_pct": 1.0811473096897763,
+        "brier_score": 0.0258518823046535,
+        "baseline_brier_score": 0.025932264718904367
+      },
+      "DRH": {
+        "orders": 4467,
+        "actual_acceptance_pct": 23.080367136780836,
+        "predicted_acceptance_pct": 26.230457667941415,
+        "brier_score": 0.1282482689138013,
+        "baseline_brier_score": 0.17795098514177485
+      },
+      "DRL": {
+        "orders": 6861,
+        "actual_acceptance_pct": 44.41043579653112,
+        "predicted_acceptance_pct": 40.08556083703984,
+        "brier_score": 0.23121910609384916,
+        "baseline_brier_score": 0.26130017699942976
+      },
+      "NBR": {
+        "orders": 288,
+        "actual_acceptance_pct": 16.666666666666668,
+        "predicted_acceptance_pct": 30.99775526128955,
+        "brier_score": 0.15913704584590999,
+        "baseline_brier_score": 0.16666666666666666
+      },
+      "NQR": {
+        "orders": 29633,
+        "actual_acceptance_pct": 7.022576181959302,
+        "predicted_acceptance_pct": 6.874413164684096,
+        "brier_score": 0.045051349660186236,
+        "baseline_brier_score": 0.06570137545759636
+      },
+      "NSR": {
+        "orders": 3456,
+        "actual_acceptance_pct": 1.1574074074074074,
+        "predicted_acceptance_pct": 0.07833974324879929,
+        "brier_score": 0.011526754781182804,
+        "baseline_brier_score": 0.01151407601218221
+      },
+      "PBR": {
+        "orders": 69075,
+        "actual_acceptance_pct": 28.403908794788272,
+        "predicted_acceptance_pct": 34.88827749886314,
+        "brier_score": 0.13973320564096578,
+        "baseline_brier_score": 0.24892119857115932
+      },
+      "PQR": {
+        "orders": 78355,
+        "actual_acceptance_pct": 22.950673218046074,
+        "predicted_acceptance_pct": 24.073577009356807,
+        "brier_score": 0.11221375010280353,
+        "baseline_brier_score": 0.17740170442611267
+      },
+      "PSR": {
+        "orders": 318155,
+        "actual_acceptance_pct": 50.86891609435652,
+        "predicted_acceptance_pct": 52.471134861728025,
+        "brier_score": 0.2105799403517798,
+        "baseline_brier_score": 0.2505673480100924
+      }
+    }
+  },
+  "lookup_config": {
+    "minimum_cell_orders": 100,
+    "minimum_margin_orders": 200,
+    "smoothing_strength": 50.0
+  },
+  "raw_source_sha256": {
+    "sell_202604.csv": "fd13084616addd798fa68a93ab800e38a061b6231db5d86b8e152cc92212a44c",
+    "sell_202605.csv": "1422bd7d0dceced74ab3b0c9407117ca15a938721cca8c5245355c31e379c8a3",
+    "sell_202606.csv": "91101dc113e2910724edef0a5822cd71ec71715df035d9636c32ad51d3a01c91"
+  },
+  "counterfactual_boundary": "The model estimates acceptance for a hypothetical simple BESS offer from historical comparable orders; it cannot identify the exact counterfactual merit-order outcome for an asset that was not present."
+}

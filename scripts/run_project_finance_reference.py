@@ -16,6 +16,7 @@ OUT = ROOT / "outputs" / "project_finance"
 OUT.mkdir(parents=True, exist_ok=True)
 STAGE10 = json.loads((ROOT / "outputs" / "market_investment" / "market_investment_summary.json").read_text(encoding="utf-8"))
 STAGE11 = json.loads((ROOT / "outputs" / "multiservice" / "multiservice_summary.json").read_text(encoding="utf-8"))
+STAGE13 = json.loads((ROOT / "outputs" / "multiservice" / "stage13_issue_time_multiservice_summary.json").read_text(encoding="utf-8"))
 DAILY = pd.read_csv(ROOT / "outputs" / "market_optimisation" / "pre_delivery_strategy_daily.csv")
 
 DEFAULT = ProjectFinanceAssumptions(
@@ -37,6 +38,8 @@ DEFAULT = ProjectFinanceAssumptions(
 VALUES = {
     "forecast_wholesale_base": STAGE10["scenarios"]["forecast_wholesale_420d"]["annual_operating_value_gbp"],
     "reserve_aware_wholesale": STAGE10["scenarios"]["reserve_aware_wholesale_420d"]["annual_operating_value_gbp"],
+    "stage13_non_bm_calibrated": STAGE13["scenarios"]["non_bm"]["annualised_acceptance_calibrated_total_gbp"],
+    "stage13_bm_calibrated": STAGE13["scenarios"]["bm_eligible"]["annualised_acceptance_calibrated_total_gbp"],
     "stage11_non_bm_upside": STAGE11["scenarios"]["non_bm_multiservice"]["annualised_net_value_gbp"],
     "stage11_bm_upside": STAGE11["scenarios"]["bm_multiservice"]["annualised_net_value_gbp"],
 }
@@ -78,14 +81,15 @@ def main() -> None:
         "scenarios": scenarios,
         "monte_carlo_forecast_wholesale": mc,
         "base_case_rule": "forecast-selected Stage 10 wholesale operating value is the finance base",
-        "stage11_rule": "Stage 11 multi-service cases are perfect-information price-taker upside screens, not finance-base revenue",
+        "stage13_rule": "Stage 13 uses issue-time price/capacity decisions and empirical expected acceptance; it is an intermediate screening case, not bankable contracted revenue",
+        "stage11_rule": "Stage 11 multi-service cases are perfect-information price-taker upper bounds, not finance-base revenue",
         "tax_boundary": "simplified screening tax and user-defined allowance schedule; no tax advice or legal eligibility opinion",
         "excluded": [
             "tax-loss carry-forward and group relief",
             "VAT and transaction taxes",
             "refinancing, hedging and sculpted debt",
             "working capital and reserve accounts",
-            "asset-specific ancillary-service bid acceptance",
+            "exact counterfactual ancillary-service auction acceptance and bankable contracted revenue",
         ],
     }
     (OUT / "project_finance_summary.json").write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n", encoding="utf-8")

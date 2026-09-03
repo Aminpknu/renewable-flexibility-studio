@@ -1,0 +1,158 @@
+{
+  "schema_version": "1.0",
+  "stage": "13_issue_time_multiservice_acceptance_calibrated",
+  "validation_start": "2026-05-01",
+  "validation_end": "2026-06-30",
+  "battery": {
+    "power_mw": 25.0,
+    "energy_mwh": 200.0,
+    "duration_hours": 8.0
+  },
+  "throughput_cost_gbp_per_mwh": 2.0,
+  "scenarios": {
+    "bm_eligible": {
+      "days": 60,
+      "annualised_acceptance_calibrated_total_gbp": 2210841.870522426,
+      "annualised_realised_wholesale_margin_gbp": 1053538.873799923,
+      "annualised_acceptance_calibrated_ancillary_gbp": 1157302.996722503,
+      "annualised_reserve_aware_wholesale_only_gbp": 1144102.56160009,
+      "annualised_stage11_perfect_information_gbp": 4668355.609294495,
+      "capture_vs_stage11_perfect_information_pct": 47.3580432930331,
+      "incremental_value_vs_reserve_aware_wholesale_gbp_per_year": 1066739.308922336,
+      "positive_total_value_days_pct": 100.0,
+      "mean_price_eligible_offer_pct": 99.2755981316701,
+      "mean_predicted_acceptance_pct": 48.3030293909916,
+      "offered_mw_hours": 35871.5,
+      "expected_accepted_mw_hours": 16463.47212626742,
+      "by_product": {
+        "DCH": {
+          "offered_mw_hours": 456.0,
+          "expected_accepted_mw_hours": 266.93388878799385,
+          "acceptance_calibrated_payment_gbp": 663.810028627714,
+          "mean_bid_gbp_per_mw_per_hour": 0.0
+        },
+        "DRL": {
+          "offered_mw_hours": 22636.0,
+          "expected_accepted_mw_hours": 10493.507943652261,
+          "acceptance_calibrated_payment_gbp": 167080.62553866935,
+          "mean_bid_gbp_per_mw_per_hour": 0.8009606535306527
+        },
+        "NBR": {
+          "offered_mw_hours": 2341.0,
+          "expected_accepted_mw_hours": 55.833410359518965,
+          "acceptance_calibrated_payment_gbp": 668.4375335923062,
+          "mean_bid_gbp_per_mw_per_hour": 0.0793512118002799
+        },
+        "NQR": {
+          "offered_mw_hours": 2872.5,
+          "expected_accepted_mw_hours": 1150.712767467911,
+          "acceptance_calibrated_payment_gbp": 1018.9301447591073,
+          "mean_bid_gbp_per_mw_per_hour": 0.015748834355391667
+        },
+        "NSR": {
+          "offered_mw_hours": 8.5,
+          "expected_accepted_mw_hours": 0.0,
+          "acceptance_calibrated_payment_gbp": 0.0,
+          "mean_bid_gbp_per_mw_per_hour": 0.0
+        },
+        "PBR": {
+          "offered_mw_hours": 1753.0,
+          "expected_accepted_mw_hours": 1053.4280267041122,
+          "acceptance_calibrated_payment_gbp": 5428.553954268651,
+          "mean_bid_gbp_per_mw_per_hour": 0.19371962027431253
+        },
+        "PQR": {
+          "offered_mw_hours": 924.0,
+          "expected_accepted_mw_hours": 505.8397001278139,
+          "acceptance_calibrated_payment_gbp": 3768.0640842222388,
+          "mean_bid_gbp_per_mw_per_hour": 0.0009006886884088007
+        },
+        "PSR": {
+          "offered_mw_hours": 4880.5,
+          "expected_accepted_mw_hours": 2937.2163891678074,
+          "acceptance_calibrated_payment_gbp": 11482.95394748326,
+          "mean_bid_gbp_per_mw_per_hour": 0.4996182253582931
+        }
+      }
+    },
+    "non_bm": {
+      "days": 60,
+      "annualised_acceptance_calibrated_total_gbp": 2223233.3562767827,
+      "annualised_realised_wholesale_margin_gbp": 1051389.6039955276,
+      "annualised_acceptance_calibrated_ancillary_gbp": 1171843.7522812549,
+      "annualised_reserve_aware_wholesale_only_gbp": 1144102.56160009,
+      "annualised_stage11_perfect_information_gbp": 4639091.384216556,
+      "capture_vs_stage11_perfect_information_pct": 47.92389655958974,
+      "incremental_value_vs_reserve_aware_wholesale_gbp_per_year": 1079130.7946766925,
+      "positive_total_value_days_pct": 100.0,
+      "mean_price_eligible_offer_pct": 99.1804031696273,
+      "mean_predicted_acceptance_pct": 46.91546884675599,
+      "offered_mw_hours": 35290.5,
+      "expected_accepted_mw_hours": 16564.048352982034,
+      "by_product": {
+        "DCH": {
+          "offered_mw_hours": 708.0,
+          "expected_accepted_mw_hours": 409.47305015971085,
+          "acceptance_calibrated_payment_gbp": 1067.75898231873,
+          "mean_bid_gbp_per_mw_per_hour": 0.0
+        },
+        "DRL": {
+          "offered_mw_hours": 23360.0,
+          "expected_accepted_mw_hours": 10820.082799954116,
+          "acceptance_calibrated_payment_gbp": 172803.31571288576,
+          "mean_bid_gbp_per_mw_per_hour": 0.8568273641550433
+        },
+        "NQR": {
+          "offered_mw_hours": 3293.0,
+          "expected_accepted_mw_hours": 1302.715406758908,
+          "acceptance_calibrated_payment_gbp": 1080.0421485887298,
+          "mean_bid_gbp_per_mw_per_hour": 0.0801938749137175
+        },
+        "NSR": {
+          "offered_mw_hours": 967.0,
+          "expected_accepted_mw_hours": 0.0,
+          "acceptance_calibrated_payment_gbp": 0.0,
+          "mean_bid_gbp_per_mw_per_hour": 3.429465799327046e-14
+        },
+        "PQR": {
+          "offered_mw_hours": 1579.5,
+          "expected_accepted_mw_hours": 807.5860608308983,
+          "acceptance_calibrated_payment_gbp": 4837.449465529946,
+          "mean_bid_gbp_per_mw_per_hour": 0.0007959970341845309
+        },
+        "PSR": {
+          "offered_mw_hours": 5383.0,
+          "expected_accepted_mw_hours": 3224.1910352783993,
+          "acceptance_calibrated_payment_gbp": 12711.434065420981,
+          "mean_bid_gbp_per_mw_per_hour": 0.4569283950646508
+        }
+      }
+    }
+  },
+  "decision_information": [
+    "prior-date wholesale price forecast",
+    "prior-date product-specific EAC clearing-price forecast",
+    "Stage B prior-data directional uncertainty and SOC corridor",
+    "acceptance calibration from earlier standalone-parent EAC orders",
+    "opportunity-cost bid floor computed from forecast wholesale value"
+  ],
+  "realised_information_used_only_for_scoring": [
+    "APX Market Index price",
+    "EAC system clearing price and system cleared volume"
+  ],
+  "acceptance_scoring": "expected accepted MW = offered MW capped by system cleared volume times issue-time predicted acceptance ratio; bids above realised clearing price receive zero",
+  "limitations": [
+    "counterfactual asset acceptance cannot be observed exactly",
+    "acceptance is calibrated from comparable simple historical parent orders, not participant identity",
+    "wholesale schedule is not re-optimised after a rejected ancillary offer",
+    "utilisation energy/payments and performance penalties remain excluded",
+    "APX Market Index is a public short-term wholesale reference, not a licensed day-ahead auction price",
+    "capacity selection uses product-level prior acceptance before bid-specific acceptance is calculated",
+    "opportunity-cost bid is a standalone-contract value-loss approximation and does not allocate joint-stack interaction value"
+  ],
+  "calendar_days": 61,
+  "eligible_days": 60,
+  "excluded_calendar_dates": [
+    "2026-06-24"
+  ]
+}
