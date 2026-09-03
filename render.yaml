@@ -6,4 +6,5 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:server
     healthCheckPath: /
-    autoDeploy: true
+    autoDeployTrigger: checksPass
+    renderSubdomainPolicy: enabled
