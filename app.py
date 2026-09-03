@@ -20,6 +20,7 @@ from adapters.latest_forecast import latest_target_date, load_latest_forecast
 from adapters.market_reference import load_market_index_history, select_market_index_prices
 from adapters.quick_reserve import load_quick_reserve_history
 from adapters.spatial_forecast import build_spatial_virtual_forecast, load_latest_spatial_forecast
+from adapters.spatial_demand import load_latest_spatial_demand, select_zone_demand
 from adapters.market_forecast_bundle import assess_market_forecast_bundle, validate_market_forecast_bundle
 from engine.battery import BatteryConfig, simulate_reactive_firming
 from engine.design_sizing import select_stable_design
@@ -73,6 +74,8 @@ IMBALANCE_SUMMARY_PATH = ROOT / "outputs" / "imbalance_backtest_summary.json"
 DESIGN_GRID_PATH = ROOT / "outputs" / "design_sizing_grid_100mw.csv"
 LATEST_FORECAST_PATH = ROOT / "data" / "latest_forecast.csv"
 LATEST_SPATIAL_FORECAST_PATH = ROOT / "data" / "latest_spatial_forecast.csv"
+LATEST_SPATIAL_DEMAND_PATH = ROOT / "data" / "latest_spatial_demand_forecast.csv"
+SPATIAL_DEMAND_MANIFEST_PATH = ROOT / "data" / "spatial_demand_manifest.json"
 SYSTEM_PRICES_PATH = ROOT / "data" / "elexon_system_prices.csv"
 MARKET_INDEX_PATH = ROOT / "data" / "elexon_market_index_prices.csv"
 MARKET_BACKTEST_PATH = ROOT / "outputs" / "market_optimisation" / "default_mixed_summary.json"
@@ -97,6 +100,8 @@ MARKET_INDEX_PRICES = load_market_index_history(MARKET_INDEX_PATH)
 QUICK_RESERVE = load_quick_reserve_history(str(QUICK_RESERVE_PATH))
 LATEST_FORECAST = load_latest_forecast(LATEST_FORECAST_PATH)
 LATEST_SPATIAL_FORECAST = load_latest_spatial_forecast(LATEST_SPATIAL_FORECAST_PATH)
+LATEST_SPATIAL_DEMAND = load_latest_spatial_demand(LATEST_SPATIAL_DEMAND_PATH)
+SPATIAL_DEMAND_MANIFEST = json.loads(SPATIAL_DEMAND_MANIFEST_PATH.read_text(encoding="utf-8"))
 LATEST_TARGET_DATE = latest_target_date(LATEST_FORECAST)
 FULL_BACKTEST = json.loads(FULL_BACKTEST_PATH.read_text(encoding="utf-8"))
 IMBALANCE_BACKTEST = json.loads(IMBALANCE_SUMMARY_PATH.read_text(encoding="utf-8"))
@@ -1658,6 +1663,30 @@ def _spatial_zone_figure(frame: pd.DataFrame, zone: str) -> go.Figure:
     return figure
 
 
+def _spatial_system_zone_figure(frame: pd.DataFrame, zone: str) -> go.Figure:
+    figure = go.Figure()
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"], y=frame["zone_underlying_demand_mw"] / 1000.0,
+        mode="lines", name="Underlying demand proxy", line={"width": 3},
+    ))
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"], y=frame["zone_total_forecast_mw"] / 1000.0,
+        mode="lines", name="Embedded wind + solar forecast",
+    ))
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"], y=frame["net_load_mw"] / 1000.0,
+        mode="lines", name="Net load after embedded wind + solar", line={"dash": "dash"},
+    ))
+    figure.add_hline(y=0.0, line_dash="dot")
+    figure.update_layout(
+        xaxis_title="Settlement time (UTC)", yaxis_title="System zone power (GW)",
+        hovermode="x unified", height=410, margin=dict(l=55, r=20, t=55, b=45),
+        legend={"orientation": "h", "y": 1.03, "yanchor": "bottom", "x": 0},
+        title=f"{zone} zone system demand and embedded-renewable context",
+    )
+    return figure
+
+
 def _spatial_zone_view(
     zone: str,
     portfolio_type: str,
@@ -1673,6 +1702,17 @@ def _spatial_zone_view(
     selected_zone = spatial.loc[spatial["zone"].eq(zone)].copy()
     if selected_zone.empty:
         raise KeyError(f"Unknown spatial zone: {zone}")
+    system_renewable = LATEST_SPATIAL_FORECAST.loc[
+        LATEST_SPATIAL_FORECAST["zone"].eq(zone),
+        ["settlement_period", "valid_time_utc", "zone_wind_forecast_mw", "zone_solar_forecast_mw", "zone_total_forecast_mw"],
+    ].copy()
+    system_demand = select_zone_demand(LATEST_SPATIAL_DEMAND, zone)
+    system_context = system_demand.merge(
+        system_renewable, on=["settlement_period", "valid_time_utc"], how="inner", validate="one_to_one"
+    )
+    if len(system_context) != len(system_demand):
+        raise ValueError("Spatial renewable and demand bundles do not cover the same settlement periods.")
+    system_context["net_load_mw"] = system_context["zone_underlying_demand_mw"] - system_context["zone_total_forecast_mw"]
     design_grid = scaled_design_grid(
         DESIGN_GRID, portfolio_type, float(capacity_mw), float(wind_share_pct)
     )
@@ -1689,6 +1729,13 @@ def _spatial_zone_view(
     peak = float(selected_zone["zone_virtual_forecast_mw"].max())
     proxy_power = float(selected_design["power_mw"]) * capacity_share
     proxy_energy = float(selected_design["energy_mwh"]) * capacity_share
+    demand_energy_gwh = float(system_context["zone_underlying_demand_mw"].sum() * 0.5 / 1000.0)
+    embedded_energy_gwh = float(system_context["zone_total_forecast_mw"].sum() * 0.5 / 1000.0)
+    embedded_share_pct = 100.0 * embedded_energy_gwh / demand_energy_gwh if demand_energy_gwh > 0 else 0.0
+    demand_peak_gw = float(system_context["zone_underlying_demand_mw"].max() / 1000.0)
+    net_peak_gw = float(system_context["net_load_mw"].max() / 1000.0)
+    net_min_gw = float(system_context["net_load_mw"].min() / 1000.0)
+    surplus_periods = int(system_context["net_load_mw"].lt(0).sum())
     cards = [
         _kpi_card("Spatial zone", zone, "One of the 10 V2 weather/allocation zones"),
         _kpi_card("Allocated nameplate proxy", f"{zone_capacity:.1f} MW", f"{100*capacity_share:.1f}% of selected virtual portfolio"),
@@ -1696,6 +1743,10 @@ def _spatial_zone_view(
         _kpi_card("Peak allocated forecast", f"{peak:.1f} MW", "Weather-informed share of national V2 forecast"),
         _kpi_card("Indicative BESS share", f"{proxy_power:.1f} MW / {proxy_energy:.1f} MWh", "Proportional Stage A allocation only"),
         _kpi_card("Implied duration", f"{float(selected_design['duration_hours']):.0f} h", "Inherited from national Stage A design"),
+        _kpi_card("Underlying demand proxy", f"{demand_energy_gwh:.1f} GWh/day", f"Peak {demand_peak_gw:.2f} GW"),
+        _kpi_card("Embedded wind + solar", f"{embedded_energy_gwh:.1f} GWh/day", f"{embedded_share_pct:.1f}% of underlying demand-proxy energy"),
+        _kpi_card("Peak net load", f"{net_peak_gw:.2f} GW", "Demand minus embedded wind + solar"),
+        _kpi_card("Minimum net load", f"{net_min_gw:.2f} GW", f"{surplus_periods} half-hours below zero"),
     ]
     note = html.Div([
         html.Div(
@@ -1707,11 +1758,15 @@ def _spatial_zone_view(
             className="scenario-note-line",
         ),
         html.Div(
-            "The BESS figure is only a proportional allocation of the national Stage A design. City-specific forecast-error histories and local grid constraints are not available, so it is not an independently sized local battery recommendation. Demand, System Price and market settlement remain GB-level.",
+            "The BESS figure is only a proportional allocation of the national Stage A design. City-specific forecast-error histories and local grid constraints are not available, so it is not an independently sized local battery recommendation.",
             className="scenario-note-line uncertainty-line",
         ),
+        html.Div(
+            f"Underlying zone demand is a proxy, not measured municipal demand: DESNZ 2024 local-authority consumption sets annual weights and Elexon GSP Group Take sets regional half-hourly shape. National underlying demand is reconstructed as NESO National Demand plus the V2 embedded wind/solar forecast; after subtracting the identical spatial embedded forecast, the ten zone net loads reconcile to NESO National Demand. The GSP shape validation improves on a flat profile by {SPATIAL_DEMAND_MANIFEST['profile_validation']['improvement_vs_flat_pct']:.1f}% on Apr-Jun 2026.",
+            className="scenario-note-line",
+        ),
     ])
-    return note, cards, _spatial_zone_figure(selected_zone, zone)
+    return note, cards, _spatial_zone_figure(selected_zone, zone), _spatial_system_zone_figure(system_context, zone)
 
 
 def _scenario(
@@ -2368,6 +2423,16 @@ app.layout = html.Div(
                             figure=_empty_figure("Spatial allocation will load automatically."),
                             config={"displaylogo": False},
                         ),
+                        html.Div("Underlying demand, embedded renewables and net load", className="chart-title"),
+                        html.Div(
+                            "This second chart uses the full embedded wind/solar V2 spatial allocation, not the user-scaled virtual portfolio. The underlying-demand proxy is reconstructed from NESO National Demand plus embedded wind/solar, then spatially allocated. Subtracting the same embedded forecast yields a zone net-load proxy whose ten-zone sum reconciles to NESO National Demand; it is not a measured city feeder trace.",
+                            className="chart-subtitle",
+                        ),
+                        dcc.Graph(
+                            id="spatial-system-chart",
+                            figure=_empty_figure("Spatial demand context will load automatically."),
+                            config={"displaylogo": False},
+                        ),
                         html.Div("Official GB day-ahead demand context", className="chart-title"),
                         html.Div("National Demand Forecast is official NESO data served through Elexon Insights. It provides system-scale context; the virtual portfolio is not claimed to be a physical national battery.", className="chart-subtitle"),
                         dcc.Graph(id="grid-demand-chart", figure=_empty_figure("GB demand context will load automatically."), config={"displaylogo": False}),
@@ -2448,6 +2513,7 @@ def show_wind_share(portfolio_type: str) -> str:
     Output("spatial-zone-note", "children"),
     Output("spatial-zone-kpi-grid", "children"),
     Output("spatial-zone-chart", "figure"),
+    Output("spatial-system-chart", "figure"),
     Input("spatial-zone-input", "value"),
     Input("portfolio-input", "value"),
     Input("capacity-input", "value"),
@@ -2466,7 +2532,7 @@ def update_spatial_zone(
         )
     except (TypeError, ValueError, KeyError, AssertionError) as error:
         message = f"Spatial zone allocation could not be calculated: {error}"
-        return message, [], _empty_figure(message)
+        return message, [], _empty_figure(message), _empty_figure(message)
 
 
 @app.callback(

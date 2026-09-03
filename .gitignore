@@ -43,3 +43,6 @@ data/*.parquet
 
 # Build-only raw government source; derived spatial weights are versioned.
 data/repd_*.csv
+
+# Build-only raw spatial-demand source archives.
+data/build_sources/

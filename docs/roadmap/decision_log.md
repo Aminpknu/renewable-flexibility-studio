@@ -141,3 +141,16 @@ Default evidence: £1.13m/yr forecast-wholesale operating value, -£20.58m NPV, 
 Validation: full merged repository suite passes 145 tests; market-backed UI callbacks and JSON export are tested
 Known limitations: APX MIP is not a licensed day-ahead auction price; realised-price scoring does not prove trade execution; QR asset acceptance is unidentified; cost/financing assumptions are screening inputs; no tax/debt/site-grid/transaction-cost model
 Next allowed stage: public-product review, probabilistic renewable forecasting, automated cross-repository forecast/spatial handoff, and structured QR acceptance modelling
+
+## Spatial Demand — Ten-zone underlying demand and net load
+
+Stage: Spatial demand / net-load allocation
+Decision: EVIDENCE READY
+Decision date: 2026-09-03
+Branch: feature/spatial-demand
+Primary evidence: DESNZ 2024 Local Authority electricity consumption, Elexon CDCA-I029 GSP Group Take, NESO GSP-region boundaries, pre-delivery NESO National Demand Forecast and V2 embedded wind/solar spatial allocation
+Acceptance result: PASS for sourced ten-zone demand/net-load screening
+Reason: 350 Local Authorities map to ten zones and GSP Groups; Apr-Jun profile validation improves 35.4% versus flat; underlying-demand and NDF net-load identities reconcile every half-hour
+Validation: full repository suite passes 150 tests; selected-zone UI, underlying-demand identity and NDF net-load reconciliation are tested
+Known limitations: modelled system-zone allocation rather than measured city demand; Local Authority centroids approximate zone/GSP assignment; annual DESNZ weights are 2024; no distribution feeder constraints or independently observed ten-zone half-hour demand targets
+Next allowed stage: reusable NESO multi-service framework, then project-finance screening

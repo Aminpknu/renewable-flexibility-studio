@@ -17,7 +17,7 @@ A user can:
 - inspect a leakage-safe rolling **80% prediction interval** and see which historical periods fell outside the expected range;
 - size a battery for **future operation** using a 2,541-cell stability grid across 450 out-of-sample days, with 80/90/95% firming and reliability targets;
 - inspect the latest V2 **forecast-day** renewable schedule with a directional empirical uncertainty range;
-- inspect a 10-zone weather-informed spatial allocation of the GB wind/solar forecast, reconciled exactly to the national V2 totals;
+- inspect a 10-zone weather-informed spatial allocation of the GB wind/solar forecast, plus a sourced spatial underlying-demand/net-load proxy reconciled to NESO National Demand;
 - carry the selected future battery into an operational reserve planner that checks current SOC, calculates a safe starting-SOC band, recommends only the minimum necessary pre-day adjustment, and identifies critical downside/upside reserve windows;
 - place that schedule in real GB grid context using the official half-hourly NESO National Demand Forecast served by Elexon Insights;
 - translate each historical forecast deviation into a BSC-style imbalance volume and official Elexon System-Price cashflow, before and after battery firming;
@@ -121,7 +121,11 @@ A formal prior-data-only backtest covers 420 eligible dates. At a 50% baseline S
 
 The forecast-day view now exposes ten indicative spatial zones aligned with the V2 weather sampling locations: Inverness, Edinburgh, Newcastle, Manchester, Leeds, Birmingham, Norwich, Cardiff, Bristol and London. The national V2 wind/solar forecast remains authoritative. Each half-hour is allocated across the ten zones using **DESNZ REPD operational wind/solar capacity as a fixed spatial proxy** multiplied by the corresponding issue-time V2 weather signal, then normalised so the ten zones sum exactly back to the national wind and solar MW totals.
 
-REPD is used only as a spatial weighting proxy: it tracks projects above 150 kW and had a 1 MW threshold before 2021, so it is not treated as a complete embedded-capacity census. The Studio therefore labels these outputs as **spatial allocation / flexibility zones**, not independently trained or observed city-generation forecasts. The city-level BESS card is a proportional allocation of the national Stage A design, not independent local sizing; local forecast-error histories, network constraints, demand and prices are not available at this resolution.
+REPD is used only as a spatial weighting proxy: it tracks projects above 150 kW and had a 1 MW threshold before 2021, so it is not treated as a complete embedded-capacity census. The Studio therefore labels these outputs as **spatial allocation / flexibility zones**, not independently trained or observed city-generation forecasts. The city-level BESS card is a proportional allocation of the national Stage A design, not independent local sizing; local forecast-error histories and distribution-network constraints are not available at this resolution.
+
+The same ten zones now have a separate **underlying-demand and net-load proxy**. DESNZ 2024 local-authority electricity consumption sets annual spatial weights; Elexon CDCA-I029 GSP Group Take history supplies regional within-day shape. Because embedded wind/solar suppress NESO National Demand, the national underlying-demand proxy is constructed as `NDF + V2 embedded wind + V2 embedded solar`. It is spatially allocated and then the identical zone embedded-renewable forecast is subtracted. Consequently, zone underlying demand sums to the national underlying proxy, while the ten zone net loads sum back exactly to NESO National Demand every half-hour. This is modelled system-zone demand, not measured municipal-city demand.
+
+The GSP shape model is trained only through March 2026 for its Apr-Jun 2026 validation check. On 1,267 GSP-days it reduces mean within-day profile error from 0.415 to 0.268 percentage points of daily energy, a **35.4% improvement versus a flat half-hour profile**.
 
 The GB demand panel also accepts a contiguous **remaining-day** NESO forecast after delivery has started. A partial series is shown with an explicit warning instead of being rejected as an incomplete day.
 
