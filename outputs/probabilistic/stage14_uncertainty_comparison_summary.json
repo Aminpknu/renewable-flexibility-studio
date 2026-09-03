@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0",
+  "stage": "14_probabilistic_vs_directional_residual_comparison",
+  "locked_period": "2026-04-01 to 2026-06-30",
+  "battery": {
+    "power_mw": 25.0,
+    "energy_mwh": 200.0,
+    "duration_hours": 8.0
+  },
+  "portfolio_capacity_mw": 100.0,
+  "old_method": "rolling 180-day local signed-residual q10-q90 envelope",
+  "new_method": "mix-aware conditional quantile regression with rolling prior-date conformal calibration",
+  "by_wind_share": {
+    "0.00": {
+      "periods": 4320,
+      "days": 90,
+      "old_directional_residual": {
+        "coverage_pct": 88.70370370370371,
+        "mean_width_mw": 6.086438199795012
+      },
+      "stage14_probabilistic": {
+        "coverage_pct": 83.37962962962962,
+        "mean_width_mw": 4.917071324035438
+      },
+      "width_change_pct": -19.21266325843838,
+      "old_energy_band_feasible_days_pct": 100.0,
+      "new_energy_band_feasible_days_pct": 100.0,
+      "mean_abs_start_soc_change_pct_points": 0.0,
+      "mean_new_start_soc_pct": 50.0,
+      "mean_old_start_soc_pct": 50.0
+    },
+    "0.50": {
+      "periods": 4320,
+      "days": 90,
+      "old_directional_residual": {
+        "coverage_pct": 83.31018518518518,
+        "mean_width_mw": 7.273966720377044
+      },
+      "stage14_probabilistic": {
+        "coverage_pct": 82.68518518518519,
+        "mean_width_mw": 7.641547668678513
+      },
+      "width_change_pct": 5.053376822191669,
+      "old_energy_band_feasible_days_pct": 100.0,
+      "new_energy_band_feasible_days_pct": 100.0,
+      "mean_abs_start_soc_change_pct_points": 0.0,
+      "mean_new_start_soc_pct": 50.0,
+      "mean_old_start_soc_pct": 50.0
+    },
+    "1.00": {
+      "periods": 4320,
+      "days": 90,
+      "old_directional_residual": {
+        "coverage_pct": 81.85185185185185,
+        "mean_width_mw": 12.343370445883487
+      },
+      "stage14_probabilistic": {
+        "coverage_pct": 83.33333333333334,
+        "mean_width_mw": 12.322616950554359
+      },
+      "width_change_pct": -0.1681347523362131,
+      "old_energy_band_feasible_days_pct": 96.66666666666667,
+      "new_energy_band_feasible_days_pct": 96.66666666666667,
+      "mean_abs_start_soc_change_pct_points": 1.3902114295599977,
+      "mean_new_start_soc_pct": 50.10072986678094,
+      "mean_old_start_soc_pct": 51.17689267439552
+    }
+  }
+}

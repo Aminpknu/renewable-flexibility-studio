@@ -1,4 +1,4 @@
-__pycache__/
+﻿__pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
@@ -49,9 +49,18 @@ data/build_sources/
 !outputs/multiservice/
 !outputs/multiservice/*.json
 !outputs/multiservice/*.csv
+!outputs/probabilistic/
+!outputs/probabilistic/*.json
+!outputs/probabilistic/*.csv
 
 # Versioned Stage 12 project-finance screening evidence.
 !outputs/project_finance/
 !outputs/project_finance/*.json
 !outputs/project_finance/*.csv
 *.err
+
+# Versioned Stage 15 regime evidence used by the app.
+!outputs/regimes/
+!outputs/regimes/*.json
+!outputs/regimes/*.csv
+
