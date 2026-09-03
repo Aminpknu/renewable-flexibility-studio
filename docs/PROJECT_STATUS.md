@@ -36,6 +36,7 @@
 - Stage 9 Quick Reserve packet: NESO EAC PQR/NQR clearing-price archive, whole-MW shared-capacity commitments, state-of-energy guard and availability-only arbitrage/QR stacking;
 - full three-use co-optimisation: renewable firming + wholesale arbitrage + Quick Reserve availability sharing one battery MW/SOC budget;
 - prior-date Quick Reserve price forecast and pre-delivery PQR/NQR capacity-allocation signal, with 90-day value-capture benchmark and EAC Sell Orders acceptance diagnostic;
+- Stage 10 market-backed investment appraisal: 420-day forecast-selected/reserve-aware wholesale lifecycle NPV/BCR/payback/switching values, aligned QR upside sensitivity and block-resampled market-backed P10/P50/P90/CVaR;
 - one-page Dash interface and CSV export;
 - public GitHub repository with GitHub Actions configuration;
 - automated test suite covering physical, uncertainty, tomorrow-planning and settlement logic;
@@ -50,10 +51,9 @@ Forecasting V2 is packaged separately on branch `feature/v2-spatial-production`,
 
 1. Build an explicit structured QR bid/acceptance model from EAC Sell Orders/Results by Unit; the current price/capacity signal is issue-time-correct but intentionally not acceptance-adjusted.
 2. Connect an authorised day-ahead auction feed when available and compare it with the public Market Index forecast benchmark.
-3. Feed forecast-based market + Quick Reserve value into lifecycle NPV/Monte Carlo so Stage 6 can use market-backed operating evidence alongside scenario consequence values.
-4. Add date-range, seasonal and weather-regime comparison and quantify sizing/reserve sensitivity by wind/solar mix.
-5. Upgrade the operational directional residual range to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty and compare both approaches.
-6. Automate the renewable V2 forecast-bundle handoff and cross-bundle freshness/fallback behavior.
+3. Add date-range, seasonal and weather-regime comparison and quantify sizing/reserve sensitivity by wind/solar mix and spatial zone.
+4. Upgrade the operational directional residual range to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty and compare both approaches.
+5. Automate the renewable V2 forecast + spatial-bundle handoff and cross-bundle freshness/fallback behavior.
 
 ## Learning fixture
 

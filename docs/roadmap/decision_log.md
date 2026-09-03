@@ -127,3 +127,17 @@ Reason: partial current-day demand is no longer rejected; ten zone shares reconc
 Validation: 135 Flexibility Studio tests pass; forecasting producer spatial tests pass and 104 branch tests pass excluding one stale ignored local-artifact parity check
 Known limitations: no observed city generation/error targets; REPD is an incomplete embedded-capacity census; no local demand/network constraints or local prices; city BESS MW/MWh is proportional allocation only
 Next allowed stage: complete Stage 10 market-backed investment integration, while preserving the spatial-proxy boundary
+
+## Stage 10 — Market-backed lifecycle investment
+
+Stage: 10 Market-backed lifecycle investment and downside risk
+Decision: EVIDENCE READY
+Decision date: 2026-09-03
+Branch: feature/stage10-market-backed-investment
+Primary evidence: 420-day realised forecast-selected/reserve-aware APX Market Index operating value; 90-day aligned pre-delivery QR capacity-allocation upside; 5,000-run block-resampled wholesale investment Monte Carlo
+Acceptance result: PASS for market-backed pre-feasibility investment screening
+Reason: operating value is tied to prior-date forecast-selected schedules rather than an abstract consequence value; lifecycle NPV/BCR/payback/switching values and optional replacement are explicit; QR is separated as deterministic price-taker upside; Monte Carlo preserves daily-block market dependence and excludes unsupported QR acceptance
+Default evidence: £1.13m/yr forecast-wholesale operating value, -£20.58m NPV, BCR 0.30, £3.82m/yr break-even operating value, £4.42m max CAPEX; P50 Monte Carlo NPV about -£21.46m and 95% CVaR loss about £25.42m
+Validation: full merged repository suite passes 145 tests; market-backed UI callbacks and JSON export are tested
+Known limitations: APX MIP is not a licensed day-ahead auction price; realised-price scoring does not prove trade execution; QR asset acceptance is unidentified; cost/financing assumptions are screening inputs; no tax/debt/site-grid/transaction-cost model
+Next allowed stage: public-product review, probabilistic renewable forecasting, automated cross-repository forecast/spatial handoff, and structured QR acceptance modelling
