@@ -175,3 +175,31 @@ Bundle health is shown explicitly in the Studio:
 - **STALE_TIME**: the target delivery window is already materially past.
 
 A scheduled GitHub Actions workflow runs at 18:15 UTC each day and may also be triggered manually. It refreshes the validated bundle and commits only changed `data/` evidence. A reconstruction is never allowed to overwrite an already-valid pre-delivery issue for the same target.
+
+## H. Quick Reserve availability stacking
+
+The first ancillary-service packet adds NESO Quick Reserve to the wholesale battery benchmark. It uses the EAC Results Summary for Positive Quick Reserve (PQR) and Negative Quick Reserve (NQR), with one 30-minute auction window per settlement period and clearing prices in £/MW/h.
+
+The screening model encodes whole-MW QR contracts with a 1 MW minimum positive commitment. PQR and NQR split one battery nameplate capacity, so `PQR + NQR <= BESS MW`: the same MW is not sold twice. Wholesale charging/discharging, QR commitments and SOC therefore share one physical battery.
+
+Availability payment is:
+
+```text
+contracted MW * clearing price (£/MW/h) * 0.5 h
+```
+
+Only availability value is included. QR utilisation is dispatched separately and paid on a pay-as-bid basis, so neither utilisation payment nor activation energy is inferred from the availability-clearing archive.
+
+A configurable state-of-energy guard requires enough stored energy/headroom to sustain one or more consecutive QR windows without breaching the 10–90% SOC limits. The baseline uses two consecutive windows (1 hour), while one- and four-window cases are retained as sensitivities. This is a conservative screening approximation of the service energy/crossover requirement, not proof of NESO prequalification.
+
+The historical value calculation is an **ex-post price-taker upper bound**. It assumes the virtual asset could contract integer MW at the observed clearing price up to the system cleared volume. It does not model the asset's submitted bid price, auction merit order, acceptance probability, telemetry, operational notifications or commercial unavailability penalties.
+
+The benchmark also calculates the incorrect independent sum of `arbitrage-only + QR-only`. The gap between that sum and the shared-battery optimum is reported as **double-count avoided**, making the opportunity cost of using the same MW/SOC for multiple revenue streams explicit.
+
+### Frozen Apr–Jun 2026 QR evidence
+
+For the default 100 MW 50/50 portfolio, 25 MW / 200 MWh battery and £2/MWh throughput cost, the **two-window (1 h) guard** gives an Apr–Jun 2026 regime annualisation of about **£2.38m/yr arbitrage-only**, **£1.35m/yr QR availability-only**, and **£3.13m/yr physically stacked**. QR therefore adds about **£0.75m/yr** above the arbitrage-only upper bound in this regime.
+
+Simply adding the two independent strategies would imply about **£3.73m/yr**. The shared-battery optimisation reduces this by about **£0.61m/yr**, which is the estimated double-count avoided. Mean stacked commitments are about **13.0 MW PQR** and **8.6 MW NQR**, with their sum constrained within the 25 MW nameplate in every window.
+
+Changing the crossover guard from one to four windows reduces the stacked regime annualisation from roughly **£3.17m/yr to £3.08m/yr**. These values describe the 90-day Apr–Jun 2026 price regime and must not be substituted for a full-year forecast or guaranteed service revenue.

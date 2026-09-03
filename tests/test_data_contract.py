@@ -175,3 +175,44 @@ def test_operational_market_forecast_pipeline_artifacts() -> None:
     assert status["bundle_health"]["status"] in {
         "LIVE", "RECONSTRUCTED", "STALE_TARGET", "STALE_TIME",
     }
+
+
+def test_quick_reserve_archive_integrity() -> None:
+    import hashlib
+    import pandas as pd
+
+    csv_path = ROOT / "data" / "neso_quick_reserve_prices.csv"
+    manifest = json.loads(
+        (ROOT / "data" / "neso_quick_reserve_prices_manifest.json").read_text(encoding="utf-8")
+    )
+    frame = pd.read_csv(csv_path)
+    assert manifest["schema_version"] == "1.0"
+    assert manifest["service"] == "Quick Reserve"
+    assert manifest["products"] == ["PQR", "NQR"]
+    assert manifest["rights"] == "NESO Open Data Licence"
+    assert manifest["rows"] == 8744
+    assert set(frame["product"]) == {"PQR", "NQR"}
+    assert frame["window_hours"].eq(0.5).all()
+    assert not frame.duplicated(["delivery_start_utc", "product"]).any()
+    canonical = csv_path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == manifest["sha256"]
+
+
+def test_quick_reserve_stacking_evidence_artifact() -> None:
+    import pandas as pd
+
+    summary = json.loads(
+        (ROOT / "outputs" / "quick_reserve" / "quick_reserve_summary.json").read_text(encoding="utf-8")
+    )
+    daily = pd.read_csv(ROOT / "outputs" / "quick_reserve" / "quick_reserve_daily.csv")
+    assert summary["stage"] == "9_quick_reserve_availability_stacking"
+    assert summary["payment_scope"] == "availability only; utilisation excluded"
+    assert len(daily) == 90
+    two = summary["guard_sensitivity"]["2"]
+    assert two["days"] == 90
+    assert two["stacked_annualised_gbp"] >= two["arbitrage_annualised_gbp"]
+    assert two["naive_independent_sum_annualised_gbp"] >= two["stacked_annualised_gbp"]
+    assert two["double_count_avoided_annualised_gbp"] > 0
+    assert summary["guard_sensitivity"]["4"]["stacked_annualised_gbp"] <= (
+        summary["guard_sensitivity"]["1"]["stacked_annualised_gbp"] + 1e-6
+    )

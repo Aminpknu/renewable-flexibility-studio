@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.0",
+  "stage": "9_quick_reserve_availability_stacking",
+  "service": "Quick Reserve",
+  "products": [
+    "PQR",
+    "NQR"
+  ],
+  "price_source": "NESO EAC Results Summary",
+  "price_unit": "GBP/MW/h",
+  "payment_scope": "availability only; utilisation excluded",
+  "acceptance_assumption": "price-taker capacity accepted at observed clearing price",
+  "battery": {
+    "power_mw": 25.0,
+    "energy_mwh": 200.0,
+    "duration_hours": 8.0
+  },
+  "throughput_cost_gbp_per_mwh": 2.0,
+  "baseline_crossover_guard_windows": 2,
+  "guard_sensitivity": {
+    "1": {
+      "days": 90,
+      "annualisation_factor": 4.058333333333334,
+      "arbitrage_annualised_gbp": 2378411.87861887,
+      "qr_only_annualised_gbp": 1353640.3427083334,
+      "stacked_annualised_gbp": 3170179.902916192,
+      "stacked_availability_annualised_gbp": 943773.7971249999,
+      "incremental_stacked_vs_arbitrage_annualised_gbp": 791768.0242973218,
+      "naive_independent_sum_annualised_gbp": 3732052.2213272033,
+      "double_count_avoided_annualised_gbp": 561872.3184110116,
+      "stacked_positive_value_days_pct": 100.0,
+      "mean_pqr_contracted_mw": 12.742592592592592,
+      "mean_nqr_contracted_mw": 8.920601851851853,
+      "daily_stacked_value_p10_gbp": 3947.675243846813,
+      "daily_stacked_value_p50_gbp": 6856.65734819397,
+      "daily_stacked_value_p90_gbp": 16331.262242553763
+    },
+    "2": {
+      "days": 90,
+      "annualisation_factor": 4.058333333333334,
+      "arbitrage_annualised_gbp": 2378411.87861887,
+      "qr_only_annualised_gbp": 1353640.3427083334,
+      "stacked_annualised_gbp": 3126795.198027204,
+      "stacked_availability_annualised_gbp": 913639.8198749999,
+      "incremental_stacked_vs_arbitrage_annualised_gbp": 748383.3194083341,
+      "naive_independent_sum_annualised_gbp": 3732052.2213272033,
+      "double_count_avoided_annualised_gbp": 605257.0232999994,
+      "stacked_positive_value_days_pct": 100.0,
+      "mean_pqr_contracted_mw": 12.996759259259258,
+      "mean_nqr_contracted_mw": 8.575,
+      "daily_stacked_value_p10_gbp": 3879.6949840224734,
+      "daily_stacked_value_p50_gbp": 6769.349024806772,
+      "daily_stacked_value_p90_gbp": 15895.809550467524
+    },
+    "4": {
+      "days": 90,
+      "annualisation_factor": 4.058333333333334,
+      "arbitrage_annualised_gbp": 2378411.87861887,
+      "qr_only_annualised_gbp": 1353640.3427083334,
+      "stacked_annualised_gbp": 3080609.722661651,
+      "stacked_availability_annualised_gbp": 866651.7872083333,
+      "incremental_stacked_vs_arbitrage_annualised_gbp": 702197.8440427806,
+      "naive_independent_sum_annualised_gbp": 3732052.2213272033,
+      "double_count_avoided_annualised_gbp": 651442.4986655529,
+      "stacked_positive_value_days_pct": 100.0,
+      "mean_pqr_contracted_mw": 12.965972222222222,
+      "mean_nqr_contracted_mw": 8.282638888888888,
+      "daily_stacked_value_p10_gbp": 3752.382503695446,
+      "daily_stacked_value_p50_gbp": 6675.519449228916,
+      "daily_stacked_value_p90_gbp": 15888.364190852864
+    }
+  },
+  "limitations": [
+    "perfect-information EAC clearing prices and APX Market Index prices",
+    "individual asset auction acceptance is not modelled",
+    "QR utilisation revenue and activation energy are excluded",
+    "two-window guard is a screening rule, not proof of service prequalification",
+    "site grid connection, telemetry and bid execution are not modelled"
+  ]
+}

@@ -32,6 +32,7 @@
 - Stage 9 market layer: 450-day Elexon APX Market Index archive, settlement-aware firming, perfect-foresight wholesale arbitrage and shared-battery firming/arbitrage co-optimisation;
 - Stage 9 pre-delivery layer: prior-date-only Market Index price forecasting, forecast-selected arbitrage, perfect-foresight capture-gap measurement and Stage B reserve-aware wholesale scheduling;
 - atomic scheduled market-forecast publication with SHA-256 validation, LIVE/RECONSTRUCTED/STALE health labels and last-valid fallback;
+- Stage 9 Quick Reserve packet: NESO EAC PQR/NQR clearing-price archive, whole-MW shared-capacity commitments, state-of-energy guard and availability-only arbitrage/QR stacking;
 - one-page Dash interface and CSV export;
 - public GitHub repository with GitHub Actions configuration;
 - automated test suite covering physical, uncertainty, tomorrow-planning and settlement logic;
@@ -44,9 +45,9 @@ Forecasting V2 is packaged separately on branch `feature/v2-spatial-production`,
 
 ## Next analytical stages
 
-1. Extend market co-optimisation to the first balancing/ancillary-service revenue product after encoding its eligibility, commitment and headroom/SOC constraints.
+1. Convert Quick Reserve from the current perfect-information price-taker availability benchmark into a pre-delivery bid/acceptance strategy using issue-time-correct auction information.
 2. Connect an authorised day-ahead auction feed when available and compare it with the public Market Index forecast benchmark.
-3. Feed forecast-based market value into lifecycle NPV/Monte Carlo so Stage 6 can use market-backed operating evidence alongside scenario consequence values.
+3. Feed forecast-based market + Quick Reserve value into lifecycle NPV/Monte Carlo so Stage 6 can use market-backed operating evidence alongside scenario consequence values.
 4. Add date-range, seasonal and weather-regime comparison and quantify sizing/reserve sensitivity by wind/solar mix.
 5. Upgrade the operational directional residual range to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty and compare both approaches.
 6. Automate the renewable V2 forecast-bundle handoff and cross-bundle freshness/fallback behavior.

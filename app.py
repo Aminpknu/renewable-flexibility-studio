@@ -18,6 +18,7 @@ from adapters.grid_context import fetch_day_ahead_demand
 from adapters.imbalance_settlement import load_system_price_history, select_system_prices
 from adapters.latest_forecast import latest_target_date, load_latest_forecast
 from adapters.market_reference import load_market_index_history, select_market_index_prices
+from adapters.quick_reserve import load_quick_reserve_history
 from adapters.market_forecast_bundle import assess_market_forecast_bundle, validate_market_forecast_bundle
 from engine.battery import BatteryConfig, simulate_reactive_firming
 from engine.design_sizing import select_stable_design
@@ -42,6 +43,7 @@ from engine.monte_carlo import (
 from engine.portfolio import build_virtual_forecast, build_virtual_portfolio
 from engine.pre_delivery_strategy import build_reserve_soc_corridor
 from engine.reserve_planning import ReservePlanningConfig, build_reserve_plan
+from engine.quick_reserve import QuickReserveStackingConfig, optimise_arbitrage_and_quick_reserve
 from engine.sizing import find_minimum_battery
 from engine.stress import run_value_stress_scenarios
 from engine.uncertainty import (
@@ -61,6 +63,8 @@ LATEST_FORECAST_PATH = ROOT / "data" / "latest_forecast.csv"
 SYSTEM_PRICES_PATH = ROOT / "data" / "elexon_system_prices.csv"
 MARKET_INDEX_PATH = ROOT / "data" / "elexon_market_index_prices.csv"
 MARKET_BACKTEST_PATH = ROOT / "outputs" / "market_optimisation" / "default_mixed_summary.json"
+QUICK_RESERVE_PATH = ROOT / "data" / "neso_quick_reserve_prices.csv"
+QUICK_RESERVE_SUMMARY_PATH = ROOT / "outputs" / "quick_reserve" / "quick_reserve_summary.json"
 PRICE_FORECAST_BACKTEST_PATH = ROOT / "outputs" / "market_optimisation" / "price_forecast_backtest.csv"
 PREDELIVERY_DAILY_PATH = ROOT / "outputs" / "market_optimisation" / "pre_delivery_strategy_daily.csv"
 PREDELIVERY_SUMMARY_PATH = ROOT / "outputs" / "market_optimisation" / "pre_delivery_strategy_summary.json"
@@ -70,11 +74,13 @@ MARKET_PIPELINE_STATUS_PATH = ROOT / "data" / "market_forecast_pipeline_status.j
 HISTORICAL_DATA = load_historical_predictions(DATA_PATH)
 SYSTEM_PRICES = load_system_price_history(SYSTEM_PRICES_PATH)
 MARKET_INDEX_PRICES = load_market_index_history(MARKET_INDEX_PATH)
+QUICK_RESERVE = load_quick_reserve_history(str(QUICK_RESERVE_PATH))
 LATEST_FORECAST = load_latest_forecast(LATEST_FORECAST_PATH)
 LATEST_TARGET_DATE = latest_target_date(LATEST_FORECAST)
 FULL_BACKTEST = json.loads(FULL_BACKTEST_PATH.read_text(encoding="utf-8"))
 IMBALANCE_BACKTEST = json.loads(IMBALANCE_SUMMARY_PATH.read_text(encoding="utf-8"))
 MARKET_BACKTEST = json.loads(MARKET_BACKTEST_PATH.read_text(encoding="utf-8"))
+QUICK_RESERVE_SUMMARY = json.loads(QUICK_RESERVE_SUMMARY_PATH.read_text(encoding="utf-8"))
 PRICE_FORECAST_BACKTEST = pd.read_csv(PRICE_FORECAST_BACKTEST_PATH)
 PREDELIVERY_DAILY = pd.read_csv(PREDELIVERY_DAILY_PATH)
 PREDELIVERY_SUMMARY = json.loads(PREDELIVERY_SUMMARY_PATH.read_text(encoding="utf-8"))
@@ -1112,6 +1118,105 @@ def _forecast_day_market_schedule(
     return note, cards, figure
 
 
+def _quick_reserve_day_analysis(
+    date_value: str,
+    portfolio_type: str,
+    capacity_mw: float,
+    wind_share_pct: float,
+    design_target_pct: float,
+    design_reliability_pct: float,
+    throughput_cost: float,
+    guard_windows: int,
+):
+    market = select_market_index_prices(MARKET_INDEX_PRICES, date_value)
+    valid = pd.to_datetime(market["valid_time_utc"], utc=True)
+    qr = QUICK_RESERVE.loc[QUICK_RESERVE["delivery_start_utc"].isin(valid)].copy()
+    if len(qr) != 2 * len(market):
+        raise ValueError("Quick Reserve evidence is unavailable for this historical date.")
+    grid = scaled_design_grid(
+        DESIGN_GRID, portfolio_type, float(capacity_mw), float(wind_share_pct)
+    )
+    selected = select_stable_design(grid, design_target_pct, design_reliability_pct)
+    if selected is None:
+        raise ValueError("No stable future design exists for the selected design gate.")
+    battery = BatteryConfig(
+        power_mw=float(selected["power_mw"]), duration_hours=float(selected["duration_hours"]),
+        round_trip_efficiency=0.90, initial_soc_fraction=0.50,
+    )
+    _arb_frame, arb = optimise_wholesale_arbitrage(
+        market, battery, WholesaleArbitrageConfig(float(throughput_cost))
+    )
+    _qr_only_frame, qr_only = optimise_arbitrage_and_quick_reserve(
+        market, qr, battery,
+        QuickReserveStackingConfig(
+            float(throughput_cost), crossover_guard_windows=int(guard_windows),
+            enable_arbitrage=False,
+        ),
+    )
+    stacked_frame, stacked = optimise_arbitrage_and_quick_reserve(
+        market, qr, battery,
+        QuickReserveStackingConfig(
+            float(throughput_cost), crossover_guard_windows=int(guard_windows),
+            enable_arbitrage=True,
+        ),
+    )
+    return {
+        "market": market, "qr": qr, "selected": selected, "battery": battery,
+        "arbitrage": arb, "qr_only": qr_only, "stacked": stacked,
+        "stacked_frame": stacked_frame,
+    }
+
+
+def _quick_reserve_figure(analysis: dict[str, Any]) -> go.Figure:
+    frame = analysis["stacked_frame"]
+    battery = analysis["battery"]
+    figure = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.08)
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"], y=frame["pqr_price"],
+        mode="lines", name="PQR clearing price",
+    ), row=1, col=1)
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"], y=frame["nqr_price"],
+        mode="lines", name="NQR clearing price", line={"dash": "dash"},
+    ), row=1, col=1)
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"], y=frame["pqr_contracted_mw"],
+        mode="lines", name="PQR contracted MW",
+    ), row=2, col=1)
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"], y=-frame["nqr_contracted_mw"],
+        mode="lines", name="NQR contracted MW (shown negative)",
+    ), row=2, col=1)
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"],
+        y=frame["qr_arbitrage_discharge_mw"] - frame["qr_arbitrage_charge_mw"],
+        mode="lines", name="Wholesale schedule", line={"dash": "dot"},
+    ), row=2, col=1)
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"],
+        y=100.0 * frame["qr_soc_end_mwh"] / battery.energy_capacity_mwh,
+        mode="lines", name="Battery SOC",
+    ), row=3, col=1)
+    figure.add_hline(
+        y=100.0 * battery.minimum_soc_fraction, line_dash="dot",
+        row=3, col=1,
+    )
+    figure.add_hline(
+        y=100.0 * battery.maximum_soc_fraction, line_dash="dot",
+        row=3, col=1,
+    )
+    figure.add_hline(y=0.0, line_dash="dash", row=2, col=1)
+    figure.update_yaxes(title_text="£/MW/h", row=1, col=1)
+    figure.update_yaxes(title_text="MW", row=2, col=1)
+    figure.update_yaxes(title_text="SOC (%)", row=3, col=1)
+    figure.update_xaxes(title_text="Delivery time (UTC)", row=3, col=1)
+    figure.update_layout(
+        height=720, hovermode="x unified", margin=dict(l=60, r=20, t=55, b=50),
+        legend={"orientation": "h", "y": 1.02, "yanchor": "bottom", "x": 0},
+    )
+    return figure
+
+
 def _tomorrow_planning_data(
     portfolio_type: str,
     capacity_mw: float,
@@ -1711,6 +1816,45 @@ app.layout = html.Div(
                             config={"displaylogo": False},
                         ),
                         html.Hr(),
+                        html.H3("Quick Reserve availability stacking"),
+                        html.P(
+                            "This view adds NESO Quick Reserve availability value to the same physical battery used for wholesale arbitrage. It uses actual EAC PQR/NQR clearing prices (£/MW/h), whole-MW contracts and a configurable state-of-energy crossover guard. Utilisation revenue and activation energy are excluded.",
+                            className="section-copy",
+                        ),
+                        html.Div(
+                            [
+                                html.Div([
+                                    html.Label("Quick Reserve energy/crossover guard"),
+                                    dcc.Dropdown(
+                                        id="quick-reserve-guard-input",
+                                        options=[
+                                            {"label": "1 window (30 min)", "value": 1},
+                                            {"label": "2 windows (1 h)", "value": 2},
+                                            {"label": "4 windows (2 h)", "value": 4},
+                                        ],
+                                        value=2, clearable=False,
+                                    ),
+                                ]),
+                            ],
+                            className="design-controls",
+                        ),
+                        html.Button(
+                            "Run Quick Reserve stacking", id="quick-reserve-button",
+                            n_clicks=0, className="primary-button",
+                        ),
+                        html.Div(id="quick-reserve-note", className="scenario-note"),
+                        html.Div(id="quick-reserve-kpi-grid", className="kpi-grid"),
+                        html.Div("Quick Reserve prices, commitments and shared-battery SOC", className="chart-title"),
+                        html.Div(
+                            "PQR is upward reserve and NQR is downward reserve. NQR commitments are plotted below zero only for visual separation. The wholesale schedule and reserve commitments share one BESS power and SOC budget.",
+                            className="chart-subtitle",
+                        ),
+                        dcc.Graph(
+                            id="quick-reserve-chart",
+                            figure=_empty_figure("Quick Reserve evidence is available for Apr–Jun 2026 historical dates."),
+                            config={"displaylogo": False},
+                        ),
+                        html.Hr(),
                         html.H3(f"Forecast-day market schedule · {LATEST_TARGET_DATE}"),
                         html.P(
                             "This view combines the latest renewable forecast, the Stage B reserve corridor and a prior-data-only APX Market Index price forecast. It shows how much wholesale scheduling value is given up to preserve battery energy/headroom for renewable uncertainty.",
@@ -2287,6 +2431,89 @@ def update_imbalance_settlement(stored: str | None, date_value: str):
         ),
     ])
     return note, cards, _imbalance_figure(settled)
+
+
+@app.callback(
+    Output("quick-reserve-note", "children"),
+    Output("quick-reserve-kpi-grid", "children"),
+    Output("quick-reserve-chart", "figure"),
+    Input("quick-reserve-button", "n_clicks"),
+    State("date-input", "value"),
+    State("portfolio-input", "value"),
+    State("capacity-input", "value"),
+    State("wind-share-input", "value"),
+    State("design-target-input", "value"),
+    State("design-reliability-input", "value"),
+    State("market-throughput-cost-input", "value"),
+    State("quick-reserve-guard-input", "value"),
+)
+def run_quick_reserve_stacking(
+    _clicks: int,
+    date_value: str,
+    portfolio_type: str,
+    capacity_mw: float,
+    wind_share_pct: float,
+    design_target_pct: float,
+    design_reliability_pct: float,
+    throughput_cost: float,
+    guard_windows: int,
+):
+    try:
+        analysis = _quick_reserve_day_analysis(
+            date_value, portfolio_type, capacity_mw, wind_share_pct,
+            design_target_pct, design_reliability_pct, throughput_cost, guard_windows,
+        )
+    except (TypeError, ValueError, KeyError, RuntimeError) as error:
+        message = f"Quick Reserve stacking could not be calculated: {error}"
+        return message, [], _empty_figure(message)
+    selected = analysis["selected"]
+    arb = analysis["arbitrage"]
+    qr_only = analysis["qr_only"]
+    stacked = analysis["stacked"]
+    hours = len(analysis["market"]) * analysis["battery"].interval_hours
+    independent_sum = float(arb["net_arbitrage_margin_gbp"]) + float(qr_only["net_stacked_value_gbp"])
+    double_count = independent_sum - float(stacked["net_stacked_value_gbp"])
+    mean_pqr = float(stacked["pqr_contracted_mw_hours"]) / hours
+    mean_nqr = float(stacked["nqr_contracted_mw_hours"]) / hours
+    cards = [
+        _kpi_card("Installed design", f"{selected['power_mw']:.0f} MW / {selected['energy_mwh']:.0f} MWh", "Stage A selected battery"),
+        _kpi_card("Arbitrage-only value", f"£{arb['net_arbitrage_margin_gbp']:,.0f}", "Perfect-information APX MIP benchmark"),
+        _kpi_card("QR-only availability", f"£{qr_only['net_stacked_value_gbp']:,.0f}", "PQR + NQR availability only"),
+        _kpi_card("Shared-battery stacked", f"£{stacked['net_stacked_value_gbp']:,.0f}", "Arbitrage + QR sharing MW and SOC"),
+        _kpi_card("QR availability in stack", f"£{stacked['total_availability_payment_gbp']:,.0f}", "Utilisation revenue excluded"),
+        _kpi_card("Independent-sum overstatement", f"£{double_count:,.0f}", "Value double-count avoided by co-optimisation"),
+        _kpi_card("Mean PQR commitment", f"{mean_pqr:.1f} MW", "Positive Quick Reserve"),
+        _kpi_card("Mean NQR commitment", f"{mean_nqr:.1f} MW", "Negative Quick Reserve"),
+    ]
+    default_reference = (
+        portfolio_type == "mixed"
+        and abs(float(capacity_mw) - 100.0) < 1e-9
+        and abs(float(wind_share_pct) - 50.0) < 1e-9
+        and abs(float(design_target_pct) - 90.0) < 1e-9
+        and abs(float(design_reliability_pct) - 90.0) < 1e-9
+        and abs(float(throughput_cost) - 2.0) < 1e-9
+    )
+    note_lines = [
+        html.Div(
+            "Quick Reserve value shown here is availability only. Utilisation revenue and activation energy are excluded, and the asset is treated as a price taker accepted at the observed EAC clearing price.",
+            className="scenario-note-line uncertainty-warning",
+        ),
+        html.Div(
+            f"The {int(guard_windows)}-window guard requires enough stored-energy/headroom to sustain consecutive 30-minute QR windows while the wholesale schedule and PQR/NQR commitments share one physical battery.",
+            className="scenario-note-line",
+        ),
+        html.Div(
+            "This is not proof of NESO prequalification, auction acceptance, telemetry compliance or actual earned revenue.",
+            className="scenario-note-line uncertainty-line",
+        ),
+    ]
+    if default_reference:
+        ref = QUICK_RESERVE_SUMMARY["guard_sensitivity"][str(int(guard_windows))]
+        note_lines.append(html.Div(
+            f"Frozen Apr–Jun 2026 default reference: stacked £{ref['stacked_annualised_gbp']/1e6:.2f}m/yr versus arbitrage-only £{ref['arbitrage_annualised_gbp']/1e6:.2f}m/yr; the naïve independent sum overstates value by about £{ref['double_count_avoided_annualised_gbp']/1e6:.2f}m/yr. This annualisation describes that 90-day regime only.",
+            className="scenario-note-line",
+        ))
+    return html.Div(note_lines), cards, _quick_reserve_figure(analysis)
 
 
 @app.callback(
