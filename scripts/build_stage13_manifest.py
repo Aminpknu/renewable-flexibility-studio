@@ -20,11 +20,10 @@ FILES = [
 
 
 def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    # Evidence files are CSV/JSON text. Canonicalise line endings so the
+    # manifest is stable across Windows development and Linux CI/deploys.
+    text = path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 def main() -> None:
     missing = [str(path) for path in FILES if not path.exists()]
     if missing:
