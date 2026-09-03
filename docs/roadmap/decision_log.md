@@ -1,4 +1,4 @@
-﻿# Decision log
+# Decision log
 
 ## Stage 6A — Risk & Value deterministic layer
 
@@ -167,3 +167,17 @@ Reason: one generic MILP shares the same MW/SOC across firming, wholesale and 12
 Default evidence: £3.38m/yr QR+SR, £4.80m/yr full non-BM, £4.82m/yr BM-eligible; Dynamic Regulation ~£2.41m/yr non-BM availability value; 36.7% vs 30.1% error reduction for QR+SR vs full non-BM
 Known limitations: realised clearing prices, price-taker acceptance, utilisation/performance penalties excluded, complete Response windows only within daily SOC-reset horizon, screening energy guards are not full service-term models
 Next allowed stage: project-finance screening, then issue-time multi-service/acceptance modelling
+
+## Stage 12 — Project-finance screening
+
+Stage: Stage 12 debt/equity project-finance screening
+Decision: EVIDENCE READY
+Decision date: 2026-09-03
+Branch: feature/stage12-project-finance
+Primary evidence: Stage 10 forecast-selected wholesale daily value, Stage 11 multi-service upside screens, deterministic debt/equity schedule and 2,000-run block-resampled finance Monte Carlo
+Acceptance result: PASS for transparent pre-feasibility financing screening
+Reason: project/equity NPV and IRR, annuity debt schedule, CFADS, DSCR/LLCR and simplified tax/capital-allowance assumptions are explicit; Stage 11 perfect-information ancillary value remains separate from the finance base
+Validation: full repository suite passes 164 tests; deterministic finance UI, finance Monte Carlo and downloadable evidence boundaries are tested
+Default evidence: wholesale base project NPV ~-£20.87m, equity IRR ~-31.1%, minimum DSCR 0.22x, LLCR 0.27x; Stage 11 non-BM upside project NPV ~+£3.30m, equity IRR ~15.7%, minimum DSCR 1.61x, LLCR 1.79x
+Known limitations: screening tax only; no loss carry-forward, VAT, group relief, legal allowance opinion, refinancing, hedging, debt sculpting, reserve accounts, working capital or bankable ancillary-service acceptance
+Next allowed stage: issue-time multi-service/acceptance modelling, probabilistic renewables, regime analysis and final automation/product release

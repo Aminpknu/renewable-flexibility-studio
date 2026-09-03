@@ -115,3 +115,11 @@ The JSON records deterministic lifecycle scenarios, a 5,000-run forecast-wholesa
 `data/neso_multiservice_prices.csv` stores the Apr-Jun 2026 EAC Results Summary evidence used by Stage 11. It contains 29,514 auction-result rows across 12 products: PQR/NQR, PSR/NSR, PBR/NBR and DCL/DCH/DML/DMH/DRL/DRH. Required fields include product/family, direction, UTC delivery window, clearing price, cleared volume, whole-MW/minimum-MW flags, BM-eligibility flag and screening energy-headroom duration. `data/neso_multiservice_prices_manifest.json` records the NESO resource ID, Open Data Licence, query window and SHA-256.
 
 `outputs/multiservice/multiservice_daily.csv` contains the 90-date default-reference audit for QR+SR, full non-BM and BM-eligible service sets. `multiservice_summary.json` stores annualised value/error-reduction results and the modelling boundary. The archive contains availability clearing-price evidence only; it does not establish asset-specific auction acceptance, utilisation instructions/payments or performance penalties.
+
+## Stage 12 project-finance evidence
+
+`outputs/project_finance/project_finance_summary.json` freezes the default Stage 12 screening case. The finance-base operating value comes from the Stage 10 forecast-selected wholesale strategy; Stage 11 non-BM/BM multi-service values are retained only as separately labelled perfect-information upside screens.
+
+The reference assumptions are explicit: CAPEX, fixed OPEX, asset life, project discount rate, revenue degradation, debt share/rate/tenor, corporation-tax scenario, capital-allowance schedule, equity hurdle, DSCR threshold and optional replacement. `project_finance_monte_carlo_2000.csv` stores the 2,000-draw audit used for the frozen downside summary.
+
+The tax layer is screening-only. It does not determine legal eligibility for UK capital allowances and excludes tax-loss carry-forward, VAT, group relief, refinancing, hedging, debt sculpting, reserve accounts and working capital. The probabilistic finance base excludes Stage 11 ancillary-service upside because service bid/acceptance remains perfect-information/price-taker screening.

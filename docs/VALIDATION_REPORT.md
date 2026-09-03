@@ -195,3 +195,11 @@ The common EAC archive contains **29,514** Apr-Jun 2026 result rows across 12 cu
 For the default 100 MW 50/50 portfolio and 25 MW / 200 MWh battery, the 90-day screen annualises to **£3.38m/yr** for QR + Slow Reserve, **£4.80m/yr** for the full non-BM service set and **£4.82m/yr** for an explicit BM-eligible scenario. Dynamic Regulation contributes about **£2.41m/yr** of availability value in the non-BM screen. Mean renewable forecast-error reduction changes from **36.7%** (QR+SR) to **30.1%** (full non-BM), demonstrating the opportunity cost of allocating shared flexibility to ancillary services.
 
 Acceptance boundary: these are realised-clearing-price, price-taker **availability-only** upper-bound screens. Utilisation payments/energy, performance penalties and asset-specific bid acceptance are not included.
+
+## Stage 12 project-finance screening validation
+
+The default reference is the 100 MW 50/50 portfolio with the 25 MW / 200 MWh Stage A design. Under £25m CAPEX, £0.5m/year fixed OPEX, 60% debt, 6% debt rate, 10-year tenor, 25% tax scenario, 12% equity hurdle, 15-year life and 2% annual degradation, the Stage 10 wholesale base gives project NPV about -£20.87m, equity IRR about -31.1%, minimum DSCR 0.22x and LLCR 0.27x.
+
+The Stage 11 non-BM multi-service perfect-information upside gives project NPV about +£3.30m, equity IRR about 15.7%, minimum DSCR 1.61x and LLCR 1.79x under the same financing assumptions. This is deliberately not treated as bankable base revenue.
+
+The frozen 2,000-run finance Monte Carlo resamples contiguous 7-day blocks of realised Stage 10 forecast-selected wholesale value and varies CAPEX, fixed OPEX, availability, degradation and debt rate. The base case remains negative across the reference draws, with DSCR breach and equity-hurdle failure explicitly reported. Engine equations, app callbacks, evidence contract and download boundaries are covered by automated tests.

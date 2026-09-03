@@ -215,6 +215,16 @@ Quick Reserve and Slow Reserve use 30-minute EAC windows; Dynamic Containment, D
 
 Each product also carries a transparent screening energy-headroom duration used to prevent physically impossible reserve sales. These durations are conservative modelling guards, not substitutes for the complete service terms. Stage 11 values availability at observed EAC clearing prices and excludes utilisation energy/payments, performance penalties and asset-specific auction acceptance. Therefore the 90-day evidence is an ex-post price-taker upper-bound screen, not a deployable revenue forecast.
 
-## 16. Current exclusions
+## 16. Project-finance screening
+
+Stage 12 uses the Stage 10 year-one operating value as the finance-base revenue input. A constant-annuity debt schedule is built from total CAPEX, debt share, debt interest rate and tenor. Equity funds the remaining upfront CAPEX. Annual operating value degrades by the entered rate; fixed OPEX and optional replacement cost are then applied.
+
+For each debt year, interest is calculated on opening debt, principal is the balance of the constant debt payment, and cash available for debt service (CFADS) is EBITDA less the simplified cash-tax scenario. DSCR is `CFADS / debt service`. LLCR is the present value of loan-life CFADS discounted at the debt rate divided by initial debt. Project IRR uses unlevered project cashflows; equity IRR uses equity cashflows after debt service.
+
+Tax is intentionally a screening abstraction. The user enters corporation-tax rate, year-1 capital-allowance fraction and a straight-line period for remaining CAPEX. Interest reduces taxable income, but tax losses are not carried forward. The model does not determine legal eligibility for UK allowances and excludes VAT, group relief, refinancing, hedging, debt sculpting, reserve accounts and working capital.
+
+The probabilistic finance case resamples contiguous blocks of realised Stage 10 forecast-selected daily wholesale value and varies CAPEX, fixed OPEX, availability, degradation and debt rate. It reports project/equity NPV and IRR quantiles, DSCR-breach probability and LLCR distribution. Stage 11 multi-service values remain deterministic perfect-information upside screens and are excluded from this finance-base Monte Carlo.
+
+## 17. Current exclusions
 
 The current release excludes a licensed contracted/day-ahead auction price benchmark, detailed cell-level degradation, site-specific grid-connection/network constraints, weather-ensemble probabilistic forecasts and independently validated city-level generation/error targets. The historical firming evidence remains national forecast-error behaviour scaled to a virtual portfolio. Spatial-zone outputs are reconciled allocation proxies, not individual-asset forecasts.
