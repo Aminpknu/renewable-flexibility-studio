@@ -111,3 +111,29 @@ The table uses the conservative start-at-minimum-SOC sensitivity so no one-time 
 The Dash application was launched on the user's workstation with `data/historical_backtest.csv`. The root endpoint and `/_dash-layout` both returned HTTP 200; the rendered layout included dates from 1 April 2025 through 30 June 2026. The server was then terminated cleanly.
 
 The original 1 June 2025 scenario remains only as a compact learning/unit-test fixture and should not be used as the headline sizing result.
+
+## Stage 9 market-optimisation validation
+
+The public Elexon APX Market Index archive covers all 450 V2 target dates and 21,600 settlement periods, including 46/50-period daylight-saving days. The archive is checksum-locked and aligned by settlement date/period with the historical forecast and System Price bundles.
+
+The market optimiser is tested against hand-calculated cases for price-priority firming, terminal SOC restoration, throughput-cost switching, negative wholesale prices, wholesale arbitrage, mutually exclusive charging/discharging and shared MW/SOC constraints in the firming/arbitrage co-optimiser. The full repository suite passes after the market layer is installed.
+
+For the default 100 MW 50/50 portfolio and Stage A 25 MW / 200 MWh design, using a £2/MWh scenario throughput cost, the 450-day ex-post evidence annualises to approximately **-£0.061m reactive firming**, **£0.270m settlement-aware firming**, **£1.904m wholesale arbitrage-only**, and **£2.049m co-optimised firming plus arbitrage**. Mean daily physical error reduction is about **98.3% reactive**, **47.8% settlement-aware**, and **40.1% co-optimised**.
+
+These market values use realised forecast error and/or realised prices and are therefore perfect-information upper-bound evidence. APX Market Index Price is labelled a short-term wholesale reference, not a day-ahead auction price. No public result is described as deployable revenue until an issue-time-correct price forecast or authorised day-ahead price feed is connected.
+
+## Pre-delivery market-price strategy validation
+
+An expanding ridge forecast of APX Market Index Price was backtested on 420 target days after a 30-day warm-up. All target-day features use settlement dates strictly earlier than the target date. MAE is **£20.01/MWh** versus **£22.53/MWh** for a previous-observed-same-period baseline, an **11.2% improvement**; forecast R² is **0.300** versus **-0.077** for that naive baseline.
+
+The forecast-selected 25 MW / 200 MWh arbitrage strategy captures **60.0%** of the matching perfect-information arbitrage upper bound across the 420 days and **63.4%** across Apr-Jun 2026. A Stage B SOC-corridor-constrained version remains feasible on all 420 mixed-portfolio days and captures **49.6%** overall. Positive realised net margin occurs on 89.3% of forecast-strategy days and 90.7% of reserve-aware days.
+
+The current 3 September forecast-day market file is flagged `as_if_reconstruction_after_target_start`. It excludes all target-day Market Index observations but was generated after delivery began, so it is not counted as an operationally issued forecast.
+
+## Automated market-forecast publication validation
+
+The market forecast publisher now writes to temporary files first and validates target date, 46/48/50-period completeness, duplicate keys, finite prices and SHA-256 before replacing the published bundle. Unit tests verify that a failed refresh retains the existing valid bundle and that a post-start reconstruction cannot overwrite an already-issued LIVE pre-delivery bundle.
+
+The scheduled workflow is configured for 18:15 UTC daily plus manual dispatch. The application reads the validated manifest and reports LIVE, RECONSTRUCTED, STALE_TARGET or STALE_TIME alongside pipeline fallback status. The current 3 September 2026 bundle is correctly classified RECONSTRUCTED because it was generated after target start; no claim of a genuinely issued pre-delivery schedule is made for that file.
+
+After this operational pipeline change, the complete offline suite passes **114 tests** and `git diff --check` is clean.

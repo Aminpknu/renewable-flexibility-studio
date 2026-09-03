@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "stage": "9_market_optimisation_packet1",
+  "method": "ex-post System Price settlement-aware directional firming",
+  "perfect_information": true,
+  "portfolio": {
+    "type": "mixed",
+    "capacity_mw": 100.0,
+    "wind_share_pct": 50.0
+  },
+  "battery": {
+    "power_mw": 25.0,
+    "energy_mwh": 200.0,
+    "duration_hours": 8.0,
+    "initial_soc_pct": 50.0
+  },
+  "market_reference": {
+    "source": "Elexon APXMIDP Market Index Data",
+    "semantic_label": "short-term GB wholesale reference; not day-ahead auction price",
+    "daily_restoration_price": "APXMIDP volume-weighted average price"
+  },
+  "throughput_cost_gbp_per_mwh": 2.0,
+  "observed_days": 450,
+  "market_aware_total_net_value_improvement_gbp": 333188.20358466625,
+  "reactive_total_net_value_improvement_gbp": -74552.9793334596,
+  "market_aware_annualised_net_value_improvement_gbp": 270437.7585762208,
+  "reactive_annualised_net_value_improvement_gbp": -60512.168225658046,
+  "arbitrage_total_net_margin_gbp": 2346239.3064218746,
+  "arbitrage_annualised_net_margin_gbp": 1904364.237045755,
+  "arbitrage_positive_margin_days_pct": 100.0,
+  "cooptimised_total_net_value_gbp": 2524738.1657408997,
+  "cooptimised_annualised_net_value_gbp": 2049245.8111930303,
+  "cooptimised_incremental_value_vs_arbitrage_gbp": 178498.85931902518,
+  "cooptimised_positive_value_days_pct": 100.0,
+  "market_aware_positive_value_days_pct": 100.0,
+  "reactive_positive_value_days_pct": 35.11111111111111,
+  "market_aware_better_than_reactive_days_pct": 100.0,
+  "mean_daily_error_reduction_pct_market_aware": 47.75291311097184,
+  "mean_daily_error_reduction_pct_reactive": 98.2673854342833,
+  "market_aware_daily_net_value_p10_gbp": 136.27517059321684,
+  "market_aware_daily_net_value_p50_gbp": 452.5129617043058,
+  "market_aware_daily_net_value_p90_gbp": 1713.784500758287,
+  "reactive_daily_net_value_p50_gbp": -206.06456001855094,
+  "arbitrage_daily_net_margin_p10_gbp": 1273.2123277651115,
+  "arbitrage_daily_net_margin_p50_gbp": 3709.19369541349,
+  "arbitrage_daily_net_margin_p90_gbp": 10816.998486857556,
+  "cooptimised_daily_net_value_p10_gbp": 1475.1354744184432,
+  "cooptimised_daily_net_value_p50_gbp": 4007.92682490701,
+  "cooptimised_daily_net_value_p90_gbp": 11744.13772836197,
+  "mean_daily_error_reduction_pct_cooptimised": 40.12220391419465,
+  "limitations": [
+    "perfect-information benchmark uses realised System Price and realised forecast error",
+    "Market Index Data is a public short-term wholesale reference, not a day-ahead auction price",
+    "throughput cost is a transparent scenario assumption",
+    "no ancillary-service revenue, taxes, financing or site-specific grid constraints"
+  ]
+}

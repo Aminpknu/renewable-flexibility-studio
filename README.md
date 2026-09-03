@@ -121,6 +121,20 @@ Stage 6 converts the 450-day BESS firming evidence into a transparent pre-feasib
 
 Stage 6B adds complete-day block-resampled Monte Carlo with uncertainty in consequence value, CAPEX, OPEX, battery availability and degradation. It reports P10/P50/P90 NPV, probability of negative NPV, 95% VaR/CVaR using `investment loss = -NPV`, probability of failing the selected firming/reliability gate, and named downside stress cases. The default 100 MW 50/50, 25 MW / 200 MWh case is economically negative under the illustrative default assumptions, while smaller batteries can have better NPV but fail the technical 90/90 gate.
 
+## GB market-linked optimisation
+
+Stage 9 connects the battery evidence to real public GB market references. The repository now carries a 450-day / 21,600-period Elexon APX Market Index archive aligned to the V2 forecast-error and System Price evidence. Market Index Price is explicitly labelled **short-term wholesale market reference**, not a day-ahead auction price.
+
+Three ex-post upper-bound strategies are separated: settlement-aware firming using realised System Price plus priced SOC restoration; perfect-foresight wholesale arbitrage using Market Index Price; and a co-optimiser that shares one physical battery MW/SOC/throughput budget between firming and arbitrage. Under the frozen default 100 MW 50/50, 25 MW / 200 MWh case and a £2/MWh scenario throughput cost, annualised values are about **-£0.061m reactive firming**, **£0.270m settlement-aware firming**, **£1.904m arbitrage-only**, and **£2.049m co-optimised**. These are realised-price upper bounds, not deployable revenue forecasts.
+
+A separate adapter validates user-supplied licensed day-ahead prices with publication timestamps and issue-time cutoffs, so an authorised Nord Pool/EPEX feed can be added later without changing the optimisation architecture.
+
+The pre-delivery price forecast is now operationalised as an atomic bundle pipeline. A scheduled GitHub Actions job builds a candidate from prior APX days, validates period count/target/checksum, archives the previous valid bundle and publishes only after validation. The Studio labels the result **LIVE**, **RECONSTRUCTED** or **STALE** and exposes fallback status instead of silently using an invalid refresh.
+
+The forecast-based market layer now removes price perfect foresight using an expanding ridge forecast trained only on earlier Market Index settlement dates. Across 420 eligible days, price MAE is **£20.0/MWh**, 11.2% better than the previous-observed-same-period baseline. A 25 MW / 200 MWh forecast-selected arbitrage schedule captures about **60.0%** of the perfect-information upper bound overall and **63.4%** on Apr-Jun 2026. Preserving the Stage B SOC reserve corridor reduces capture to **49.6%**, quantifying the market opportunity cost of maintaining renewable-risk headroom.
+
+The current 3 September forecast-day market bundle is explicitly marked as an **as-if reconstruction generated after delivery began**, while still excluding all target-day Market Index observations. Future automation should generate this bundle before the target day starts.
+
 ## Renewable-only continuous-SOC stress test
 
 For a 100 MW virtual portfolio with a 25 MW / 50 MWh battery, 90% round-trip efficiency, 10–90% SOC limits and no grid charging, continuous operation absorbs about **33.5% of wind**, **50.2% of solar** and **44.4% of 50/50 mixed** absolute forecast-deviation energy. SOC ends at its minimum bound, showing that energy availability and conversion losses matter across long horizons.

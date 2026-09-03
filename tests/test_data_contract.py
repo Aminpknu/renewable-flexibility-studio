@@ -78,3 +78,100 @@ def test_stage6b_default_summary_artifact() -> None:
     assert relative and max(relative) < 2.0
     stress_names = {row["scenario"] for row in summary["stress_scenarios"]}
     assert {"poor_forecast_accuracy", "derating_availability_loss", "adverse_cost_value", "combined_downside"}.issubset(stress_names)
+
+
+def test_elexon_market_index_archive_integrity() -> None:
+    import hashlib
+    import pandas as pd
+
+    csv_path = ROOT / "data" / "elexon_market_index_prices.csv"
+    manifest = json.loads(
+        (ROOT / "data" / "elexon_market_index_prices_manifest.json").read_text(encoding="utf-8")
+    )
+    frame = pd.read_csv(csv_path)
+    assert manifest["schema_version"] == "1.0"
+    assert manifest["data_provider"] == "APXMIDP"
+    assert manifest["target_days"] == 450
+    assert manifest["rows"] == 21600
+    assert "not day-ahead" in manifest["semantic_label"]
+    assert len(frame) == 21600
+    assert frame["settlement_date"].nunique() == 450
+    assert not frame.duplicated(["settlement_date", "settlement_period", "market_index_provider"]).any()
+    canonical = csv_path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == manifest["sha256"]
+
+
+def test_market_optimisation_evidence_artifact() -> None:
+    import pandas as pd
+
+    summary = json.loads(
+        (ROOT / "outputs" / "market_optimisation" / "default_mixed_summary.json")
+        .read_text(encoding="utf-8")
+    )
+    daily = pd.read_csv(
+        ROOT / "outputs" / "market_optimisation" / "default_mixed_daily.csv"
+    )
+    assert summary["schema_version"] == "1.0"
+    assert summary["stage"] == "9_market_optimisation_packet1"
+    assert summary["perfect_information"] is True
+    assert summary["observed_days"] == 450
+    assert "not day-ahead" in summary["market_reference"]["semantic_label"]
+    assert len(daily) == 450
+    assert daily["settlement_date"].nunique() == 450
+    assert summary["cooptimised_total_net_value_gbp"] >= (
+        summary["arbitrage_total_net_margin_gbp"] - 1e-5
+    )
+    assert summary["mean_daily_error_reduction_pct_reactive"] > (
+        summary["mean_daily_error_reduction_pct_market_aware"]
+    )
+
+
+def test_pre_delivery_market_strategy_artifacts() -> None:
+    import pandas as pd
+    price = pd.read_csv(ROOT / "outputs" / "market_optimisation" / "price_forecast_backtest.csv")
+    daily = pd.read_csv(ROOT / "outputs" / "market_optimisation" / "pre_delivery_strategy_daily.csv")
+    summary = json.loads(
+        (ROOT / "outputs" / "market_optimisation" / "pre_delivery_strategy_summary.json").read_text(encoding="utf-8")
+    )
+    assert price["settlement_date"].nunique() == 420
+    assert len(price) == 20160
+    assert len(daily) == 420
+    assert summary["price_forecast"]["issue_rule"] == "strictly earlier settlement dates only"
+    assert 50.0 < summary["forecast_capture_rate_pct"] < 70.0
+    assert summary["reserve_corridor_feasible_days_pct"] == 100.0
+    assert summary["locked_test"]["days"] == 90
+
+
+def test_latest_market_price_forecast_is_labelled_by_actual_issue_timing() -> None:
+    import pandas as pd
+    frame = pd.read_csv(ROOT / "data" / "latest_market_price_forecast.csv")
+    manifest = json.loads((ROOT / "data" / "latest_market_price_forecast_manifest.json").read_text(encoding="utf-8"))
+    assert len(frame) in {46, 48, 50}
+    assert frame["settlement_date"].nunique() == 1
+    assert manifest["method"]["uses_target_date_prices"] is False
+    assert manifest["method"]["issue_rule"].endswith("strictly earlier than target date")
+    assert manifest["operational_status"] in {"pre_delivery_issue", "as_if_reconstruction_after_target_start"}
+    assert manifest["semantic_label"].endswith("not day-ahead auction price")
+
+
+def test_operational_market_forecast_pipeline_artifacts() -> None:
+    import hashlib
+
+    csv_path = ROOT / "data" / "latest_market_price_forecast.csv"
+    manifest = json.loads(
+        (ROOT / "data" / "latest_market_price_forecast_manifest.json").read_text(encoding="utf-8")
+    )
+    status = json.loads(
+        (ROOT / "data" / "market_forecast_pipeline_status.json").read_text(encoding="utf-8")
+    )
+    assert manifest["schema_version"] == "1.1"
+    assert manifest["row_count"] in {46, 48, 50}
+    canonical = csv_path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == manifest["sha256"]
+    assert status["pipeline_status"] in {
+        "PUBLISHED", "RETAINED_PRE_DELIVERY_BUNDLE", "FALLBACK_RETAINED",
+        "FALLBACK_RESTORED", "RENEWABLE_TARGET_STALE",
+    }
+    assert status["bundle_health"]["status"] in {
+        "LIVE", "RECONSTRUCTED", "STALE_TARGET", "STALE_TIME",
+    }

@@ -29,6 +29,9 @@
 - 450-day gross cash-out exposure and daily tail-risk benchmark, explicitly separated from profit;
 - Stage 6A deterministic physical risk and value appraisal: NPV, BCR, payback, switching values, availability, sensitivity and risk-value frontier;
 - Stage 6B block-resampled Monte Carlo: P10/P50/P90 NPV, negative-NPV probability, VaR/CVaR, technical-gate failure probability and stress scenarios;
+- Stage 9 market layer: 450-day Elexon APX Market Index archive, settlement-aware firming, perfect-foresight wholesale arbitrage and shared-battery firming/arbitrage co-optimisation;
+- Stage 9 pre-delivery layer: prior-date-only Market Index price forecasting, forecast-selected arbitrage, perfect-foresight capture-gap measurement and Stage B reserve-aware wholesale scheduling;
+- atomic scheduled market-forecast publication with SHA-256 validation, LIVE/RECONSTRUCTED/STALE health labels and last-valid fallback;
 - one-page Dash interface and CSV export;
 - public GitHub repository with GitHub Actions configuration;
 - automated test suite covering physical, uncertainty, tomorrow-planning and settlement logic;
@@ -41,11 +44,12 @@ Forecasting V2 is packaged separately on branch `feature/v2-spatial-production`,
 
 ## Next analytical stages
 
-1. Promote/deploy the reviewed Stage 6 release and verify the public Render service.
-2. Add date-range, seasonal and weather-regime comparison and quantify sizing/reserve sensitivity by wind/solar mix.
-3. Upgrade the operational directional residual range to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty and compare both approaches.
-4. Automate the versioned forecast-bundle handoff, freshness/stale-data checks and fallback behavior.
-5. Add a correctly defined contracted/day-ahead price reference only if moving from scenario consequence values toward market-based economics.
+1. Extend market co-optimisation to the first balancing/ancillary-service revenue product after encoding its eligibility, commitment and headroom/SOC constraints.
+2. Connect an authorised day-ahead auction feed when available and compare it with the public Market Index forecast benchmark.
+3. Feed forecast-based market value into lifecycle NPV/Monte Carlo so Stage 6 can use market-backed operating evidence alongside scenario consequence values.
+4. Add date-range, seasonal and weather-regime comparison and quantify sizing/reserve sensitivity by wind/solar mix.
+5. Upgrade the operational directional residual range to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty and compare both approaches.
+6. Automate the renewable V2 forecast-bundle handoff and cross-bundle freshness/fallback behavior.
 
 ## Learning fixture
 

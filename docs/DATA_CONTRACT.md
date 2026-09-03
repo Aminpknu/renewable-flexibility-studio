@@ -61,3 +61,23 @@ The final frozen archive was rebuilt atomically after a write-integrity check id
 ## Independence rule
 
 The flexibility website reads a versioned file bundle. It must not call the forecasting Dash service or import its page modules. A later automated publishing workflow may replace the bundle, but the standalone product retains its own schema validation, checksum and deployment lifecycle.
+
+## Historical Elexon Market Index bundle
+
+Market optimisation reads `data/elexon_market_index_prices.csv`, containing APX Market Index Data (`APXMIDP`) for the same 450 V2 target days and 21,600 settlement periods. Required fields are settlement date/period, UTC valid time, provider, Market Index Price and Market Index Volume.
+
+The public semantic label is **short-term GB wholesale market reference; not day-ahead auction price**. `data/elexon_market_index_prices_manifest.json` records provider, endpoint, coverage, row count and a line-ending-independent SHA-256.
+
+A separate licensed day-ahead adapter accepts `settlement_date`, `settlement_period`, `valid_time_utc`, `publication_time_utc`, `day_ahead_price_gbp_per_mwh` and `source`. It rejects duplicate or incomplete GB days and can enforce that every price was published before an explicit issue cutoff. Licensed NEMO prices are not bundled in the public repository.
+
+## Market-price forecast and pre-delivery strategy evidence
+
+`outputs/market_optimisation/price_forecast_backtest.csv` contains 420 expanding-window APX Market Index forecasts generated only from earlier settlement dates. `pre_delivery_strategy_daily.csv` and `pre_delivery_strategy_summary.json` record realised margins for schedules selected from those forecasts, the matching perfect-information upper bound, and the Stage B reserve-aware variant.
+
+`data/latest_market_price_forecast.csv` is the compact forecast-day price-signal bundle. Its manifest records source-history coverage, generation time, target start time, leakage-safe issue rule and whether the bundle was actually created before delivery or later as an as-if reconstruction. It forecasts the public short-term APX Market Index reference and must never be relabelled as a licensed day-ahead auction price.
+
+## Operational market-forecast publication state
+
+`data/latest_market_price_forecast.csv` and its manifest are the current published market-price forecast bundle. Schema 1.1 adds `row_count`, SHA-256 and line-ending normalisation. Publication is atomic and occurs only after the candidate bundle validates.
+
+`data/last_valid_market_price_forecast.csv` plus its manifest preserve the previous validated bundle before replacement. `data/market_forecast_pipeline_status.json` records refresh/publish/fallback state and the current bundle-health classification. A fallback can remain available for audit while being explicitly marked stale if its target does not match the renewable forecast target.
