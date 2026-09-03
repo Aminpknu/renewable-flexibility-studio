@@ -11,7 +11,7 @@ python -m pytest -q
 Latest verified result:
 
 ```text
-44 passed
+50 passed
 ```
 
 Coverage includes historical-bundle validation, complete 46/48/50-period days, wind/solar/mixed portfolio scaling, battery power/SOC/efficiency constraints, no simultaneous charge/discharge, firming metrics, sizing search, V2 manifest integrity, and explicit proof that multi-day SOC carries across midnight without a daily reset.
