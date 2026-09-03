@@ -87,3 +87,11 @@ A separate licensed day-ahead adapter accepts `settlement_date`, `settlement_per
 `data/neso_quick_reserve_prices.csv` contains PQR/NQR Enduring Auction Capability clearing results used by the first ancillary-service stacking benchmark. It covers the Apr–Jun 2026 market regime plus the UTC crossover required to align the first GB delivery day, with one PQR and one NQR result per 30-minute delivery window where available.
 
 Required fields are product/direction, UTC delivery start/end, 0.5 h window length, system cleared volume (MW), clearing price (£/MW/h) and the derived availability payment per contracted MW. The manifest records the NESO EAC resource ID, NESO Open Data Licence, query window, row/window counts and SHA-256. These are system auction results, not asset-specific accepted bids or utilisation instructions.
+
+## Quick Reserve forecast-history and pre-delivery evidence
+
+`data/neso_quick_reserve_forecast_history.csv` stitches the FY2025 archived and current EAC Results Summary resources for prior-date QR price forecasting. Its manifest records both source resource IDs, NESO Open Data Licence, 28,992 rows / 14,496 paired PQR/NQR windows and SHA-256. This extended history supports model training only; current-rule value validation remains Apr–Jun 2026.
+
+`outputs/quick_reserve/quick_reserve_price_forecast_backtest.csv` contains prior-date-only PQR/NQR price forecasts and naive lag references. `quick_reserve_predelivery_daily.csv` and `quick_reserve_predelivery_allocations.csv` store the 90 locked-date capacity-allocation audit. `quick_reserve_predelivery_summary.json` locks the value-capture metrics and explicitly states that asset merit-order acceptance is not identified.
+
+`quick_reserve_acceptance_diagnostic.json` stores aggregate Apr–Jun Sell Orders diagnostics showing that clearing-price threshold alone does not reliably identify execution. No participant names, unit identifiers or individual bid rows are copied into the repository; only aggregate validation counts/metrics are retained.

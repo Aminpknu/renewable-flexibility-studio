@@ -220,3 +220,54 @@ def test_quick_reserve_stacking_evidence_artifact() -> None:
     assert summary["guard_sensitivity"]["4"]["stacked_annualised_gbp"] <= (
         summary["guard_sensitivity"]["1"]["stacked_annualised_gbp"] + 1e-6
     )
+
+
+def test_quick_reserve_forecast_history_integrity() -> None:
+    import hashlib
+    import pandas as pd
+
+    csv_path = ROOT / "data" / "neso_quick_reserve_forecast_history.csv"
+    manifest = json.loads(
+        (ROOT / "data" / "neso_quick_reserve_forecast_history_manifest.json").read_text(encoding="utf-8")
+    )
+    frame = pd.read_csv(csv_path)
+    assert manifest["schema_version"] == "1.0"
+    assert manifest["rows"] == 28992
+    assert manifest["delivery_windows"] == 14496
+    assert set(manifest["source_resources"]) == {"fy2025_archive", "current_results"}
+    assert manifest["rights"] == "NESO Open Data Licence"
+    assert set(frame["product"]) == {"PQR", "NQR"}
+    canonical = csv_path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == manifest["sha256"]
+
+
+def test_quick_reserve_predelivery_signal_evidence() -> None:
+    import pandas as pd
+
+    summary = json.loads(
+        (ROOT / "outputs" / "quick_reserve" / "quick_reserve_predelivery_summary.json").read_text(encoding="utf-8")
+    )
+    daily = pd.read_csv(
+        ROOT / "outputs" / "quick_reserve" / "quick_reserve_predelivery_daily.csv"
+    )
+    assert summary["stage"] == "9_quick_reserve_predelivery_capacity_signal"
+    assert summary["locked_days"] == 90
+    assert len(daily) == 90
+    assert summary["forecast_value_capture_pct"] > summary["naive_value_capture_pct"]
+    assert summary["forecast_value_capture_pct"] < 100.0
+    assert summary["locked_price_mae_gbp_per_mw_per_hour"] < (
+        summary["locked_naive_price_mae_gbp_per_mw_per_hour"]
+    )
+    assert "asset bid merit-order position is not identified" in summary["acceptance_assumption"]
+
+
+def test_quick_reserve_acceptance_diagnostic_rejects_simple_threshold_claim() -> None:
+    diagnostic = json.loads(
+        (ROOT / "outputs" / "quick_reserve" / "quick_reserve_acceptance_diagnostic.json").read_text(encoding="utf-8")
+    )
+    combined = diagnostic["combined"]
+    assert diagnostic["stage"] == "9_quick_reserve_acceptance_diagnostic"
+    assert combined["orders"] > 2_000_000
+    assert combined["precision_pct"] < 50.0
+    assert combined["false_positive"] > combined["true_positive"]
+    assert "not sufficient" in diagnostic["interpretation"]

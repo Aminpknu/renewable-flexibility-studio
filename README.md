@@ -141,6 +141,8 @@ The first ancillary-service layer adds NESO Positive/Negative Quick Reserve usin
 
 The full three-use optimiser then lets renewable firming compete with wholesale arbitrage and Quick Reserve for the same battery. It annualises to about **?3.27m/yr**, versus **?2.51m/yr** for firming + arbitrage without QR, while retaining about **37.0%** mean renewable forecast-error reduction. Adding QR-only independently to firming + arbitrage would overstate the triple-stack value by about **?0.60m/yr**. These are perfect-information, price-taker screening values for that 90-day regime, not guaranteed auction acceptance or earned revenue.
 
+A prior-date-only QR clearing-price forecast now turns that upper bound into a pre-delivery **capacity-allocation signal**. On the 90 locked Apr?Jun 2026 dates it retains about **93.1%** of perfect-information QR-only availability value (**?1.26m/yr** under the same price-taker scoring assumption), versus **88.0%** for a previous-same-product/period baseline. This is deliberately not called acceptance-adjusted revenue: an aggregate diagnostic over **2.06 million** Apr?Jun QR Sell Orders finds that `bid price ? clearing price` has only **28.9% precision** for actual execution, so the project does not invent a bid-acceptance probability from clearing price alone.
+
 ## Renewable-only continuous-SOC stress test
 
 For a 100 MW virtual portfolio with a 25 MW / 50 MWh battery, 90% round-trip efficiency, 10–90% SOC limits and no grid charging, continuous operation absorbs about **33.5% of wind**, **50.2% of solar** and **44.4% of 50/50 mixed** absolute forecast-deviation energy. SOC ends at its minimum bound, showing that energy availability and conversion losses matter across long horizons.

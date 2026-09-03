@@ -151,3 +151,11 @@ After the Quick Reserve packet and UI integration, the complete offline reposito
 The three-use extension adds System-Price-valued renewable firming to the same wholesale/QR battery. Under the baseline two-window guard, firming + arbitrage annualises to **£2.51m/yr** and the full firming + arbitrage + QR stack to **£3.27m/yr**, an incremental **£0.76m/yr** QR availability value. The independent firming/arbitrage + QR-only sum is about **£3.86m/yr**, so shared-battery optimisation removes approximately **£0.60m/yr** of double-counting while retaining **37.0%** mean renewable-error reduction.
 
 After the full three-use firming/arbitrage/Quick Reserve integration, the repository suite passes **124 tests** with a clean diff check.
+
+## Pre-delivery Quick Reserve price/capacity validation
+
+The QR clearing-price model uses an extended NESO EAC Results Summary history from 2 September 2025 to 30 June 2026, stitched from the FY2025 archive and current resource. It contains **28,992 PQR/NQR rows / 14,496 delivery windows**. Forecast features use earlier delivery dates only; mutating a target day's clearing prices does not change that target's model forecast in the leakage unit test.
+
+Across 242 eligible days, forecast MAE is **£2.09/MW/h** versus **£2.44/MW/h** for a previous-same-product/period lag. On the 90 V2 locked Apr–Jun dates, MAE is **£2.17/MW/h** versus **£2.55/MW/h** naive. The forecast-selected PQR/NQR split retains **93.1%** of perfect-information QR-only availability value (**£1.26m/yr** regime annualisation), versus **88.0% / £1.19m/yr** for the naive capacity signal.
+
+This result is deliberately labelled capacity-allocation capture, not acceptance-adjusted revenue. An aggregate diagnostic over **2,061,840** Apr–Jun 2026 QR Sell Orders finds that `priceLimit <= clearingPrice` has only **28.9% precision** for actual execution, with 497,315 rejected orders satisfying that simple threshold. The project therefore does not infer virtual-asset acceptance from clearing price alone.

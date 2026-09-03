@@ -211,3 +211,19 @@ A second QR formulation adds renewable imbalance firming to the same optimisatio
 With the baseline two-window guard on Apr–Jun 2026, **firming + arbitrage without QR annualises to about £2.51m/yr**, while **firming + arbitrage + QR annualises to about £3.27m/yr**. The QR layer therefore adds about **£0.76m/yr** above the firming/arbitrage upper bound in this regime. Mean physical renewable-error reduction changes from **35.8% to 37.0%**.
 
 The independent sum of firming+arbitrage and QR-only would be about **£3.86m/yr**, so the triple co-optimiser removes roughly **£0.60m/yr** of double-counted value. This is the preferred headline revenue-stacking benchmark because it explicitly allocates one BESS across renewable-risk management, energy trading and ancillary-service availability.
+
+## I. Pre-delivery Quick Reserve capacity signal
+
+The first deployable-style QR packet forecasts PQR/NQR clearing prices from EAC results that were available on strictly earlier delivery dates. The forecast history stitches the NESO FY2025 Results Summary archive to the current Results Summary resource, giving 28,992 PQR/NQR rows across 14,496 half-hour windows from 2 September 2025 to 30 June 2026. Apr–Jun 2026 remains the current-rule economic validation regime.
+
+A ridge model uses product, settlement-period/calendar harmonics, prior same-product/period prices and prior system-cleared volumes. It never uses target-day clearing price. Across 242 eligible dates its MAE is about **£2.09/MW/h** versus **£2.44/MW/h** for the previous-same-product/period baseline, a **14.2%** improvement. On Apr–Jun 2026, MAE is about **£2.18/MW/h** versus **£2.56/MW/h** naive.
+
+The price forecast is converted into an integer PQR/NQR capacity split before each target date using the same 25 MW nameplate and two-window state-of-energy guard. The capacity decision is then frozen. Ex-post scoring uses the subsequently realised clearing price and caps accepted capacity at the realised system-cleared volume.
+
+On the 90 V2 locked Apr–Jun 2026 dates, perfect-information QR-only availability annualises to about **£1.35m/yr** under the existing price-taker benchmark. The prior-date forecast allocation retains about **93.1%** of that value (**£1.26m/yr**), compared with **88.0%** (**£1.19m/yr**) for the naive lag allocation. Forecast allocation therefore adds roughly **£69k/yr** over the naive signal in this regime. Mean PQR/NQR allocations are about **13.4 / 8.5 MW**, close to the perfect-information **13.0 / 8.6 MW** split.
+
+### Acceptance boundary
+
+This capacity-capture result is **not an acceptance-adjusted asset-revenue forecast**. EAC Sell Orders expose price limit, status, acceptance ratio, executed quantity and clearing price. Across 2.06 million Apr–Jun 2026 Quick Reserve sell orders, the simple classifier `priceLimit <= clearingPrice` has only about **28.9% precision** for actual execution, despite high recall. Many below-clearing orders are rejected because auction baskets, substitution/flexible-order constraints and other optimisation conditions matter.
+
+The project therefore does not infer an asset-specific acceptance probability from clearing price alone. The current pre-delivery QR result is labelled a **capacity-allocation signal under a system-volume-capped price-taker assumption**. A future bid/acceptance model must use unit/order structure or an explicitly validated auction-acceptance model before its outputs can be described as obtainable QR revenue.

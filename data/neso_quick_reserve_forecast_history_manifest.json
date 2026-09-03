@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "source": "NESO Enduring Auction Capability Results Summary",
+  "source_resources": {
+    "fy2025_archive": "be55ee51-b79e-47da-b71e-a0f8865d9d66",
+    "current_results": "596f29ac-0387-4ba4-a6d3-95c243140707"
+  },
+  "rights": "NESO Open Data Licence",
+  "service": "Quick Reserve",
+  "products": [
+    "PQR",
+    "NQR"
+  ],
+  "history_scope": "Phase-2-era price-forecast evidence; current-rule investment validation remains Apr-Jun 2026",
+  "start_utc": "2025-09-02T00:00:00+00:00",
+  "end_utc": "2026-06-30T23:30:00+00:00",
+  "rows": 28992,
+  "delivery_windows": 14496,
+  "sha256": "ac848c18b34c6ed070a6d8db037957fbb399094b2b0aad00c0c16a20b78b1dbc",
+  "sha256_normalisation": "UTF-8 text with LF line endings"
+}

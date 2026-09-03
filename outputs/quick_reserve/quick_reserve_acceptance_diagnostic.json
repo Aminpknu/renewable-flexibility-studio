@@ -1,0 +1,144 @@
+{
+  "schema_version": "1.0",
+  "stage": "9_quick_reserve_acceptance_diagnostic",
+  "source": "NESO EAC monthly Sell Orders archives",
+  "service": "Quick Reserve",
+  "months": [
+    "2026-04",
+    "2026-05",
+    "2026-06"
+  ],
+  "monthly_resource_ids": {
+    "2026-04": "45d867bb-eccb-4a60-8618-74316aafde5a",
+    "2026-05": "654c9fcd-9d0b-42c5-bac7-9fa245b5f99d",
+    "2026-06": "85272de8-2fd7-4578-ae4b-55da74629841"
+  },
+  "combined": {
+    "orders": 2061840,
+    "threshold_rule": "predict accepted if priceLimit <= clearingPrice",
+    "true_positive": 202620,
+    "false_positive": 497315,
+    "false_negative": 36940,
+    "true_negative": 1324965,
+    "precision_pct": 28.94840235164694,
+    "recall_pct": 84.5800634496577,
+    "accuracy_pct": 74.08843557211034,
+    "by_order_type": {
+      "CHILD": {
+        "orders": 793411,
+        "accepted_orders": 52249,
+        "rejected_below_clearing": 160313,
+        "accepted_above_clearing": 1586
+      },
+      "PARENT": {
+        "orders": 709453,
+        "accepted_orders": 178391,
+        "rejected_below_clearing": 235977,
+        "accepted_above_clearing": 35354
+      },
+      "SUBSTITUTABLECHILD": {
+        "orders": 558976,
+        "accepted_orders": 8920,
+        "rejected_below_clearing": 101025,
+        "accepted_above_clearing": 0
+      }
+    }
+  },
+  "monthly": {
+    "2026-04": {
+      "orders": 654130,
+      "threshold_rule": "predict accepted if priceLimit <= clearingPrice",
+      "true_positive": 68664,
+      "false_positive": 169414,
+      "false_negative": 10680,
+      "true_negative": 405372,
+      "precision_pct": 28.84096808608943,
+      "recall_pct": 86.53962492437991,
+      "accuracy_pct": 72.46816382064726,
+      "by_order_type": {
+        "CHILD": {
+          "orders": 255339,
+          "accepted_orders": 17980,
+          "rejected_below_clearing": 60013,
+          "accepted_above_clearing": 337
+        },
+        "PARENT": {
+          "orders": 216074,
+          "accepted_orders": 58337,
+          "rejected_below_clearing": 72792,
+          "accepted_above_clearing": 10343
+        },
+        "SUBSTITUTABLECHILD": {
+          "orders": 182717,
+          "accepted_orders": 3027,
+          "rejected_below_clearing": 36609,
+          "accepted_above_clearing": 0
+        }
+      }
+    },
+    "2026-05": {
+      "orders": 726965,
+      "threshold_rule": "predict accepted if priceLimit <= clearingPrice",
+      "true_positive": 67499,
+      "false_positive": 158019,
+      "false_negative": 15377,
+      "true_negative": 486070,
+      "precision_pct": 29.93064855133515,
+      "recall_pct": 81.44577440996187,
+      "accuracy_pct": 76.14795760456144,
+      "by_order_type": {
+        "CHILD": {
+          "orders": 279914,
+          "accepted_orders": 17835,
+          "rejected_below_clearing": 47842,
+          "accepted_above_clearing": 1245
+        },
+        "PARENT": {
+          "orders": 248824,
+          "accepted_orders": 62181,
+          "rejected_below_clearing": 79277,
+          "accepted_above_clearing": 14132
+        },
+        "SUBSTITUTABLECHILD": {
+          "orders": 198227,
+          "accepted_orders": 2860,
+          "rejected_below_clearing": 30900,
+          "accepted_above_clearing": 0
+        }
+      }
+    },
+    "2026-06": {
+      "orders": 680745,
+      "threshold_rule": "predict accepted if priceLimit <= clearingPrice",
+      "true_positive": 66457,
+      "false_positive": 169882,
+      "false_negative": 10883,
+      "true_negative": 433523,
+      "precision_pct": 28.119353978818562,
+      "recall_pct": 85.92836824411688,
+      "accuracy_pct": 73.44600401031222,
+      "by_order_type": {
+        "CHILD": {
+          "orders": 258158,
+          "accepted_orders": 16434,
+          "rejected_below_clearing": 52458,
+          "accepted_above_clearing": 4
+        },
+        "PARENT": {
+          "orders": 244555,
+          "accepted_orders": 57873,
+          "rejected_below_clearing": 83908,
+          "accepted_above_clearing": 10879
+        },
+        "SUBSTITUTABLECHILD": {
+          "orders": 178032,
+          "accepted_orders": 3033,
+          "rejected_below_clearing": 33516,
+          "accepted_above_clearing": 0
+        }
+      }
+    }
+  },
+  "interpretation": "A simple bid-price threshold is not sufficient to identify QR execution; basket/substitution/flexible-order constraints can reject orders below clearing.",
+  "model_boundary": "No asset-specific auction-acceptance probability is inferred from clearing price alone."
+}

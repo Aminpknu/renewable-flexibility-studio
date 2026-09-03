@@ -93,3 +93,20 @@ def test_quick_reserve_layer_uses_shared_battery_and_availability_only() -> None
     assert "Utilisation revenue" in text
     assert "price taker" in text
     assert "not proof" in text.lower()
+
+
+def test_quick_reserve_predelivery_layer_reports_signal_not_acceptance_revenue() -> None:
+    note, cards, figure = app.update_quick_reserve_predelivery("2026-06-30")
+    values = {card.children[0].children: card.children[1].children for card in cards}
+    assert values["Forecast allocation capture"] == "93.1%"
+    assert values["Naive allocation capture"] == "88.0%"
+    assert "Forecast QR value" in values
+    assert values["Simple bid-threshold precision"] == "28.9%"
+    assert "Selected-day capture" in values
+    names = [trace.name for trace in figure.data]
+    assert "PQR realised clearing" in names
+    assert "PQR prior-date forecast" in names
+    assert "Forecast-selected PQR MW" in names
+    text = str(note)
+    assert "not acceptance-adjusted" in text
+    assert "poor execution classifier" in text
