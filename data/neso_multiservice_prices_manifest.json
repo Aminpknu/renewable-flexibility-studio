@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "source": "NESO Enduring Auction Capability Results Summary",
+  "resource_id": "596f29ac-0387-4ba4-a6d3-95c243140707",
+  "rights": "NESO Open Data Licence",
+  "query_start_utc": "2026-03-31T22:00:00",
+  "query_end_utc": "2026-07-01T00:00:00",
+  "rows": 29514,
+  "families": [
+    "Balancing Reserve",
+    "Dynamic Containment",
+    "Dynamic Moderation",
+    "Dynamic Regulation",
+    "Quick Reserve",
+    "Slow Reserve"
+  ],
+  "products": [
+    "DCH",
+    "DCL",
+    "DMH",
+    "DML",
+    "DRH",
+    "DRL",
+    "NBR",
+    "NQR",
+    "NSR",
+    "PBR",
+    "PQR",
+    "PSR"
+  ],
+  "delivery_start_min_utc": "2026-03-31T22:00:00+00:00",
+  "delivery_start_max_utc": "2026-06-30T23:30:00+00:00",
+  "sha256": "1fbb016e0d8dae991a65410b0f73558bbf67e6a2f94633e68b0bbc1247e90293",
+  "sha256_normalisation": "UTF-8 text with LF line endings",
+  "scope_note": "availability clearing-price evidence only; utilisation instructions/payments and performance penalties excluded"
+}

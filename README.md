@@ -166,6 +166,14 @@ Under the illustrative default assumptions of ?25m CAPEX, ?0.5m/year fixed OPEX,
 
 A 5,000-run reference Monte Carlo resamples contiguous 7-day blocks of realised forecast-selected daily market value and varies CAPEX, fixed OPEX, availability and degradation. The frozen default gives **P10/P50/P90 NPV ? -?24.18m / -?21.46m / -?19.00m**, with 95% CVaR loss about **?25.42m**. Quick Reserve is deliberately excluded from these draws. These are pre-feasibility screening results, not a bankable valuation.
 
+### NESO multi-service availability stacking
+
+Stage 11 generalises the ancillary-service engine across the current NESO EAC products: Quick Reserve (PQR/NQR), Slow Reserve (PSR/NSR), Dynamic Containment/Moderation/Regulation and, under an explicit BM-eligibility switch, Balancing Reserve (PBR/NBR). All products share the same physical battery MW, SOC and energy-headroom constraints. Dynamic Response remains a real 4-hour EFA commitment and the current Positive Slow Reserve linked-window rule is enforced with identical MW across each linked local-time block.
+
+The frozen Apr-Jun 2026 default 25 MW / 200 MWh screen annualises to about **£3.38m/yr** for firming + wholesale + Quick/Slow Reserve, **£4.80m/yr** for the full non-BM stack, and **£4.82m/yr** when BM eligibility also enables Balancing Reserve. Dynamic Regulation supplies about **£2.41m/yr** of availability value in the non-BM screen. Renewable forecast-error reduction falls from about **36.7%** in the QR+SR case to **30.1%** in the broader non-BM stack, quantifying the opportunity cost of reserving more battery capacity for ancillary markets.
+
+These are **perfect-information, price-taker availability screening values**, not earned revenue forecasts. Utilisation instructions/payments, performance penalties and asset-specific bid acceptance are excluded. The current generic release also uses a conservative rule that one physical MW cannot be sold into multiple simultaneous ancillary products.
+
 ## Renewable-only continuous-SOC stress test
 
 For a 100 MW virtual portfolio with a 25 MW / 50 MWh battery, 90% round-trip efficiency, 10–90% SOC limits and no grid charging, continuous operation absorbs about **33.5% of wind**, **50.2% of solar** and **44.4% of 50/50 mixed** absolute forecast-deviation energy. SOC ends at its minimum bound, showing that energy availability and conversion losses matter across long horizons.

@@ -1,0 +1,156 @@
+{
+  "schema_version": "1.0",
+  "source": "NESO current balancing-service pages and EAC Results Summary",
+  "products": [
+    {
+      "product": "PQR",
+      "family": "Quick Reserve",
+      "direction": "upward",
+      "minimum_mw": 1,
+      "whole_mw": true,
+      "bm_required": false,
+      "response_seconds": 60,
+      "energy_guard_hours": 1.0,
+      "window_hours": 0.5,
+      "linked_rule": null
+    },
+    {
+      "product": "NQR",
+      "family": "Quick Reserve",
+      "direction": "downward",
+      "minimum_mw": 1,
+      "whole_mw": true,
+      "bm_required": false,
+      "response_seconds": 60,
+      "energy_guard_hours": 1.0,
+      "window_hours": 0.5,
+      "linked_rule": null
+    },
+    {
+      "product": "PSR",
+      "family": "Slow Reserve",
+      "direction": "upward",
+      "minimum_mw": 1,
+      "whole_mw": true,
+      "bm_required": false,
+      "response_seconds": 900,
+      "energy_guard_hours": 1.0,
+      "window_hours": 0.5,
+      "linked_rule": "psr_transition_2026"
+    },
+    {
+      "product": "NSR",
+      "family": "Slow Reserve",
+      "direction": "downward",
+      "minimum_mw": 1,
+      "whole_mw": true,
+      "bm_required": false,
+      "response_seconds": 900,
+      "energy_guard_hours": 1.0,
+      "window_hours": 0.5,
+      "linked_rule": null
+    },
+    {
+      "product": "PBR",
+      "family": "Balancing Reserve",
+      "direction": "upward",
+      "minimum_mw": 1,
+      "whole_mw": true,
+      "bm_required": true,
+      "response_seconds": null,
+      "energy_guard_hours": 0.5,
+      "window_hours": 0.5,
+      "linked_rule": null
+    },
+    {
+      "product": "NBR",
+      "family": "Balancing Reserve",
+      "direction": "downward",
+      "minimum_mw": 1,
+      "whole_mw": true,
+      "bm_required": true,
+      "response_seconds": null,
+      "energy_guard_hours": 0.5,
+      "window_hours": 0.5,
+      "linked_rule": null
+    },
+    {
+      "product": "DCL",
+      "family": "Dynamic Containment",
+      "direction": "upward",
+      "minimum_mw": 1,
+      "whole_mw": true,
+      "bm_required": false,
+      "response_seconds": 1,
+      "energy_guard_hours": 0.25,
+      "window_hours": 4.0,
+      "linked_rule": null
+    },
+    {
+      "product": "DCH",
+      "family": "Dynamic Containment",
+      "direction": "downward",
+      "minimum_mw": 1,
+      "whole_mw": true,
+      "bm_required": false,
+      "response_seconds": 1,
+      "energy_guard_hours": 0.25,
+      "window_hours": 4.0,
+      "linked_rule": null
+    },
+    {
+      "product": "DML",
+      "family": "Dynamic Moderation",
+      "direction": "upward",
+      "minimum_mw": 1,
+      "whole_mw": true,
+      "bm_required": false,
+      "response_seconds": 1,
+      "energy_guard_hours": 0.5,
+      "window_hours": 4.0,
+      "linked_rule": null
+    },
+    {
+      "product": "DMH",
+      "family": "Dynamic Moderation",
+      "direction": "downward",
+      "minimum_mw": 1,
+      "whole_mw": true,
+      "bm_required": false,
+      "response_seconds": 1,
+      "energy_guard_hours": 0.5,
+      "window_hours": 4.0,
+      "linked_rule": null
+    },
+    {
+      "product": "DRL",
+      "family": "Dynamic Regulation",
+      "direction": "upward",
+      "minimum_mw": 1,
+      "whole_mw": true,
+      "bm_required": false,
+      "response_seconds": 10,
+      "energy_guard_hours": 1.0,
+      "window_hours": 4.0,
+      "linked_rule": null
+    },
+    {
+      "product": "DRH",
+      "family": "Dynamic Regulation",
+      "direction": "downward",
+      "minimum_mw": 1,
+      "whole_mw": true,
+      "bm_required": false,
+      "response_seconds": 10,
+      "energy_guard_hours": 1.0,
+      "window_hours": 4.0,
+      "linked_rule": null
+    }
+  ],
+  "screening_notes": [
+    "Availability clearing-price value only; utilisation energy/payments and performance penalties are excluded.",
+    "Energy-guard hours are conservative screening constraints, not a substitute for the full service terms.",
+    "The generic optimiser applies a conservative no-double-selling rule across all simultaneous ancillary products.",
+    "Balancing Reserve is disabled unless the scenario explicitly assumes BM-unit eligibility."
+  ]
+}

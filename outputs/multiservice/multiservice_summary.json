@@ -1,0 +1,61 @@
+{
+  "stage": "11_neso_multiservice_availability_stacking",
+  "days": 90,
+  "battery": {
+    "power_mw": 25.0,
+    "energy_mwh": 200.0
+  },
+  "scenarios": {
+    "qr_sr": {
+      "annualised_net_value_gbp": 3380126.113985888,
+      "annualised_firming_value_gbp": 528655.5504367175,
+      "annualised_arbitrage_value_gbp": 1974126.8693347168,
+      "annualised_ancillary_availability_gbp": 1075468.0530416667,
+      "annualised_throughput_cost_gbp": 198124.3588272125,
+      "mean_error_reduction_pct": 36.673463542487546,
+      "family_annualised_availability_gbp": {
+        "Quick Reserve": 780703.308125,
+        "Slow Reserve": 294764.74491666665
+      }
+    },
+    "non_bm_multiservice": {
+      "annualised_net_value_gbp": 4801234.034043706,
+      "annualised_firming_value_gbp": 437597.4970213371,
+      "annualised_arbitrage_value_gbp": 1728276.0058521638,
+      "annualised_ancillary_availability_gbp": 2788664.2902916665,
+      "annualised_throughput_cost_gbp": 153303.7591214614,
+      "mean_error_reduction_pct": 30.134613169683362,
+      "family_annualised_availability_gbp": {
+        "Dynamic Containment": 9915.969333333333,
+        "Dynamic Moderation": 13209.550333333334,
+        "Dynamic Regulation": 2406389.561666667,
+        "Quick Reserve": 220191.28716666656,
+        "Slow Reserve": 138957.92179166665
+      }
+    },
+    "bm_multiservice": {
+      "annualised_net_value_gbp": 4823698.289711263,
+      "annualised_firming_value_gbp": 446374.9900076935,
+      "annualised_arbitrage_value_gbp": 1717129.9181549,
+      "annualised_ancillary_availability_gbp": 2813646.1727916673,
+      "annualised_throughput_cost_gbp": 153452.79124299728,
+      "mean_error_reduction_pct": 30.54717783241705,
+      "family_annualised_availability_gbp": {
+        "Balancing Reserve": 81514.24262499998,
+        "Dynamic Containment": 8660.645666666667,
+        "Dynamic Moderation": 12003.089,
+        "Dynamic Regulation": 2388874.6066666674,
+        "Quick Reserve": 216148.2334583334,
+        "Slow Reserve": 106445.35537500001
+      }
+    }
+  },
+  "modelling_boundary": [
+    "perfect-information/price-taker availability benchmark",
+    "utilisation revenue, performance penalties and bid-acceptance uncertainty excluded",
+    "one MW cannot be sold to multiple simultaneous ancillary products in this conservative release",
+    "Dynamic Response blocks are retained as 4-hour commitments and only complete service windows inside each daily SOC-reset horizon are valued",
+    "PSR linked-window identical-MW constraints are enforced for the current transition regime",
+    "Balancing Reserve is included only in the explicit BM-eligible scenario"
+  ]
+}
