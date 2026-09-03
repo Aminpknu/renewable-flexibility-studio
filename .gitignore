@@ -37,3 +37,6 @@ data/*.parquet
 !outputs/quick_reserve/
 !outputs/quick_reserve/*.json
 !outputs/quick_reserve/*.csv
+
+# Build-only raw government source; derived spatial weights are versioned.
+data/repd_*.csv

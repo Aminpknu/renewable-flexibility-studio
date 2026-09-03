@@ -19,6 +19,7 @@ from adapters.imbalance_settlement import load_system_price_history, select_syst
 from adapters.latest_forecast import latest_target_date, load_latest_forecast
 from adapters.market_reference import load_market_index_history, select_market_index_prices
 from adapters.quick_reserve import load_quick_reserve_history
+from adapters.spatial_forecast import build_spatial_virtual_forecast, load_latest_spatial_forecast
 from adapters.market_forecast_bundle import assess_market_forecast_bundle, validate_market_forecast_bundle
 from engine.battery import BatteryConfig, simulate_reactive_firming
 from engine.design_sizing import select_stable_design
@@ -63,6 +64,7 @@ EXTENDED_SIZING_PATH = ROOT / "outputs" / "extended_sizing.csv"
 IMBALANCE_SUMMARY_PATH = ROOT / "outputs" / "imbalance_backtest_summary.json"
 DESIGN_GRID_PATH = ROOT / "outputs" / "design_sizing_grid_100mw.csv"
 LATEST_FORECAST_PATH = ROOT / "data" / "latest_forecast.csv"
+LATEST_SPATIAL_FORECAST_PATH = ROOT / "data" / "latest_spatial_forecast.csv"
 SYSTEM_PRICES_PATH = ROOT / "data" / "elexon_system_prices.csv"
 MARKET_INDEX_PATH = ROOT / "data" / "elexon_market_index_prices.csv"
 MARKET_BACKTEST_PATH = ROOT / "outputs" / "market_optimisation" / "default_mixed_summary.json"
@@ -84,6 +86,7 @@ SYSTEM_PRICES = load_system_price_history(SYSTEM_PRICES_PATH)
 MARKET_INDEX_PRICES = load_market_index_history(MARKET_INDEX_PATH)
 QUICK_RESERVE = load_quick_reserve_history(str(QUICK_RESERVE_PATH))
 LATEST_FORECAST = load_latest_forecast(LATEST_FORECAST_PATH)
+LATEST_SPATIAL_FORECAST = load_latest_spatial_forecast(LATEST_SPATIAL_FORECAST_PATH)
 LATEST_TARGET_DATE = latest_target_date(LATEST_FORECAST)
 FULL_BACKTEST = json.loads(FULL_BACKTEST_PATH.read_text(encoding="utf-8"))
 IMBALANCE_BACKTEST = json.loads(IMBALANCE_SUMMARY_PATH.read_text(encoding="utf-8"))
@@ -111,6 +114,7 @@ EXTENDED_SIZING = pd.read_csv(EXTENDED_SIZING_PATH)
 DESIGN_GRID = load_design_grid(DESIGN_GRID_PATH)
 DATE_OPTIONS = available_dates(HISTORICAL_DATA)
 DEFAULT_DATE = DATE_OPTIONS[-1]
+SPATIAL_ZONE_OPTIONS = sorted(LATEST_SPATIAL_FORECAST["zone"].dropna().unique().tolist())
 
 app = Dash(__name__, title="Renewable Flexibility Studio")
 server = app.server
@@ -1472,6 +1476,87 @@ def _grid_demand_figure(frame: pd.DataFrame) -> go.Figure:
     return figure
 
 
+def _spatial_zone_figure(frame: pd.DataFrame, zone: str) -> go.Figure:
+    figure = go.Figure()
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"], y=frame["zone_wind_virtual_mw"],
+        mode="lines", name="Allocated wind forecast",
+    ))
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"], y=frame["zone_solar_virtual_mw"],
+        mode="lines", name="Allocated solar forecast",
+    ))
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"], y=frame["zone_virtual_forecast_mw"],
+        mode="lines", name="Zone total", line={"width": 3},
+    ))
+    figure.update_layout(
+        xaxis_title="Settlement time (UTC)",
+        yaxis_title="Allocated virtual portfolio forecast (MW)",
+        hovermode="x unified", height=390,
+        margin=dict(l=55, r=20, t=55, b=45),
+        legend={"orientation": "h", "y": 1.03, "yanchor": "bottom", "x": 0},
+        title=f"{zone} spatial allocation",
+    )
+    return figure
+
+
+def _spatial_zone_view(
+    zone: str,
+    portfolio_type: str,
+    capacity_mw: float,
+    wind_share_pct: float,
+    design_target_pct: float,
+    design_reliability_pct: float,
+):
+    spatial = build_spatial_virtual_forecast(
+        LATEST_SPATIAL_FORECAST, LATEST_FORECAST,
+        portfolio_type, float(capacity_mw), float(wind_share_pct) / 100.0,
+    )
+    selected_zone = spatial.loc[spatial["zone"].eq(zone)].copy()
+    if selected_zone.empty:
+        raise KeyError(f"Unknown spatial zone: {zone}")
+    design_grid = scaled_design_grid(
+        DESIGN_GRID, portfolio_type, float(capacity_mw), float(wind_share_pct)
+    )
+    selected_design = select_stable_design(
+        design_grid, float(design_target_pct), float(design_reliability_pct)
+    )
+    if selected_design is None:
+        raise ValueError("No stable future battery design exists for this gate.")
+    zone_capacity = float(selected_zone["zone_virtual_capacity_proxy_mw"].iloc[0])
+    capacity_share = float(selected_zone["zone_capacity_share"].iloc[0])
+    zone_energy = float(selected_zone["zone_virtual_forecast_mw"].sum() * 0.5)
+    national_energy = float(spatial.groupby("settlement_period")["zone_virtual_forecast_mw"].sum().sum() * 0.5)
+    energy_share = 100.0 * zone_energy / national_energy if national_energy > 0 else 0.0
+    peak = float(selected_zone["zone_virtual_forecast_mw"].max())
+    proxy_power = float(selected_design["power_mw"]) * capacity_share
+    proxy_energy = float(selected_design["energy_mwh"]) * capacity_share
+    cards = [
+        _kpi_card("Spatial zone", zone, "One of the 10 V2 weather/allocation zones"),
+        _kpi_card("Allocated nameplate proxy", f"{zone_capacity:.1f} MW", f"{100*capacity_share:.1f}% of selected virtual portfolio"),
+        _kpi_card("Forecast energy", f"{zone_energy:.1f} MWh", f"{energy_share:.1f}% of allocated forecast-day energy"),
+        _kpi_card("Peak allocated forecast", f"{peak:.1f} MW", "Weather-informed share of national V2 forecast"),
+        _kpi_card("Indicative BESS share", f"{proxy_power:.1f} MW / {proxy_energy:.1f} MWh", "Proportional Stage A allocation only"),
+        _kpi_card("Implied duration", f"{float(selected_design['duration_hours']):.0f} h", "Inherited from national Stage A design"),
+    ]
+    note = html.Div([
+        html.Div(
+            "This is a spatial allocation of the authoritative GB V2 forecast, not an independently trained or observed city-generation forecast.",
+            className="scenario-note-line uncertainty-warning",
+        ),
+        html.Div(
+            "Each half-hour, the national wind/solar MW totals are distributed across the same 10 V2 weather locations using DESNZ REPD operational-capacity proxy weights multiplied by local issue-time weather signals. The ten zones reconcile exactly back to the GB V2 totals.",
+            className="scenario-note-line",
+        ),
+        html.Div(
+            "The BESS figure is only a proportional allocation of the national Stage A design. City-specific forecast-error histories and local grid constraints are not available, so it is not an independently sized local battery recommendation. Demand, System Price and market settlement remain GB-level.",
+            className="scenario-note-line uncertainty-line",
+        ),
+    ])
+    return note, cards, _spatial_zone_figure(selected_zone, zone)
+
+
 def _scenario(
     date_value: str,
     portfolio_type: str,
@@ -2036,6 +2121,35 @@ app.layout = html.Div(
                         html.Div("Rolling battery reserve and headroom requirements", className="chart-title"),
                         html.Div("Each point asks how much downward discharge reserve or upward charging headroom may be needed over the following window equal to the installed battery duration. Dashed reference lines show what is available at the recommended starting SOC.", className="chart-subtitle"),
                         dcc.Graph(id="tomorrow-reserve-chart", figure=_empty_figure("Reserve planning will load automatically."), config={"displaylogo": False}),
+                        html.Hr(),
+                        html.H3("Spatial renewable allocation zones"),
+                        html.P(
+                            "Select one of the ten representative V2 weather zones to inspect an indicative city-level allocation of the national renewable forecast. National wind and solar totals remain authoritative and are exactly conserved across all ten zones.",
+                            className="section-copy",
+                        ),
+                        html.Div([
+                            html.Div([
+                                html.Label("Spatial zone"),
+                                dcc.Dropdown(
+                                    id="spatial-zone-input",
+                                    options=[{"label": zone, "value": zone} for zone in SPATIAL_ZONE_OPTIONS],
+                                    value="London" if "London" in SPATIAL_ZONE_OPTIONS else SPATIAL_ZONE_OPTIONS[0],
+                                    clearable=False,
+                                ),
+                            ]),
+                        ], className="design-controls"),
+                        html.Div(id="spatial-zone-note", className="scenario-note"),
+                        html.Div(id="spatial-zone-kpi-grid", className="kpi-grid"),
+                        html.Div("Weather-informed spatial renewable allocation", className="chart-title"),
+                        html.Div(
+                            "The allocation combines DESNZ REPD operational-capacity proxy weights with the same ten issue-time weather locations used by V2. It is reconciled to the GB forecast and is not observed city generation.",
+                            className="chart-subtitle",
+                        ),
+                        dcc.Graph(
+                            id="spatial-zone-chart",
+                            figure=_empty_figure("Spatial allocation will load automatically."),
+                            config={"displaylogo": False},
+                        ),
                         html.Div("Official GB day-ahead demand context", className="chart-title"),
                         html.Div("National Demand Forecast is official NESO data served through Elexon Insights. It provides system-scale context; the virtual portfolio is not claimed to be a physical national battery.", className="chart-subtitle"),
                         dcc.Graph(id="grid-demand-chart", figure=_empty_figure("GB demand context will load automatically."), config={"displaylogo": False}),
@@ -2110,6 +2224,31 @@ def explain_initial_energy(power_mw: float, duration_hours: float, initial_soc_p
 )
 def show_wind_share(portfolio_type: str) -> str:
     return "control-visible" if portfolio_type == "mixed" else "control-muted"
+
+
+@app.callback(
+    Output("spatial-zone-note", "children"),
+    Output("spatial-zone-kpi-grid", "children"),
+    Output("spatial-zone-chart", "figure"),
+    Input("spatial-zone-input", "value"),
+    Input("portfolio-input", "value"),
+    Input("capacity-input", "value"),
+    Input("wind-share-input", "value"),
+    Input("design-target-input", "value"),
+    Input("design-reliability-input", "value"),
+)
+def update_spatial_zone(
+    zone, portfolio_type, capacity_mw, wind_share_pct,
+    design_target_pct, design_reliability_pct,
+):
+    try:
+        return _spatial_zone_view(
+            zone, portfolio_type, capacity_mw, wind_share_pct,
+            design_target_pct, design_reliability_pct,
+        )
+    except (TypeError, ValueError, KeyError, AssertionError) as error:
+        message = f"Spatial zone allocation could not be calculated: {error}"
+        return message, [], _empty_figure(message)
 
 
 @app.callback(
@@ -2957,11 +3096,20 @@ def run_tomorrow_planning(
             (100.0 * merged["forecast_mw"] / merged["national_demand_mw"]).max()
         )
         publish = grid["publish_time_utc"].max().strftime("%Y-%m-%d %H:%M UTC")
+        context_status = str(grid["grid_context_status"].iloc[0]) if "grid_context_status" in grid else "complete_day"
+        period_count = int(grid["grid_context_period_count"].iloc[0]) if "grid_context_period_count" in grid else len(grid)
+        if context_status == "partial_remaining_day":
+            first_sp = int(grid["settlement_period"].min())
+            last_sp = int(grid["settlement_period"].max())
+            note_parts.append(html.Div(
+                f"Grid context is a live remaining-day NESO forecast: {period_count} periods (SP{first_sp}?SP{last_sp}) are currently published for {LATEST_TARGET_DATE}. Earlier settlement periods have already elapsed and are not returned by this endpoint.",
+                className="scenario-note-line uncertainty-warning",
+            ))
         note_parts.append(html.Div(
             f"Grid context: official National Demand Forecast ranges {grid['national_demand_mw'].min()/1000:.1f}–"
             f"{grid['national_demand_mw'].max()/1000:.1f} GW; latest included publication {publish}. "
             f"At its largest relative point, this {float(capacity_mw):.0f} MW virtual portfolio schedule is about "
-            f"{max_share:.2f}% of GB National Demand.",
+            f"{max_share:.2f}% of GB National Demand over the periods currently available from NESO.",
             className="scenario-note-line",
         ))
     except Exception as error:
