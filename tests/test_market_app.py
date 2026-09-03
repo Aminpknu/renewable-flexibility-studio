@@ -75,16 +75,19 @@ def test_quick_reserve_layer_uses_shared_battery_and_availability_only() -> None
     assert values["Installed design"] == "25 MW / 200 MWh"
     assert "Arbitrage-only value" in values
     assert "QR-only availability" in values
-    assert "Shared-battery stacked" in values
-    assert "Independent-sum overstatement" in values
-    assert "Mean PQR commitment" in values
-    assert "Mean NQR commitment" in values
+    assert "Firming + arbitrage" in values
+    assert "Arbitrage + QR" in values
+    assert "Firming + market + QR" in values
+    assert "Triple-stack firming" in values
+    assert "Triple independent-sum overstatement" in values
+    assert "Mean PQR / NQR" in values
     names = [trace.name for trace in figure.data]
     assert "PQR clearing price" in names
     assert "NQR clearing price" in names
     assert "PQR contracted MW" in names
     assert "NQR contracted MW (shown negative)" in names
-    assert "Battery SOC" in names
+    assert "Triple-stack residual" in names
+    assert "Triple-stack SOC" in names
     text = str(note)
     assert "availability only" in text
     assert "Utilisation revenue" in text

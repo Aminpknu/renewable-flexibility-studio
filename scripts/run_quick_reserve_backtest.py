@@ -8,16 +8,25 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from adapters.forecast_data import load_historical_predictions
+from adapters.forecast_data import load_historical_predictions, select_date
+from adapters.imbalance_settlement import load_system_price_history, select_system_prices
 from adapters.market_reference import load_market_index_history, select_market_index_prices
 from adapters.quick_reserve import load_quick_reserve_history
 from engine.battery import BatteryConfig
-from engine.market_optimisation import WholesaleArbitrageConfig, optimise_wholesale_arbitrage
-from engine.quick_reserve import QuickReserveStackingConfig, optimise_arbitrage_and_quick_reserve
+from engine.market_optimisation import (
+    WholesaleArbitrageConfig, optimise_wholesale_arbitrage,
+    optimise_firming_and_arbitrage,
+)
+from engine.portfolio import build_virtual_portfolio
+from engine.quick_reserve import (
+    QuickReserveStackingConfig, optimise_arbitrage_and_quick_reserve,
+    optimise_firming_arbitrage_and_quick_reserve,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 HISTORICAL = load_historical_predictions(ROOT / "data" / "historical_backtest.csv")
 MARKET = load_market_index_history(ROOT / "data" / "elexon_market_index_prices.csv")
+SYSTEM = load_system_price_history(ROOT / "data" / "elexon_system_prices.csv")
 QR = load_quick_reserve_history(str(ROOT / "data" / "neso_quick_reserve_prices.csv"))
 OUTPUT_DIR = ROOT / "outputs" / "quick_reserve"
 BATTERY = BatteryConfig(power_mw=25.0, duration_hours=8.0, round_trip_efficiency=0.90, initial_soc_fraction=0.50)
@@ -35,9 +44,17 @@ def _quick_reserve_for_market_day(market: pd.DataFrame) -> pd.DataFrame:
 
 def _run_day(date_text: str, guard_windows: int = 2) -> dict:
     market = select_market_index_prices(MARKET, date_text)
+    system = select_system_prices(SYSTEM, date_text)
+    source_day = select_date(HISTORICAL, date_text)
+    portfolio = build_virtual_portfolio(
+        source_day, "mixed", 100.0, wind_share=0.5
+    )
     qr = _quick_reserve_for_market_day(market)
     _arb_frame, arb = optimise_wholesale_arbitrage(
         market, BATTERY, WholesaleArbitrageConfig(THROUGHPUT_COST)
+    )
+    _firm_arb_frame, firm_arb = optimise_firming_and_arbitrage(
+        portfolio, system, market, BATTERY, THROUGHPUT_COST
     )
     _qr_frame, qr_only = optimise_arbitrage_and_quick_reserve(
         market, qr, BATTERY,
@@ -53,15 +70,29 @@ def _run_day(date_text: str, guard_windows: int = 2) -> dict:
             enable_arbitrage=True,
         ),
     )
+    _triple_frame, triple = optimise_firming_arbitrage_and_quick_reserve(
+        portfolio, system, market, qr, BATTERY,
+        QuickReserveStackingConfig(
+            THROUGHPUT_COST, crossover_guard_windows=guard_windows,
+            enable_arbitrage=True,
+        ),
+    )
     return {
         "settlement_date": date_text,
         "guard_windows": guard_windows,
         "arbitrage_value_gbp": arb["net_arbitrage_margin_gbp"],
+        "firming_arbitrage_value_gbp": firm_arb["net_cooptimised_value_gbp"],
+        "firming_arbitrage_error_reduction_pct": firm_arb["error_reduction_pct"],
         "qr_only_value_gbp": qr_only["net_stacked_value_gbp"],
         "stacked_value_gbp": stacked["net_stacked_value_gbp"],
         "stacked_availability_payment_gbp": stacked["total_availability_payment_gbp"],
         "stacked_pqr_mw_hours": stacked["pqr_contracted_mw_hours"],
         "stacked_nqr_mw_hours": stacked["nqr_contracted_mw_hours"],
+        "triple_stacked_value_gbp": triple["net_triple_stacked_value_gbp"],
+        "triple_availability_payment_gbp": triple["quick_reserve_availability_payment_gbp"],
+        "triple_error_reduction_pct": triple["error_reduction_pct"],
+        "triple_pqr_mw_hours": triple["pqr_contracted_mw_hours"],
+        "triple_nqr_mw_hours": triple["nqr_contracted_mw_hours"],
     }
 
 
@@ -70,6 +101,8 @@ def _summarise(frame: pd.DataFrame) -> dict:
     annualisation = 365.25 / days
     independent = frame["arbitrage_value_gbp"] + frame["qr_only_value_gbp"]
     conflict = independent - frame["stacked_value_gbp"]
+    triple_independent = frame["firming_arbitrage_value_gbp"] + frame["qr_only_value_gbp"]
+    triple_conflict = triple_independent - frame["triple_stacked_value_gbp"]
     return {
         "days": days,
         "annualisation_factor": annualisation,
@@ -84,9 +117,21 @@ def _summarise(frame: pd.DataFrame) -> dict:
         ),
         "naive_independent_sum_annualised_gbp": float(independent.sum() * annualisation),
         "double_count_avoided_annualised_gbp": float(conflict.sum() * annualisation),
+        "firming_arbitrage_annualised_gbp": float(frame["firming_arbitrage_value_gbp"].sum() * annualisation),
+        "triple_stacked_annualised_gbp": float(frame["triple_stacked_value_gbp"].sum() * annualisation),
+        "triple_incremental_vs_firming_arbitrage_annualised_gbp": float(
+            (frame["triple_stacked_value_gbp"] - frame["firming_arbitrage_value_gbp"]).sum() * annualisation
+        ),
+        "triple_naive_independent_sum_annualised_gbp": float(triple_independent.sum() * annualisation),
+        "triple_double_count_avoided_annualised_gbp": float(triple_conflict.sum() * annualisation),
+        "mean_firming_arbitrage_error_reduction_pct": float(frame["firming_arbitrage_error_reduction_pct"].mean()),
+        "mean_triple_error_reduction_pct": float(frame["triple_error_reduction_pct"].mean()),
         "stacked_positive_value_days_pct": float(100.0 * frame["stacked_value_gbp"].gt(0).mean()),
+        "triple_positive_value_days_pct": float(100.0 * frame["triple_stacked_value_gbp"].gt(0).mean()),
         "mean_pqr_contracted_mw": float(frame["stacked_pqr_mw_hours"].sum() / (days * 24.0)),
         "mean_nqr_contracted_mw": float(frame["stacked_nqr_mw_hours"].sum() / (days * 24.0)),
+        "mean_triple_pqr_contracted_mw": float(frame["triple_pqr_mw_hours"].sum() / (days * 24.0)),
+        "mean_triple_nqr_contracted_mw": float(frame["triple_nqr_mw_hours"].sum() / (days * 24.0)),
         "daily_stacked_value_p10_gbp": float(frame["stacked_value_gbp"].quantile(0.10)),
         "daily_stacked_value_p50_gbp": float(frame["stacked_value_gbp"].quantile(0.50)),
         "daily_stacked_value_p90_gbp": float(frame["stacked_value_gbp"].quantile(0.90)),

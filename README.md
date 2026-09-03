@@ -137,7 +137,9 @@ The current 3 September forecast-day market bundle is explicitly marked as an **
 
 ### Quick Reserve availability stacking
 
-The first ancillary-service layer adds NESO Positive/Negative Quick Reserve using real EAC clearing prices while keeping utilisation separate. PQR/NQR are whole-MW commitments that split the same BESS nameplate, and wholesale scheduling plus reserve share one SOC/power trajectory. Under the default two-window energy guard, the Apr?Jun 2026 regime annualises to about **?2.38m arbitrage-only**, **?1.35m QR availability-only** and **?3.13m shared-battery stacked**. Naively adding the first two would overstate value by about **?0.61m/yr**. These are perfect-information, price-taker screening values for that 90-day regime, not guaranteed auction acceptance or earned revenue.
+The first ancillary-service layer adds NESO Positive/Negative Quick Reserve using real EAC clearing prices while keeping utilisation separate. PQR/NQR are whole-MW commitments that split the same BESS nameplate, and wholesale scheduling plus reserve share one SOC/power trajectory. Under the default two-window energy guard, the Apr?Jun 2026 regime annualises to about **?2.38m arbitrage-only**, **?1.35m QR availability-only** and **?3.13m arbitrage + QR**. Naively adding the first two would overstate value by about **?0.61m/yr**.
+
+The full three-use optimiser then lets renewable firming compete with wholesale arbitrage and Quick Reserve for the same battery. It annualises to about **?3.27m/yr**, versus **?2.51m/yr** for firming + arbitrage without QR, while retaining about **37.0%** mean renewable forecast-error reduction. Adding QR-only independently to firming + arbitrage would overstate the triple-stack value by about **?0.60m/yr**. These are perfect-information, price-taker screening values for that 90-day regime, not guaranteed auction acceptance or earned revenue.
 
 ## Renewable-only continuous-SOC stress test
 

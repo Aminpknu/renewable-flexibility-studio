@@ -203,3 +203,11 @@ For the default 100 MW 50/50 portfolio, 25 MW / 200 MWh battery and £2/MWh thro
 Simply adding the two independent strategies would imply about **£3.73m/yr**. The shared-battery optimisation reduces this by about **£0.61m/yr**, which is the estimated double-count avoided. Mean stacked commitments are about **13.0 MW PQR** and **8.6 MW NQR**, with their sum constrained within the 25 MW nameplate in every window.
 
 Changing the crossover guard from one to four windows reduces the stacked regime annualisation from roughly **£3.17m/yr to £3.08m/yr**. These values describe the 90-day Apr–Jun 2026 price regime and must not be substituted for a full-year forecast or guaranteed service revenue.
+
+### Three-use co-optimisation
+
+A second QR formulation adds renewable imbalance firming to the same optimisation. Firming charge/discharge remains bounded by the observed renewable forecast error and is valued at System Price; arbitrage is valued at Market Index Price; PQR/NQR earn availability clearing value only. All three uses share charge/discharge mode, battery MW, SOC, terminal SOC and the QR energy guard.
+
+With the baseline two-window guard on Apr–Jun 2026, **firming + arbitrage without QR annualises to about £2.51m/yr**, while **firming + arbitrage + QR annualises to about £3.27m/yr**. The QR layer therefore adds about **£0.76m/yr** above the firming/arbitrage upper bound in this regime. Mean physical renewable-error reduction changes from **35.8% to 37.0%**.
+
+The independent sum of firming+arbitrage and QR-only would be about **£3.86m/yr**, so the triple co-optimiser removes roughly **£0.60m/yr** of double-counted value. This is the preferred headline revenue-stacking benchmark because it explicitly allocates one BESS across renewable-risk management, energy trading and ancillary-service availability.

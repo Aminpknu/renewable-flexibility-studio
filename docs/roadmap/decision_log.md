@@ -85,3 +85,18 @@ Default two-window evidence: £2.38m/yr arbitrage-only; £1.35m/yr QR-only; £3.
 Validation: 122 offline tests pass; `git diff --check` clean
 Known limitations: realised clearing prices; price-taker acceptance; no utilisation dispatch/payment; energy guard is screening not prequalification proof; no site/telemetry/bid-execution model
 Next allowed stage: pre-delivery QR bid/acceptance modelling and market-backed investment integration
+
+## Stage 9E — Firming + arbitrage + Quick Reserve co-optimisation
+
+Stage: 9E three-use revenue stacking
+Decision: EVIDENCE READY
+Decision date: 2026-09-03
+Branch: feature/stage9-quick-reserve
+Primary evidence: 90-day Apr–Jun 2026 triple-stack backtest and selected-day Studio comparison
+Acceptance result: PASS for perfect-information shared-battery screening
+Production impact: none; feature branch pending promotion
+Reason: renewable firming, wholesale arbitrage and PQR/NQR now share one charge/discharge mode, MW nameplate, SOC trajectory, terminal SOC and QR crossover-energy constraints
+Default two-window evidence: £2.51m/yr firming+arbitrage; £3.27m/yr full triple stack; +£0.76m/yr QR increment; ~£0.60m/yr independent-sum double-count avoided; 37.0% mean renewable-error reduction retained
+Validation: 124 offline tests pass; `git diff --check` clean
+Known limitations: realised forecast error/prices and observed EAC clearing prices; price-taker acceptance; QR utilisation excluded; no site/telemetry/bid-execution model
+Next allowed stage: issue-time-correct Quick Reserve bid/acceptance modelling, then market-backed lifecycle NPV/Monte Carlo

@@ -147,3 +147,7 @@ For the default 25 MW / 200 MWh BESS on the 90 locked Apr–Jun 2026 dates, the 
 One-, two- and four-window energy guards give stacked regime annualisations of about **£3.17m, £3.13m and £3.08m/yr**, respectively. QR utilisation payment/activation is excluded; the asset is assumed to be a price taker accepted at the observed clearing price, so these are perfect-information screening values and not proof of prequalification, acceptance or earned service revenue.
 
 After the Quick Reserve packet and UI integration, the complete offline repository suite passes **122 tests** and `git diff --check` is clean.
+
+The three-use extension adds System-Price-valued renewable firming to the same wholesale/QR battery. Under the baseline two-window guard, firming + arbitrage annualises to **£2.51m/yr** and the full firming + arbitrage + QR stack to **£3.27m/yr**, an incremental **£0.76m/yr** QR availability value. The independent firming/arbitrage + QR-only sum is about **£3.86m/yr**, so shared-battery optimisation removes approximately **£0.60m/yr** of double-counting while retaining **37.0%** mean renewable-error reduction.
+
+After the full three-use firming/arbitrage/Quick Reserve integration, the repository suite passes **124 tests** with a clean diff check.

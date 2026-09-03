@@ -4,10 +4,14 @@ import pandas as pd
 import pytest
 
 from engine.battery import BatteryConfig
-from engine.market_optimisation import WholesaleArbitrageConfig, optimise_wholesale_arbitrage
+from engine.market_optimisation import (
+    WholesaleArbitrageConfig, optimise_wholesale_arbitrage,
+    optimise_firming_and_arbitrage,
+)
 from engine.quick_reserve import (
     QuickReserveStackingConfig,
     optimise_arbitrage_and_quick_reserve,
+    optimise_firming_arbitrage_and_quick_reserve,
 )
 
 
@@ -105,3 +109,59 @@ def test_pqr_and_nqr_split_one_nameplate_capacity() -> None:
         QuickReserveStackingConfig(enable_arbitrage=False, crossover_guard_windows=1),
     )
     assert (result["pqr_contracted_mw"] + result["nqr_contracted_mw"] <= 2.0 + 1e-9).all()
+
+
+def _portfolio_and_system() -> tuple[pd.DataFrame, pd.DataFrame]:
+    times = pd.date_range("2026-04-01T00:00Z", periods=4, freq="30min")
+    portfolio = pd.DataFrame({
+        "settlement_period": range(1, 5),
+        "valid_time_utc": times,
+        "actual_mw": [9.0, 11.0, 9.0, 11.0],
+        "forecast_mw": [10.0, 10.0, 10.0, 10.0],
+    })
+    system = pd.DataFrame({
+        "settlement_period": range(1, 5),
+        "system_price_gbp_per_mwh": [100.0, 100.0, 200.0, 200.0],
+    })
+    return portfolio, system
+
+
+def test_zero_qr_price_reduces_to_firming_arbitrage_cooptimiser() -> None:
+    portfolio, system = _portfolio_and_system()
+    market = _market([20.0, 30.0, 150.0, 180.0])
+    market["settlement_period"] = range(1, 5)
+    battery = BatteryConfig(
+        power_mw=2.0, duration_hours=2.0, round_trip_efficiency=0.90,
+        initial_soc_fraction=0.5, minimum_soc_fraction=0.1, maximum_soc_fraction=0.9,
+    )
+    _plain_frame, plain = optimise_firming_and_arbitrage(
+        portfolio, system, market, battery, 2.0
+    )
+    _triple_frame, triple = optimise_firming_arbitrage_and_quick_reserve(
+        portfolio, system, market, _qr(4, 0.0, 0.0), battery,
+        QuickReserveStackingConfig(2.0, crossover_guard_windows=2),
+    )
+    assert triple["quick_reserve_availability_payment_gbp"] == pytest.approx(0.0)
+    assert triple["net_triple_stacked_value_gbp"] == pytest.approx(
+        plain["net_cooptimised_value_gbp"], abs=1e-6
+    )
+    assert triple["error_reduction_pct"] == pytest.approx(
+        plain["error_reduction_pct"], abs=1e-6
+    )
+
+
+def test_triple_stack_respects_qr_nameplate_split_and_error_direction() -> None:
+    portfolio, system = _portfolio_and_system()
+    market = _market([20.0, 30.0, 150.0, 180.0])
+    market["settlement_period"] = range(1, 5)
+    battery = BatteryConfig(
+        power_mw=2.0, duration_hours=4.0, round_trip_efficiency=1.0,
+        initial_soc_fraction=0.5, minimum_soc_fraction=0.0, maximum_soc_fraction=1.0,
+    )
+    frame, summary = optimise_firming_arbitrage_and_quick_reserve(
+        portfolio, system, market, _qr(4, 25.0, 25.0), battery,
+        QuickReserveStackingConfig(0.0, crossover_guard_windows=1),
+    )
+    assert (frame["triple_pqr_contracted_mw"] + frame["triple_nqr_contracted_mw"] <= 2.0 + 1e-9).all()
+    assert (frame["triple_residual_error_mw"].abs() <= (portfolio["actual_mw"] - portfolio["forecast_mw"]).abs() + 1e-9).all()
+    assert summary["net_triple_stacked_value_gbp"] >= 0.0

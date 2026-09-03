@@ -43,7 +43,10 @@ from engine.monte_carlo import (
 from engine.portfolio import build_virtual_forecast, build_virtual_portfolio
 from engine.pre_delivery_strategy import build_reserve_soc_corridor
 from engine.reserve_planning import ReservePlanningConfig, build_reserve_plan
-from engine.quick_reserve import QuickReserveStackingConfig, optimise_arbitrage_and_quick_reserve
+from engine.quick_reserve import (
+    QuickReserveStackingConfig, optimise_arbitrage_and_quick_reserve,
+    optimise_firming_arbitrage_and_quick_reserve,
+)
 from engine.sizing import find_minimum_battery
 from engine.stress import run_value_stress_scenarios
 from engine.uncertainty import (
@@ -1129,6 +1132,12 @@ def _quick_reserve_day_analysis(
     guard_windows: int,
 ):
     market = select_market_index_prices(MARKET_INDEX_PRICES, date_value)
+    system = select_system_prices(SYSTEM_PRICES, date_value)
+    source_day = select_date(HISTORICAL_DATA, date_value)
+    portfolio = build_virtual_portfolio(
+        source_day, portfolio_type, float(capacity_mw),
+        wind_share=float(wind_share_pct) / 100.0,
+    )
     valid = pd.to_datetime(market["valid_time_utc"], utc=True)
     qr = QUICK_RESERVE.loc[QUICK_RESERVE["delivery_start_utc"].isin(valid)].copy()
     if len(qr) != 2 * len(market):
@@ -1146,6 +1155,9 @@ def _quick_reserve_day_analysis(
     _arb_frame, arb = optimise_wholesale_arbitrage(
         market, battery, WholesaleArbitrageConfig(float(throughput_cost))
     )
+    _firm_arb_frame, firm_arb = optimise_firming_and_arbitrage(
+        portfolio, system, market, battery, float(throughput_cost)
+    )
     _qr_only_frame, qr_only = optimise_arbitrage_and_quick_reserve(
         market, qr, battery,
         QuickReserveStackingConfig(
@@ -1160,17 +1172,30 @@ def _quick_reserve_day_analysis(
             enable_arbitrage=True,
         ),
     )
+    triple_frame, triple = optimise_firming_arbitrage_and_quick_reserve(
+        portfolio, system, market, qr, battery,
+        QuickReserveStackingConfig(
+            float(throughput_cost), crossover_guard_windows=int(guard_windows),
+            enable_arbitrage=True,
+        ),
+    )
     return {
         "market": market, "qr": qr, "selected": selected, "battery": battery,
-        "arbitrage": arb, "qr_only": qr_only, "stacked": stacked,
-        "stacked_frame": stacked_frame,
+        "arbitrage": arb, "firm_arb": firm_arb,
+        "qr_only": qr_only, "stacked": stacked,
+        "stacked_frame": stacked_frame, "triple": triple,
+        "triple_frame": triple_frame,
     }
 
 
 def _quick_reserve_figure(analysis: dict[str, Any]) -> go.Figure:
-    frame = analysis["stacked_frame"]
+    frame = analysis["triple_frame"]
+    triple = frame
     battery = analysis["battery"]
-    figure = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.08)
+    figure = make_subplots(
+        rows=4, cols=1, shared_xaxes=True, vertical_spacing=0.07,
+        row_heights=[0.20, 0.27, 0.25, 0.28],
+    )
     figure.add_trace(go.Scatter(
         x=frame["valid_time_utc"], y=frame["pqr_price"],
         mode="lines", name="PQR clearing price",
@@ -1180,42 +1205,46 @@ def _quick_reserve_figure(analysis: dict[str, Any]) -> go.Figure:
         mode="lines", name="NQR clearing price", line={"dash": "dash"},
     ), row=1, col=1)
     figure.add_trace(go.Scatter(
-        x=frame["valid_time_utc"], y=frame["pqr_contracted_mw"],
+        x=frame["valid_time_utc"], y=frame["triple_pqr_contracted_mw"],
         mode="lines", name="PQR contracted MW",
     ), row=2, col=1)
     figure.add_trace(go.Scatter(
-        x=frame["valid_time_utc"], y=-frame["nqr_contracted_mw"],
+        x=frame["valid_time_utc"], y=-frame["triple_nqr_contracted_mw"],
         mode="lines", name="NQR contracted MW (shown negative)",
     ), row=2, col=1)
     figure.add_trace(go.Scatter(
         x=frame["valid_time_utc"],
-        y=frame["qr_arbitrage_discharge_mw"] - frame["qr_arbitrage_charge_mw"],
+        y=frame["triple_arbitrage_discharge_mw"] - frame["triple_arbitrage_charge_mw"],
         mode="lines", name="Wholesale schedule", line={"dash": "dot"},
     ), row=2, col=1)
+    original_error = triple["actual_mw"].astype(float) - triple["forecast_mw"].astype(float)
     figure.add_trace(go.Scatter(
-        x=frame["valid_time_utc"],
-        y=100.0 * frame["qr_soc_end_mwh"] / battery.energy_capacity_mwh,
-        mode="lines", name="Battery SOC",
+        x=triple["valid_time_utc"], y=original_error,
+        mode="lines", name="Original renewable error",
     ), row=3, col=1)
-    figure.add_hline(
-        y=100.0 * battery.minimum_soc_fraction, line_dash="dot",
-        row=3, col=1,
-    )
-    figure.add_hline(
-        y=100.0 * battery.maximum_soc_fraction, line_dash="dot",
-        row=3, col=1,
-    )
+    figure.add_trace(go.Scatter(
+        x=triple["valid_time_utc"], y=triple["triple_residual_error_mw"],
+        mode="lines", name="Triple-stack residual", line={"dash": "dash"},
+    ), row=3, col=1)
+    figure.add_trace(go.Scatter(
+        x=triple["valid_time_utc"],
+        y=100.0 * triple["triple_soc_end_mwh"] / battery.energy_capacity_mwh,
+        mode="lines", name="Triple-stack SOC",
+    ), row=4, col=1)
     figure.add_hline(y=0.0, line_dash="dash", row=2, col=1)
-    figure.update_yaxes(title_text="£/MW/h", row=1, col=1)
+    figure.add_hline(y=0.0, line_dash="dash", row=3, col=1)
+    figure.add_hline(y=100.0 * battery.minimum_soc_fraction, line_dash="dot", row=4, col=1)
+    figure.add_hline(y=100.0 * battery.maximum_soc_fraction, line_dash="dot", row=4, col=1)
+    figure.update_yaxes(title_text="?/MW/h", row=1, col=1)
     figure.update_yaxes(title_text="MW", row=2, col=1)
-    figure.update_yaxes(title_text="SOC (%)", row=3, col=1)
-    figure.update_xaxes(title_text="Delivery time (UTC)", row=3, col=1)
+    figure.update_yaxes(title_text="Error (MW)", row=3, col=1)
+    figure.update_yaxes(title_text="SOC (%)", row=4, col=1)
+    figure.update_xaxes(title_text="Delivery time (UTC)", row=4, col=1)
     figure.update_layout(
-        height=720, hovermode="x unified", margin=dict(l=60, r=20, t=55, b=50),
+        height=820, hovermode="x unified", margin=dict(l=60, r=20, t=55, b=50),
         legend={"orientation": "h", "y": 1.02, "yanchor": "bottom", "x": 0},
     )
     return figure
-
 
 def _tomorrow_planning_data(
     portfolio_type: str,
@@ -2468,22 +2497,28 @@ def run_quick_reserve_stacking(
         return message, [], _empty_figure(message)
     selected = analysis["selected"]
     arb = analysis["arbitrage"]
+    firm_arb = analysis["firm_arb"]
     qr_only = analysis["qr_only"]
     stacked = analysis["stacked"]
+    triple = analysis["triple"]
     hours = len(analysis["market"]) * analysis["battery"].interval_hours
     independent_sum = float(arb["net_arbitrage_margin_gbp"]) + float(qr_only["net_stacked_value_gbp"])
     double_count = independent_sum - float(stacked["net_stacked_value_gbp"])
-    mean_pqr = float(stacked["pqr_contracted_mw_hours"]) / hours
-    mean_nqr = float(stacked["nqr_contracted_mw_hours"]) / hours
+    triple_independent_sum = float(firm_arb["net_cooptimised_value_gbp"]) + float(qr_only["net_stacked_value_gbp"])
+    triple_double_count = triple_independent_sum - float(triple["net_triple_stacked_value_gbp"])
+    mean_pqr = float(triple["pqr_contracted_mw_hours"]) / hours
+    mean_nqr = float(triple["nqr_contracted_mw_hours"]) / hours
     cards = [
         _kpi_card("Installed design", f"{selected['power_mw']:.0f} MW / {selected['energy_mwh']:.0f} MWh", "Stage A selected battery"),
-        _kpi_card("Arbitrage-only value", f"£{arb['net_arbitrage_margin_gbp']:,.0f}", "Perfect-information APX MIP benchmark"),
-        _kpi_card("QR-only availability", f"£{qr_only['net_stacked_value_gbp']:,.0f}", "PQR + NQR availability only"),
-        _kpi_card("Shared-battery stacked", f"£{stacked['net_stacked_value_gbp']:,.0f}", "Arbitrage + QR sharing MW and SOC"),
-        _kpi_card("QR availability in stack", f"£{stacked['total_availability_payment_gbp']:,.0f}", "Utilisation revenue excluded"),
-        _kpi_card("Independent-sum overstatement", f"£{double_count:,.0f}", "Value double-count avoided by co-optimisation"),
-        _kpi_card("Mean PQR commitment", f"{mean_pqr:.1f} MW", "Positive Quick Reserve"),
-        _kpi_card("Mean NQR commitment", f"{mean_nqr:.1f} MW", "Negative Quick Reserve"),
+        _kpi_card("Arbitrage-only value", f"?{arb['net_arbitrage_margin_gbp']:,.0f}", "Perfect-information APX MIP benchmark"),
+        _kpi_card("Firming + arbitrage", f"?{firm_arb['net_cooptimised_value_gbp']:,.0f}", "Renewable firming plus wholesale"),
+        _kpi_card("QR-only availability", f"?{qr_only['net_stacked_value_gbp']:,.0f}", "PQR + NQR availability only"),
+        _kpi_card("Arbitrage + QR", f"?{stacked['net_stacked_value_gbp']:,.0f}", "Two-use shared-battery stack"),
+        _kpi_card("Firming + market + QR", f"?{triple['net_triple_stacked_value_gbp']:,.0f}", "Three uses sharing one battery"),
+        _kpi_card("Triple-stack firming", f"{triple['error_reduction_pct']:.1f}%", "Renewable forecast-error reduction retained"),
+        _kpi_card("QR availability in triple", f"?{triple['quick_reserve_availability_payment_gbp']:,.0f}", "Utilisation revenue excluded"),
+        _kpi_card("Triple independent-sum overstatement", f"?{triple_double_count:,.0f}", "Double-count avoided by shared-battery optimisation"),
+        _kpi_card("Mean PQR / NQR", f"{mean_pqr:.1f} / {mean_nqr:.1f} MW", "Positive / negative reserve commitment"),
     ]
     default_reference = (
         portfolio_type == "mixed"
@@ -2510,7 +2545,7 @@ def run_quick_reserve_stacking(
     if default_reference:
         ref = QUICK_RESERVE_SUMMARY["guard_sensitivity"][str(int(guard_windows))]
         note_lines.append(html.Div(
-            f"Frozen Apr–Jun 2026 default reference: stacked £{ref['stacked_annualised_gbp']/1e6:.2f}m/yr versus arbitrage-only £{ref['arbitrage_annualised_gbp']/1e6:.2f}m/yr; the naïve independent sum overstates value by about £{ref['double_count_avoided_annualised_gbp']/1e6:.2f}m/yr. This annualisation describes that 90-day regime only.",
+            f"Frozen Apr?Jun 2026 default reference: full firming + arbitrage + QR ?{ref['triple_stacked_annualised_gbp']/1e6:.2f}m/yr versus firming + arbitrage ?{ref['firming_arbitrage_annualised_gbp']/1e6:.2f}m/yr. The na?ve independent sum overstates triple-stack value by about ?{ref['triple_double_count_avoided_annualised_gbp']/1e6:.2f}m/yr, while mean renewable-error reduction remains {ref['mean_triple_error_reduction_pct']:.1f}%. This annualisation describes that 90-day regime only.",
             className="scenario-note-line",
         ))
     return html.Div(note_lines), cards, _quick_reserve_figure(analysis)

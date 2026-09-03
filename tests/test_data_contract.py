@@ -213,6 +213,10 @@ def test_quick_reserve_stacking_evidence_artifact() -> None:
     assert two["stacked_annualised_gbp"] >= two["arbitrage_annualised_gbp"]
     assert two["naive_independent_sum_annualised_gbp"] >= two["stacked_annualised_gbp"]
     assert two["double_count_avoided_annualised_gbp"] > 0
+    assert two["triple_stacked_annualised_gbp"] >= two["firming_arbitrage_annualised_gbp"]
+    assert two["triple_naive_independent_sum_annualised_gbp"] >= two["triple_stacked_annualised_gbp"]
+    assert two["triple_double_count_avoided_annualised_gbp"] > 0
+    assert two["mean_triple_error_reduction_pct"] > 0
     assert summary["guard_sensitivity"]["4"]["stacked_annualised_gbp"] <= (
         summary["guard_sensitivity"]["1"]["stacked_annualised_gbp"] + 1e-6
     )
