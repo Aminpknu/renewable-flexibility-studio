@@ -169,3 +169,13 @@ The companion V2 spatial bundle for 3 September 2026 contains **480 rows: 48 set
 Fixed spatial weights use operational wind/solar capacity in the July 2026 DESNZ REPD as a proxy, with projects assigned to the nearest V2 weather location. REPD limitations are explicit: it is not a complete census of embedded renewable capacity, and the zone output is therefore an allocation proxy rather than independently validated city generation.
 
 For the default 100 MW 50/50 virtual portfolio, the current London allocation has a **15.2 MW nameplate proxy** and the proportional Stage A battery share is **3.8 MW / 30.4 MWh (8 h)**. This is not independent local BESS sizing. After the grid/spatial packet, the full Flexibility Studio suite passes **135 tests**.
+
+## Stage 10 market-backed investment validation
+
+The market-backed lifecycle layer uses the realised value of the **420-day forecast-selected wholesale schedule** as its core operating evidence. Under the frozen illustrative assumptions of £25m CAPEX, £0.5m/year fixed OPEX, 15-year life, 8% discount rate and 2% annual revenue degradation, annual operating value is about **£1.13m/year**, NPV about **-£20.58m**, BCR **0.30**, maximum CAPEX for zero NPV about **£4.42m**, and the minimum year-one operating value for zero NPV about **£3.82m/year**.
+
+The Stage B reserve-aware wholesale case annualises to about **£0.94m/year** and NPV about **-£22.09m** under the same assumptions. The aligned Apr–Jun forecast-wholesale + pre-delivery QR price-taker availability upside reaches about **£2.77m/year** and NPV about **-£8.04m**; it is not treated as guaranteed or acceptance-adjusted QR revenue.
+
+The frozen 5,000-run wholesale-base Monte Carlo uses contiguous 7-day blocks of realised forecast-selected daily market value. It gives approximately **P10/P50/P90 NPV = -£24.18m / -£21.46m / -£19.00m**, **100% probability of negative NPV** and **95% CVaR loss = £25.42m** under the stated screening distributions. The 1,000-vs-5,000 convergence differences for the reported NPV/tail metrics remain below about **0.32%**. Quick Reserve is excluded from the probabilistic base.
+
+The interactive Stage 10 callbacks reuse the visible CAPEX, fixed OPEX, lifetime, discount-rate and degradation controls, add optional replacement year/cost, refuse unsupported scaling away from the frozen 100 MW 50/50 and 90%/90% reference case, and provide a downloadable deterministic/Monte Carlo JSON summary. After Stage 10 UI integration and the grid/spatial merge, the repository suite passes **145 tests** at the release gate.

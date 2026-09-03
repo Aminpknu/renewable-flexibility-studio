@@ -99,3 +99,9 @@ Required fields are product/direction, UTC delivery start/end, 0.5 h window leng
 `outputs/quick_reserve/quick_reserve_price_forecast_backtest.csv` contains prior-date-only PQR/NQR price forecasts and naive lag references. `quick_reserve_predelivery_daily.csv` and `quick_reserve_predelivery_allocations.csv` store the 90 locked-date capacity-allocation audit. `quick_reserve_predelivery_summary.json` locks the value-capture metrics and explicitly states that asset merit-order acceptance is not identified.
 
 `quick_reserve_acceptance_diagnostic.json` stores aggregate Apr–Jun Sell Orders diagnostics showing that clearing-price threshold alone does not reliably identify execution. No participant names, unit identifiers or individual bid rows are copied into the repository; only aggregate validation counts/metrics are retained.
+
+## Market-backed investment evidence
+
+`outputs/market_investment/market_investment_summary.json` freezes the Stage 10 default 100 MW 50/50, 25 MW / 200 MWh market-backed investment evidence. The core operating-value input is the 420-day realised margin of the prior-date forecast-selected APX Market Index schedule in `pre_delivery_strategy_daily.csv`; the reserve-aware case uses the matching Stage B SOC-corridor schedule. The historical market margin already includes the frozen ?2/MWh throughput-cost scenario and it must not be charged a second time in the lifecycle appraisal.
+
+The JSON records deterministic lifecycle scenarios, a 5,000-run forecast-wholesale Monte Carlo, a reserve-aware Monte Carlo and convergence diagnostics. Quick Reserve is included only in deterministic Apr?Jun aligned price-taker upside cases; it is excluded from the probabilistic base because asset-specific EAC acceptance remains unidentified. CAPEX, fixed OPEX, asset life, discount rate, degradation and optional replacement cost are explicit pre-feasibility assumptions rather than observed supplier/financing terms.

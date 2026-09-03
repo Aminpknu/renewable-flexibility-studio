@@ -35,7 +35,7 @@ This is a **virtual portfolio-level firming benchmark**. It is not:
 
 - a site-specific battery design;
 - a physical battery capable of correcting all GB renewable output;
-- an electricity-trading or revenue-stacking model;
+- a live electricity-trading execution system or guaranteed revenue model;
 - an investment recommendation;
 - direct control software for a battery management system.
 
@@ -152,6 +152,15 @@ The first ancillary-service layer adds NESO Positive/Negative Quick Reserve usin
 The full three-use optimiser then lets renewable firming compete with wholesale arbitrage and Quick Reserve for the same battery. It annualises to about **?3.27m/yr**, versus **?2.51m/yr** for firming + arbitrage without QR, while retaining about **37.0%** mean renewable forecast-error reduction. Adding QR-only independently to firming + arbitrage would overstate the triple-stack value by about **?0.60m/yr**. These are perfect-information, price-taker screening values for that 90-day regime, not guaranteed auction acceptance or earned revenue.
 
 A prior-date-only QR clearing-price forecast now turns that upper bound into a pre-delivery **capacity-allocation signal**. On the 90 locked Apr?Jun 2026 dates it retains about **93.1%** of perfect-information QR-only availability value (**?1.26m/yr** under the same price-taker scoring assumption), versus **88.0%** for a previous-same-product/period baseline. This is deliberately not called acceptance-adjusted revenue: an aggregate diagnostic over **2.06 million** Apr?Jun QR Sell Orders finds that `bid price ? clearing price` has only **28.9% precision** for actual execution, so the project does not invent a bid-acceptance probability from clearing price alone.
+
+
+## Market-backed investment case (Stage 10)
+
+Stage 10 connects the pre-delivery wholesale operating evidence to lifecycle investment appraisal. The core case uses the **realised value of the 420-day forecast-selected APX Market Index schedule**, not the Stage 6 abstract consequence-value assumption. A separate reserve-aware case uses the Stage B SOC-corridor-constrained wholesale schedule. Quick Reserve is kept as an **Apr?Jun aligned price-taker upside sensitivity** and is excluded from the probabilistic base until asset-specific EAC bid acceptance is identified.
+
+Under the illustrative default assumptions of ?25m CAPEX, ?0.5m/year fixed OPEX, 15-year life, 8% discount rate and 2% annual revenue degradation, the 420-day wholesale case provides about **?1.13m/year** operating value, **NPV ? -?20.6m** and **BCR ? 0.30**. The year-one break-even operating value is about **?3.82m/year** and the maximum upfront CAPEX consistent with zero NPV is about **?4.42m**. The aligned Apr?Jun wholesale + QR price-taker upside raises the screening operating value to about **?2.77m/year**, but remains negative at roughly **-?8.0m NPV** under the same cost assumptions.
+
+A 5,000-run reference Monte Carlo resamples contiguous 7-day blocks of realised forecast-selected daily market value and varies CAPEX, fixed OPEX, availability and degradation. The frozen default gives **P10/P50/P90 NPV ? -?24.18m / -?21.46m / -?19.00m**, with 95% CVaR loss about **?25.42m**. Quick Reserve is deliberately excluded from these draws. These are pre-feasibility screening results, not a bankable valuation.
 
 ## Renewable-only continuous-SOC stress test
 

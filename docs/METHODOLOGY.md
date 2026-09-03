@@ -178,6 +178,20 @@ Within each half-hour, wind raw allocation is proportional to the fixed wind-cap
 
 For a user-defined virtual portfolio, wind and solar nameplate are split by the selected portfolio mix and the same dynamic spatial shares are applied. The displayed city/zone BESS is the national Stage A MW/MWh design multiplied by that zone's fixed virtual-capacity proxy share. It is therefore an **indicative proportional allocation**, not an independently optimised city battery. No city-specific actual generation/error history, local demand, distribution-network constraint or local market price is inferred.
 
-## 13. Current exclusions
+## 13. Market-backed lifecycle investment appraisal
+
+Stage 10 uses the realised daily operating value of the **forecast-selected** wholesale schedule as the core investment-benefit series. The schedule itself is chosen from prior-date APX Market Index price forecasts; realised APX Market Index prices are used only afterward to score the fixed schedule. The base annual operating value is the observed daily sum annualised by `365.25 / observed_days`. The reserve-aware case uses the same price forecast while constraining SOC inside the Stage B reserve corridor.
+
+For annual operating value `V_1`, revenue degradation `g`, fixed annual OPEX `O`, discount rate `r`, lifetime `N`, optional replacement cost `R_y` and upfront CAPEX `C_0`, lifecycle NPV is:
+
+```text
+NPV = -C_0 + sum[y=1..N] ((V_1 (1-g)^(y-1) - O - R_y) / (1+r)^y)
+```
+
+The market-backed BCR is present value of market operating value divided by present value of CAPEX + fixed OPEX + replacement. The switching values are the maximum CAPEX compatible with zero NPV and the minimum year-one annual operating value required for zero NPV. Historical dispatch margins already include the frozen ?2/MWh throughput-cost assumption, so that cost is not applied again.
+
+The market-backed Monte Carlo resamples contiguous blocks of realised daily forecast-selected market value, preserving short-run market-regime dependence, and varies CAPEX, fixed OPEX, availability and degradation. It reports P10/P50/P90 NPV, probability of negative NPV, VaR and CVaR using `investment loss = -NPV`. Quick Reserve is excluded from the probabilistic base until asset-specific auction acceptance is identified. The aligned Apr?Jun QR case is deterministic upside screening only.
+
+## 14. Current exclusions
 
 The current release excludes a licensed contracted/day-ahead auction price benchmark, detailed cell-level degradation, site-specific grid-connection/network constraints, weather-ensemble probabilistic forecasts and independently validated city-level generation/error targets. The historical firming evidence remains national forecast-error behaviour scaled to a virtual portfolio. Spatial-zone outputs are reconciled allocation proxies, not individual-asset forecasts.

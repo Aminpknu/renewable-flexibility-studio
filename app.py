@@ -2651,6 +2651,225 @@ def download_risk_value_scenario(
 
 
 @app.callback(
+    Output("market-investment-note", "children"),
+    Output("market-investment-kpi-grid", "children"),
+    Output("market-investment-chart", "figure"),
+    Input("portfolio-input", "value"),
+    Input("capacity-input", "value"),
+    Input("wind-share-input", "value"),
+    Input("design-target-input", "value"),
+    Input("design-reliability-input", "value"),
+    Input("risk-capex-input", "value"),
+    Input("risk-fixed-opex-input", "value"),
+    Input("risk-life-input", "value"),
+    Input("risk-discount-input", "value"),
+    Input("risk-degradation-input", "value"),
+    Input("market-replacement-year-input", "value"),
+    Input("market-replacement-cost-input", "value"),
+)
+def update_market_backed_investment(
+    portfolio_type, capacity_mw, wind_share_pct, design_target_pct,
+    design_reliability_pct, capex_million, fixed_opex_million,
+    asset_life_years, discount_rate_pct, degradation_pct,
+    replacement_year, replacement_cost_million,
+):
+    if not _market_investment_reference_supported(
+        portfolio_type, capacity_mw, wind_share_pct,
+        design_target_pct, design_reliability_pct,
+    ):
+        message = (
+            "Market-backed investment evidence is currently frozen for the default "
+            "100 MW 50/50 portfolio and 90%/90% Stage A design gate. Change the controls "
+            "back to that reference case to avoid unsupported revenue scaling."
+        )
+        return message, [], _empty_figure(message)
+    try:
+        assumptions = _market_investment_assumptions(
+            capex_million, fixed_opex_million, asset_life_years,
+            discount_rate_pct, degradation_pct,
+            replacement_year, replacement_cost_million,
+        )
+        scenarios = _market_investment_scenarios(assumptions)
+    except (TypeError, ValueError, KeyError) as error:
+        message = f"Market-backed investment appraisal could not be calculated: {error}"
+        return message, [], _empty_figure(message)
+
+    base = scenarios["Forecast wholesale · 420d"]
+    reserve = scenarios["Reserve-aware wholesale · 420d"]
+    qr_upside = scenarios["Apr–Jun wholesale + QR upside"]
+    payback = base["simple_payback_years"]
+    payback_text = "Not within life" if payback is None else f"{int(payback)} years"
+    cards = [
+        _kpi_card("Forecast wholesale value", f"£{base['annual_operating_value_gbp']/1e6:.2f}m/yr", "420-day forecast-selected strategy"),
+        _kpi_card("Market-backed NPV", f"£{base['npv_gbp']/1e6:.2f}m", "Core 420-day wholesale evidence"),
+        _kpi_card("Market-backed BCR", f"{base['benefit_cost_ratio']:.2f}", "PV market value / PV lifecycle cost"),
+        _kpi_card("Simple payback", payback_text, "Forecast-selected wholesale base"),
+        _kpi_card("Break-even operating value", f"£{base['minimum_annual_market_value_for_zero_npv_gbp']/1e6:.2f}m/yr", "Year-one value required for NPV = 0"),
+        _kpi_card("Max CAPEX at NPV = 0", f"£{base['maximum_capex_for_zero_npv_gbp']/1e6:.2f}m", "Wholesale base switching value"),
+        _kpi_card("Reserve-aware NPV", f"£{reserve['npv_gbp']/1e6:.2f}m", "420-day Stage B reserve-aware schedule"),
+        _kpi_card("QR upside NPV", f"£{qr_upside['npv_gbp']/1e6:.2f}m", "Apr–Jun aligned price-taker screening only"),
+    ]
+    note = html.Div([
+        html.Strong(
+            "The market-backed base case uses the realised value of schedules selected from prior-date APX Market Index forecasts; it does not use the Stage 6 consequence-value assumption."
+        ),
+        html.P(
+            "The 420-day forecast-selected wholesale and reserve-aware wholesale cases are the core evidence. The £2/MWh throughput-cost assumption is already embedded in those daily operating values, so the Stage 6 variable-OPEX control is not applied again."
+        ),
+        html.P(
+            "Quick Reserve is shown only as an Apr–Jun aligned price-taker availability upside. It is excluded from the core valuation and probabilistic base because asset-specific EAC bid acceptance has not been identified. These remain pre-feasibility results, not bankable revenue forecasts."
+        ),
+    ])
+    return note, cards, _market_investment_figure(scenarios)
+
+
+@app.callback(
+    Output("market-investment-mc-note", "children"),
+    Output("market-investment-mc-kpi-grid", "children"),
+    Output("market-investment-mc-chart", "figure"),
+    Output("market-investment-mc-store", "data"),
+    Input("market-investment-mc-button", "n_clicks"),
+    State("portfolio-input", "value"), State("capacity-input", "value"),
+    State("wind-share-input", "value"), State("design-target-input", "value"),
+    State("design-reliability-input", "value"), State("risk-capex-input", "value"),
+    State("risk-fixed-opex-input", "value"), State("risk-life-input", "value"),
+    State("risk-discount-input", "value"), State("risk-degradation-input", "value"),
+    State("risk-availability-input", "value"), State("market-replacement-year-input", "value"),
+    State("market-replacement-cost-input", "value"), State("downside-simulations-input", "value"),
+    State("downside-block-input", "value"), State("downside-seed-input", "value"),
+    prevent_initial_call=True,
+)
+def run_market_backed_monte_carlo(
+    _clicks, portfolio_type, capacity_mw, wind_share_pct, design_target_pct,
+    design_reliability_pct, capex_million, fixed_opex_million,
+    asset_life_years, discount_rate_pct, degradation_pct, availability_pct,
+    replacement_year, replacement_cost_million, simulations, block_days, seed,
+):
+    if not _market_investment_reference_supported(
+        portfolio_type, capacity_mw, wind_share_pct,
+        design_target_pct, design_reliability_pct,
+    ):
+        message = "Market-backed Monte Carlo is currently available only for the frozen default 100 MW 50/50, 90%/90% reference case."
+        return message, [], _empty_figure(message), None
+    try:
+        assumptions = _market_investment_assumptions(
+            capex_million, fixed_opex_million, asset_life_years,
+            discount_rate_pct, degradation_pct,
+            replacement_year, replacement_cost_million,
+        )
+        draws, summary = _market_investment_mc(
+            assumptions, availability_pct, simulations, block_days, seed,
+        )
+    except (TypeError, ValueError, KeyError) as error:
+        message = f"Market-backed Monte Carlo could not be calculated: {error}"
+        return message, [], _empty_figure(message), None
+
+    cards = [
+        _kpi_card("P10 NPV", f"£{summary['npv_p10_gbp']/1e6:.2f}m", "Lower market-backed NPV quantile"),
+        _kpi_card("P50 NPV", f"£{summary['npv_p50_gbp']/1e6:.2f}m", "Median market-backed NPV"),
+        _kpi_card("P90 NPV", f"£{summary['npv_p90_gbp']/1e6:.2f}m", "Upper market-backed NPV quantile"),
+        _kpi_card("Probability NPV < 0", f"{summary['probability_negative_npv_pct']:.1f}%", "Share of market-backed simulations below zero"),
+        _kpi_card("95% CVaR loss", f"£{summary['cvar_expected_shortfall_gbp']/1e6:.2f}m", "Average investment loss in worst 5% tail"),
+        _kpi_card("Median annual market value", f"£{summary['annual_market_value_p50_gbp']/1e6:.2f}m/yr", "365-day block-resampled operating value"),
+    ]
+    note = html.Div([
+        html.Div(
+            f"The market-backed Monte Carlo resamples 365-day operating years in {int(block_days)}-day contiguous blocks from the 420-day realised forecast-selected wholesale evidence using seed {int(seed)}.",
+            className="scenario-note-line",
+        ),
+        html.Div(
+            f"Expected availability is centred on {float(availability_pct):.0f}% with a ±5 percentage-point triangular range. CAPEX, fixed OPEX and degradation use the Stage 10 screening distributions; Quick Reserve is excluded from every draw.",
+            className="scenario-note-line uncertainty-line",
+        ),
+        html.Div(
+            "Loss convention: investment loss = -NPV. This is a market-backed screening distribution, not a calibrated financing or auction-revenue forecast.",
+            className="scenario-note-line",
+        ),
+    ])
+    payload = {
+        "schema_version": "1.0",
+        "stage": "10_market_backed_investment_monte_carlo",
+        "summary": summary,
+        "simulation_settings": {
+            "simulations": int(simulations), "block_days": int(block_days),
+            "seed": int(seed), "availability_mode_pct": float(availability_pct),
+        },
+        "assumptions": {
+            "capex_gbp": float(assumptions.total_capex_gbp),
+            "fixed_opex_gbp_per_year": float(assumptions.fixed_opex_gbp_per_year),
+            "asset_life_years": int(assumptions.asset_life_years),
+            "discount_rate_pct": 100.0 * float(assumptions.discount_rate),
+            "annual_revenue_degradation_pct": 100.0 * float(assumptions.annual_revenue_degradation_fraction),
+            "replacement_year": assumptions.replacement_year,
+            "replacement_cost_gbp": float(assumptions.replacement_cost_gbp),
+        },
+        "scope": "420-day forecast-selected wholesale evidence; QR excluded",
+    }
+    return note, cards, _npv_distribution_figure(draws, summary), payload
+
+
+@app.callback(
+    Output("market-investment-download", "data"),
+    Input("market-investment-download-button", "n_clicks"),
+    State("portfolio-input", "value"), State("capacity-input", "value"),
+    State("wind-share-input", "value"), State("design-target-input", "value"),
+    State("design-reliability-input", "value"), State("risk-capex-input", "value"),
+    State("risk-fixed-opex-input", "value"), State("risk-life-input", "value"),
+    State("risk-discount-input", "value"), State("risk-degradation-input", "value"),
+    State("market-replacement-year-input", "value"), State("market-replacement-cost-input", "value"),
+    State("market-investment-mc-store", "data"),
+    prevent_initial_call=True,
+)
+def download_market_backed_investment(
+    _clicks, portfolio_type, capacity_mw, wind_share_pct, design_target_pct,
+    design_reliability_pct, capex_million, fixed_opex_million,
+    asset_life_years, discount_rate_pct, degradation_pct,
+    replacement_year, replacement_cost_million, mc_payload,
+):
+    if not _market_investment_reference_supported(
+        portfolio_type, capacity_mw, wind_share_pct,
+        design_target_pct, design_reliability_pct,
+    ):
+        return no_update
+    assumptions = _market_investment_assumptions(
+        capex_million, fixed_opex_million, asset_life_years,
+        discount_rate_pct, degradation_pct,
+        replacement_year, replacement_cost_million,
+    )
+    scenarios = _market_investment_scenarios(assumptions)
+    payload = {
+        "schema_version": "1.0",
+        "stage": "10_market_backed_investment",
+        "reference_case": {
+            "portfolio": "100 MW mixed 50/50",
+            "design_gate": "90% firming / 90% of days",
+            "battery": "25 MW / 200 MWh",
+        },
+        "assumptions": {
+            "capex_gbp": float(assumptions.total_capex_gbp),
+            "fixed_opex_gbp_per_year": float(assumptions.fixed_opex_gbp_per_year),
+            "asset_life_years": int(assumptions.asset_life_years),
+            "discount_rate_pct": 100.0 * float(assumptions.discount_rate),
+            "annual_revenue_degradation_pct": 100.0 * float(assumptions.annual_revenue_degradation_fraction),
+            "replacement_year": assumptions.replacement_year,
+            "replacement_cost_gbp": float(assumptions.replacement_cost_gbp),
+            "embedded_historical_throughput_cost_gbp_per_mwh": 2.0,
+        },
+        "deterministic_scenarios": scenarios,
+        "monte_carlo": mc_payload,
+        "limitations": [
+            "APX Market Index is a public short-term wholesale reference, not licensed day-ahead auction revenue",
+            "Quick Reserve is deterministic Apr-Jun price-taker upside only and is excluded from Monte Carlo",
+            "asset-specific QR bid acceptance remains unidentified",
+            "pre-feasibility screening, not bankable valuation",
+        ],
+    }
+    return dcc.send_string(
+        json.dumps(payload, indent=2), "market_backed_investment_summary.json"
+    )
+
+
+@app.callback(
     Output("downside-risk-note", "children"),
     Output("downside-risk-kpi-grid", "children"),
     Output("downside-risk-chart", "figure"),
