@@ -11,8 +11,12 @@ import pandas as pd
 
 
 def sha256_file(path: str | Path) -> str:
+    source = Path(path)
+    if source.suffix.lower() in {".csv", ".json", ".txt"}:
+        text = source.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
     digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
+    with source.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
