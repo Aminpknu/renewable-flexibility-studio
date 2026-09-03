@@ -26,6 +26,7 @@ from adapters.spatial_demand import load_latest_spatial_demand, select_zone_dema
 from adapters.market_forecast_bundle import assess_market_forecast_bundle, validate_market_forecast_bundle
 from engine.battery import BatteryConfig, simulate_reactive_firming
 from engine.asset_workspace import AssetConfig, delete_asset, get_asset, normalise_asset_store, upsert_asset
+from engine.degradation import DegradationConfig, annual_degradation_screen
 from engine.design_sizing import select_stable_design
 from engine.frontier import build_risk_value_frontier
 from engine.forecast_handoff import assess_forecast_freshness, select_forecast_bundle, validate_national_forecast
@@ -2160,6 +2161,7 @@ app.layout = html.Div(
     [
         dcc.Store(id="scenario-store"),
         dcc.Store(id="asset-store", storage_type="local"),
+        dcc.Store(id="degradation-store"),
         dcc.Download(id="scenario-download"),
         html.Header(
             [
@@ -2218,6 +2220,20 @@ app.layout = html.Div(
                     ], className="asset-actions"),
                     html.Div(id="asset-summary", className="asset-summary"),
                 ], className="download-section asset-workspace"),
+                html.Section([
+                    html.Div("STAGE 19 · DEGRADATION & SOH", className="eyebrow dark-eyebrow"),
+                    html.H2("Battery health and marginal cycling cost"),
+                    html.P("Convert state of health, cycle-life and replacement-cost assumptions into usable energy, equivalent cycles and a marginal wear cost that can be carried into dispatch decisions.", className="section-copy"),
+                    html.Div([
+                        html.Div([html.Label("Cycle life at reference DoD"), dcc.Input(id="deg-cycle-life", type="number", min=100, value=6000)]),
+                        html.Div([html.Label("Reference depth of discharge (%)"), dcc.Input(id="deg-dod", type="number", min=1, max=100, value=80)]),
+                        html.Div([html.Label("Calendar fade (%/year)"), dcc.Input(id="deg-calendar", type="number", min=0, step=.1, value=1.5)]),
+                        html.Div([html.Label("Replacement cost (£/kWh)"), dcc.Input(id="deg-replacement", type="number", min=0, step=5, value=100)]),
+                        html.Div([html.Label("Expected total throughput (MWh/day)"), dcc.Input(id="deg-daily-throughput", type="number", min=0, step=1, value=100)]),
+                    ], className="health-grid"),
+                    html.Div(id="degradation-summary", className="health-summary"),
+                    html.P("Screening model only: no cell-temperature, C-rate, chemistry-specific rainflow or warranty curve is inferred unless supplied explicitly.", className="control-help"),
+                ], className="download-section degradation-section"),
                 html.Section(
                     [
                         html.Div(
@@ -2997,6 +3013,36 @@ app.layout = html.Div(
     className="app-shell",
 )
 
+
+@app.callback(
+    Output("degradation-summary", "children"), Output("degradation-store", "data"),
+    Input("asset-select", "value"), Input("asset-store", "data"),
+    Input("deg-cycle-life", "value"), Input("deg-dod", "value"),
+    Input("deg-calendar", "value"), Input("deg-replacement", "value"),
+    Input("deg-daily-throughput", "value"),
+)
+def update_degradation_screen(selected, asset_data, cycle_life, dod, calendar, replacement, daily_throughput):
+    asset = get_asset(asset_data, selected)
+    nominal_energy = asset.nameplate_energy_mwh if asset else 200.0
+    soh = asset.state_of_health_fraction if asset else 1.0
+    cfg = DegradationConfig(
+        nominal_energy_mwh=nominal_energy, state_of_health_fraction=soh,
+        cycle_life=float(cycle_life), reference_depth_of_discharge_fraction=float(dod)/100.0,
+        calendar_fade_fraction_per_year=float(calendar)/100.0,
+        replacement_cost_gbp_per_kwh=float(replacement),
+    )
+    result = annual_degradation_screen(float(daily_throughput), cfg)
+    cards = [
+        ("Usable energy", f"{cfg.usable_energy_mwh:,.1f} MWh", "Nameplate × current SOH"),
+        ("Marginal wear cost", f"£{cfg.marginal_wear_cost_gbp_per_mwh_throughput:,.2f}/MWh", "Charge + discharge throughput basis"),
+        ("Annual equivalent cycles", f"{result['equivalent_full_cycles']:,.0f}", "From expected total throughput"),
+        ("Indicative end-year SOH", f"{100*result['end_state_of_health_fraction']:.1f}%", "Cycle + calendar screening fade"),
+        ("Annual wear allocation", f"£{result['estimated_wear_cost_gbp']:,.0f}", "Replacement-cost amortisation"),
+    ]
+    children = html.Div([html.Div([html.Div(label, className="kpi-label"), html.Div(value, className="kpi-value"), html.Div(help_text, className="kpi-help")], className="kpi-card") for label, value, help_text in cards], className="health-kpi-grid")
+    payload = dict(result)
+    payload.update({"nominal_energy_mwh": nominal_energy, "usable_energy_mwh": cfg.usable_energy_mwh, "state_of_health_fraction": soh, "cycle_life": float(cycle_life), "reference_dod_fraction": float(dod)/100.0, "replacement_cost_gbp_per_kwh": float(replacement)})
+    return children, payload
 
 @app.callback(
     Output("asset-store", "data"), Output("asset-select", "value"),

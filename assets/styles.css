@@ -169,3 +169,26 @@ footer { text-align: center; padding: 24px 20px 40px; color: var(--muted); font-
   .asset-grid { grid-template-columns: 1fr; }
   .asset-actions button { width: 100%; }
 }
+
+/* Stage 19 degradation / SOH */
+.degradation-section { border-top: 3px solid #6d5b18; }
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
+  gap: 10px 12px;
+  margin-top: 8px;
+}
+.health-grid label { margin-top: 7px; }
+.health-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.health-summary .kpi-card { background: #fffdf5; }
+@media (max-width: 1000px) {
+  .health-grid, .health-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .health-grid, .health-kpi-grid { grid-template-columns: 1fr; }
+}
