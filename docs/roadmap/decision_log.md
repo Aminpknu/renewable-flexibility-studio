@@ -154,3 +154,16 @@ Reason: 350 Local Authorities map to ten zones and GSP Groups; Apr-Jun profile v
 Validation: full repository suite passes 150 tests; selected-zone UI, underlying-demand identity and NDF net-load reconciliation are tested
 Known limitations: modelled system-zone allocation rather than measured city demand; Local Authority centroids approximate zone/GSP assignment; annual DESNZ weights are 2024; no distribution feeder constraints or independently observed ten-zone half-hour demand targets
 Next allowed stage: reusable NESO multi-service framework, then project-finance screening
+
+## Stage 11 — NESO multi-service stacking
+
+Stage: Stage 11 multi-service availability stacking
+Decision: EVIDENCE READY
+Decision date: 2026-09-03
+Branch: feature/stage11-multiservice
+Primary evidence: NESO EAC Results Summary for QR, SR, Dynamic Response and BR; 90-date Apr-Jun 2026 shared-BESS backtest
+Acceptance result: PASS for perfect-information price-taker availability screening
+Reason: one generic MILP shares the same MW/SOC across firming, wholesale and 12 EAC products; 4-hour Response blocks and PSR linked windows are preserved; BR is gated by BM eligibility; no-double-selling is conservative
+Default evidence: £3.38m/yr QR+SR, £4.80m/yr full non-BM, £4.82m/yr BM-eligible; Dynamic Regulation ~£2.41m/yr non-BM availability value; 36.7% vs 30.1% error reduction for QR+SR vs full non-BM
+Known limitations: realised clearing prices, price-taker acceptance, utilisation/performance penalties excluded, complete Response windows only within daily SOC-reset horizon, screening energy guards are not full service-term models
+Next allowed stage: project-finance screening, then issue-time multi-service/acceptance modelling

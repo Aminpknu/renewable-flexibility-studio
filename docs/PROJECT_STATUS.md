@@ -38,6 +38,7 @@
 - full three-use co-optimisation: renewable firming + wholesale arbitrage + Quick Reserve availability sharing one battery MW/SOC budget;
 - prior-date Quick Reserve price forecast and pre-delivery PQR/NQR capacity-allocation signal, with 90-day value-capture benchmark and EAC Sell Orders acceptance diagnostic;
 - Stage 10 market-backed investment appraisal: 420-day forecast-selected/reserve-aware wholesale lifecycle NPV/BCR/payback/switching values, aligned QR upside sensitivity and block-resampled market-backed P10/P50/P90/CVaR;
+- Stage 11 reusable NESO multi-service framework: QR/SR/Dynamic Response plus optional BM-only Balancing Reserve sharing one BESS MW/SOC budget, with actual EAC delivery blocks, PSR linked-window constraints and a 90-day availability-value benchmark;
 - one-page Dash interface and CSV export;
 - public GitHub repository with GitHub Actions configuration;
 - automated test suite covering physical, uncertainty, tomorrow-planning and settlement logic;
@@ -50,11 +51,11 @@ Forecasting V2 is packaged separately on branch `feature/v2-spatial-production`,
 
 ## Next analytical stages
 
-1. Generalise ancillary-service stacking into a reusable NESO service framework, then add representative Slow Reserve, Dynamic Response and Balancing Reserve/BM cases while sharing the same BESS MW/SOC budget.
-2. Add a project-finance screening layer: project/equity IRR, debt schedule, DSCR/LLCR, transparent tax/capital-allowance assumptions and downside simulation.
-3. Build an explicit structured QR bid/acceptance model from EAC Sell Orders/Results by Unit; the current price/capacity signal is issue-time-correct but intentionally not acceptance-adjusted.
-4. Add date-range, seasonal and weather-regime comparison and quantify sizing/reserve sensitivity by wind/solar mix and spatial zone.
-5. Upgrade the operational directional residual range to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty and automate renewable/spatial-bundle handoff.
+1. Add a project-finance screening layer: project/equity IRR, debt schedule, DSCR/LLCR, transparent tax/capital-allowance assumptions and downside simulation.
+2. Build issue-time multi-service price/capacity signals and explicit bid/acceptance models; Stage 11 currently remains perfect-information/price-taker availability screening.
+3. Add date-range, seasonal and weather-regime comparison and quantify sizing/reserve sensitivity by wind/solar mix and spatial zone.
+4. Upgrade the operational directional residual range to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty.
+5. Automate renewable/spatial-bundle handoff and cross-bundle freshness/fallback behaviour.
 
 ## Learning fixture
 

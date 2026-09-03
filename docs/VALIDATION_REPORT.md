@@ -187,3 +187,11 @@ The spatial-demand packet maps all 350 DESNZ 2024 Local Authorities to the ten V
 The historical GSP within-day shape is fitted only through March 2026 for the validation check. Across 1,267 Apr-Jun 2026 GSP-days, mean absolute profile error is **0.268 percentage points of daily energy**, versus **0.415** for a flat-period profile, a **35.4% improvement**.
 
 For the 3 September 2026 forecast, the complete pre-delivery NESO National Demand Forecast used by the spatial bundle was published by 11:48 UTC on 2 September. The ten underlying-demand allocations sum to `NDF + embedded wind + embedded solar` in every settlement period; after subtracting the identical ten-zone embedded-renewable allocation, zone net load sums back to NESO National Demand to numerical precision. These results validate reconciliation and profile construction, not municipal-city metering accuracy.
+
+## Stage 11 NESO multi-service validation
+
+The common EAC archive contains **29,514** Apr-Jun 2026 result rows across 12 current products and six service families. Unit tests verify shared-nameplate no-double-selling, BM gating for Balancing Reserve, intact 4-hour Dynamic Response commitments, current PSR linked-window equality, archive checksum and terminal-SOC/physical constraints.
+
+For the default 100 MW 50/50 portfolio and 25 MW / 200 MWh battery, the 90-day screen annualises to **£3.38m/yr** for QR + Slow Reserve, **£4.80m/yr** for the full non-BM service set and **£4.82m/yr** for an explicit BM-eligible scenario. Dynamic Regulation contributes about **£2.41m/yr** of availability value in the non-BM screen. Mean renewable forecast-error reduction changes from **36.7%** (QR+SR) to **30.1%** (full non-BM), demonstrating the opportunity cost of allocating shared flexibility to ancillary services.
+
+Acceptance boundary: these are realised-clearing-price, price-taker **availability-only** upper-bound screens. Utilisation payments/energy, performance penalties and asset-specific bid acceptance are not included.

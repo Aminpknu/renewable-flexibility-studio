@@ -46,3 +46,6 @@ data/repd_*.csv
 
 # Build-only raw spatial-demand source archives.
 data/build_sources/
+!outputs/multiservice/
+!outputs/multiservice/*.json
+!outputs/multiservice/*.csv

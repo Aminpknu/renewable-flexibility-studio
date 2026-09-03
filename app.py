@@ -19,6 +19,7 @@ from adapters.imbalance_settlement import load_system_price_history, select_syst
 from adapters.latest_forecast import latest_target_date, load_latest_forecast
 from adapters.market_reference import load_market_index_history, select_market_index_prices
 from adapters.quick_reserve import load_quick_reserve_history
+from adapters.neso_services import load_eac_service_history
 from adapters.spatial_forecast import build_spatial_virtual_forecast, load_latest_spatial_forecast
 from adapters.spatial_demand import load_latest_spatial_demand, select_zone_demand
 from adapters.market_forecast_bundle import assess_market_forecast_bundle, validate_market_forecast_bundle
@@ -57,6 +58,7 @@ from engine.quick_reserve import (
     QuickReserveStackingConfig, optimise_arbitrage_and_quick_reserve,
     optimise_firming_arbitrage_and_quick_reserve,
 )
+from engine.multiservice import MultiServiceConfig, optimise_firming_arbitrage_and_services
 from engine.sizing import find_minimum_battery
 from engine.stress import run_value_stress_scenarios
 from engine.uncertainty import (
@@ -80,6 +82,8 @@ SYSTEM_PRICES_PATH = ROOT / "data" / "elexon_system_prices.csv"
 MARKET_INDEX_PATH = ROOT / "data" / "elexon_market_index_prices.csv"
 MARKET_BACKTEST_PATH = ROOT / "outputs" / "market_optimisation" / "default_mixed_summary.json"
 QUICK_RESERVE_PATH = ROOT / "data" / "neso_quick_reserve_prices.csv"
+MULTISERVICE_PATH = ROOT / "data" / "neso_multiservice_prices.csv"
+MULTISERVICE_SUMMARY_PATH = ROOT / "outputs" / "multiservice" / "multiservice_summary.json"
 QUICK_RESERVE_SUMMARY_PATH = ROOT / "outputs" / "quick_reserve" / "quick_reserve_summary.json"
 QUICK_RESERVE_PREDELIVERY_SUMMARY_PATH = ROOT / "outputs" / "quick_reserve" / "quick_reserve_predelivery_summary.json"
 QUICK_RESERVE_PREDELIVERY_DAILY_PATH = ROOT / "outputs" / "quick_reserve" / "quick_reserve_predelivery_daily.csv"
@@ -98,6 +102,8 @@ HISTORICAL_DATA = load_historical_predictions(DATA_PATH)
 SYSTEM_PRICES = load_system_price_history(SYSTEM_PRICES_PATH)
 MARKET_INDEX_PRICES = load_market_index_history(MARKET_INDEX_PATH)
 QUICK_RESERVE = load_quick_reserve_history(str(QUICK_RESERVE_PATH))
+MULTISERVICE = load_eac_service_history(MULTISERVICE_PATH)
+MULTISERVICE_SUMMARY = json.loads(MULTISERVICE_SUMMARY_PATH.read_text(encoding="utf-8"))
 LATEST_FORECAST = load_latest_forecast(LATEST_FORECAST_PATH)
 LATEST_SPATIAL_FORECAST = load_latest_spatial_forecast(LATEST_SPATIAL_FORECAST_PATH)
 LATEST_SPATIAL_DEMAND = load_latest_spatial_demand(LATEST_SPATIAL_DEMAND_PATH)
@@ -1216,6 +1222,62 @@ def _quick_reserve_day_analysis(
         "stacked_frame": stacked_frame, "triple": triple,
         "triple_frame": triple_frame,
     }
+
+
+def _multiservice_day_analysis(
+    date_value: str, portfolio_type: str, capacity_mw: float, wind_share_pct: float,
+    design_target_pct: float, design_reliability_pct: float, throughput_cost: float,
+    assume_bm_eligible: bool,
+):
+    target = pd.Timestamp(date_value).normalize()
+    if target < pd.Timestamp("2026-04-01") or target > pd.Timestamp("2026-06-30"):
+        raise ValueError("Stage 11 multi-service evidence is currently frozen to Apr-Jun 2026.")
+    source = select_date(HISTORICAL_DATA, date_value)
+    portfolio = build_virtual_portfolio(
+        source, portfolio_type, float(capacity_mw), wind_share=float(wind_share_pct) / 100.0
+    )
+    system = select_system_prices(SYSTEM_PRICES, date_value)
+    market = select_market_index_prices(MARKET_INDEX_PRICES, date_value)
+    grid = scaled_design_grid(DESIGN_GRID, portfolio_type, float(capacity_mw), float(wind_share_pct))
+    selected = select_stable_design(grid, design_target_pct, design_reliability_pct)
+    if selected is None:
+        raise ValueError("No stable future design exists for the selected design gate.")
+    battery = BatteryConfig(
+        power_mw=float(selected["power_mw"]), duration_hours=float(selected["duration_hours"]),
+        round_trip_efficiency=0.90, initial_soc_fraction=0.50,
+    )
+    frame, summary = optimise_firming_arbitrage_and_services(
+        portfolio, system, market, MULTISERVICE, battery,
+        MultiServiceConfig(
+            throughput_cost_gbp_per_mwh=float(throughput_cost),
+            assume_bm_eligible=bool(assume_bm_eligible),
+        ),
+    )
+    return frame, summary, selected, battery
+
+
+def _multiservice_figure(frame: pd.DataFrame, summary: dict[str, Any], assume_bm: bool) -> go.Figure:
+    figure = make_subplots(rows=3, cols=1, shared_xaxes=False, vertical_spacing=0.11, row_heights=[0.42, 0.30, 0.28])
+    family_columns = [
+        ("Quick Reserve", "quick_reserve_contracted_mw"),
+        ("Slow Reserve", "slow_reserve_contracted_mw"),
+        ("Dynamic Containment", "dynamic_containment_contracted_mw"),
+        ("Dynamic Moderation", "dynamic_moderation_contracted_mw"),
+        ("Dynamic Regulation", "dynamic_regulation_contracted_mw"),
+        ("Balancing Reserve", "balancing_reserve_contracted_mw"),
+    ]
+    for label, column in family_columns:
+        if column in frame.columns and float(frame[column].abs().max()) > 1e-9:
+            figure.add_trace(go.Scatter(x=frame["valid_time_utc"], y=frame[column], mode="lines", name=label), row=1, col=1)
+    figure.add_trace(go.Scatter(x=frame["valid_time_utc"], y=frame["multiservice_soc_end_mwh"], mode="lines", name="SOC (MWh)"), row=2, col=1)
+    annual_key = "bm_multiservice" if assume_bm else "non_bm_multiservice"
+    annual = MULTISERVICE_SUMMARY["scenarios"][annual_key]["family_annualised_availability_gbp"]
+    figure.add_trace(go.Bar(x=list(annual), y=[v / 1e6 for v in annual.values()], name="90-day annualised availability"), row=3, col=1)
+    figure.update_yaxes(title_text="Contracted MW", row=1, col=1)
+    figure.update_yaxes(title_text="SOC (MWh)", row=2, col=1)
+    figure.update_yaxes(title_text="£m/yr", row=3, col=1)
+    figure.update_layout(height=760, margin=dict(l=60, r=20, t=55, b=65), legend={"orientation":"h", "y":1.02, "yanchor":"bottom", "x":0})
+    return figure
 
 
 def _quick_reserve_figure(analysis: dict[str, Any]) -> go.Figure:
@@ -2348,6 +2410,30 @@ app.layout = html.Div(
                             config={"displaylogo": False},
                         ),
                         html.Hr(),
+                        html.H3("NESO multi-service stacking (Stage 11)"),
+                        html.P(
+                            "This view extends the shared-BESS optimiser to current EAC Quick Reserve, Slow Reserve, Dynamic Containment/Moderation/Regulation and, when explicitly enabled, BM-only Balancing Reserve. The same MW and SOC cannot be sold independently to simultaneous services.",
+                            className="section-copy",
+                        ),
+                        dcc.Checklist(
+                            id="multiservice-bm-input",
+                            options=[{"label": "Assume BM-registered BESS (enable Balancing Reserve)", "value": "bm"}],
+                            value=[],
+                        ),
+                        html.Button("Run multi-service stacking", id="multiservice-button", n_clicks=0, className="primary-button"),
+                        html.Div(id="multiservice-note", className="scenario-note"),
+                        html.Div(id="multiservice-kpi-grid", className="kpi-grid"),
+                        html.Div("Selected-day service commitments and 90-day availability-value mix", className="chart-title"),
+                        html.Div(
+                            "Dynamic Response is retained as real 4-hour EFA contracts; PSR linked windows use identical MW. Values are perfect-information, price-taker availability screening only: utilisation, penalties and asset-specific auction acceptance are excluded.",
+                            className="chart-subtitle",
+                        ),
+                        dcc.Graph(
+                            id="multiservice-chart",
+                            figure=_empty_figure("Stage 11 evidence is available for Apr-Jun 2026 historical dates."),
+                            config={"displaylogo": False},
+                        ),
+                        html.Hr(),
                         html.H3(f"Forecast-day market schedule · {LATEST_TARGET_DATE}"),
                         html.P(
                             "This view combines the latest renewable forecast, the Stage B reserve corridor and a prior-data-only APX Market Index price forecast. It shows how much wholesale scheduling value is given up to preserve battery energy/headroom for renewable uncertainty.",
@@ -3297,6 +3383,65 @@ def run_quick_reserve_stacking(
             className="scenario-note-line",
         ))
     return html.Div(note_lines), cards, _quick_reserve_figure(analysis)
+
+
+@app.callback(
+    Output("multiservice-note", "children"),
+    Output("multiservice-kpi-grid", "children"),
+    Output("multiservice-chart", "figure"),
+    Input("multiservice-button", "n_clicks"),
+    State("date-input", "value"),
+    State("portfolio-input", "value"),
+    State("capacity-input", "value"),
+    State("wind-share-input", "value"),
+    State("design-target-input", "value"),
+    State("design-reliability-input", "value"),
+    State("market-throughput-cost-input", "value"),
+    State("multiservice-bm-input", "value"),
+)
+def run_multiservice_stacking(
+    _clicks, date_value, portfolio_type, capacity_mw, wind_share_pct,
+    design_target_pct, design_reliability_pct, throughput_cost, bm_values,
+):
+    assume_bm = "bm" in (bm_values or [])
+    try:
+        frame, summary, selected, _battery = _multiservice_day_analysis(
+            date_value, portfolio_type, capacity_mw, wind_share_pct,
+            design_target_pct, design_reliability_pct, throughput_cost, assume_bm,
+        )
+    except (TypeError, ValueError, KeyError, RuntimeError, AssertionError) as error:
+        message = f"Multi-service stacking could not be calculated: {error}"
+        return message, [], _empty_figure(message)
+    annual_key = "bm_multiservice" if assume_bm else "non_bm_multiservice"
+    annual = MULTISERVICE_SUMMARY["scenarios"][annual_key]
+    qr_sr = MULTISERVICE_SUMMARY["scenarios"]["qr_sr"]
+    dr_value = annual["family_annualised_availability_gbp"].get("Dynamic Regulation", 0.0)
+    cards = [
+        _kpi_card("Selected design", f"{selected['power_mw']:.0f} MW / {selected['energy_mwh']:.0f} MWh", "Shared across firming, wholesale and ancillary services"),
+        _kpi_card("Selected-day stacked value", f"£{summary['net_stacked_value_gbp']:,.0f}", "Perfect-information screening value"),
+        _kpi_card("Selected-day ancillary", f"£{summary['ancillary_availability_payment_gbp']:,.0f}", "Availability clearing-price value only"),
+        _kpi_card("Renewable error reduction", f"{summary['error_reduction_pct']:.1f}%", "Firming retained after competing market uses"),
+        _kpi_card("QR + Slow Reserve", f"£{qr_sr['annualised_net_value_gbp']/1e6:.2f}m/yr", "Frozen 90-day default reference"),
+        _kpi_card("Full multi-service stack", f"£{annual['annualised_net_value_gbp']/1e6:.2f}m/yr", "BM-eligible" if assume_bm else "Non-BM reference"),
+        _kpi_card("Ancillary availability", f"£{annual['annualised_ancillary_availability_gbp']/1e6:.2f}m/yr", "90-day annualised default reference"),
+        _kpi_card("Dynamic Regulation", f"£{dr_value/1e6:.2f}m/yr", "Largest current availability-value contributor in the default screen"),
+    ]
+    mode = "BM-eligible" if assume_bm else "non-BM"
+    note = html.Div([
+        html.Div(
+            f"{mode} Stage 11 scenario. Balancing Reserve is {'enabled' if assume_bm else 'excluded'}; all enabled services share one physical battery MW/SOC budget.",
+            className="scenario-note-line",
+        ),
+        html.Div(
+            "The frozen Apr-Jun 2026 reference is a realised-clearing-price, price-taker upper-bound screen. It does not model utilisation instructions/payments, performance penalties or asset-specific auction acceptance.",
+            className="scenario-note-line uncertainty-warning",
+        ),
+        html.Div(
+            "Dynamic Response remains a 4-hour EFA commitment, Positive Slow Reserve linked windows enforce identical MW, and this release conservatively prevents the same MW being sold to multiple simultaneous ancillary products.",
+            className="scenario-note-line uncertainty-line",
+        ),
+    ])
+    return note, cards, _multiservice_figure(frame, summary, assume_bm)
 
 
 @app.callback(

@@ -206,6 +206,15 @@ The market-backed BCR is present value of market operating value divided by pres
 
 The market-backed Monte Carlo resamples contiguous blocks of realised daily forecast-selected market value, preserving short-run market-regime dependence, and varies CAPEX, fixed OPEX, availability and degradation. It reports P10/P50/P90 NPV, probability of negative NPV, VaR and CVaR using `investment loss = -NPV`. Quick Reserve is excluded from the probabilistic base until asset-specific auction acceptance is identified. The aligned Apr?Jun QR case is deterministic upside screening only.
 
-## 15. Current exclusions
+
+## 15. NESO multi-service availability stacking
+
+Stage 11 represents each EAC ancillary product as one contract variable over its actual delivery window. Firming, wholesale arbitrage and every enabled ancillary product compete for one BESS power/SOC trajectory. Upward products consume discharge headroom; downward products consume charge headroom. A conservative nameplate rule additionally requires the sum of simultaneous ancillary commitments to remain within BESS MW, so the same physical MW is not counted twice.
+
+Quick Reserve and Slow Reserve use 30-minute EAC windows; Dynamic Containment, Dynamic Moderation and Dynamic Regulation retain their 4-hour EFA delivery blocks. Positive Slow Reserve applies identical contracted MW across the current linked morning (06:00-10:30 local), midday (10:30-15:00) and evening (15:00-21:00) transition windows. Balancing Reserve is available only when the scenario explicitly assumes BM-unit eligibility.
+
+Each product also carries a transparent screening energy-headroom duration used to prevent physically impossible reserve sales. These durations are conservative modelling guards, not substitutes for the complete service terms. Stage 11 values availability at observed EAC clearing prices and excludes utilisation energy/payments, performance penalties and asset-specific auction acceptance. Therefore the 90-day evidence is an ex-post price-taker upper-bound screen, not a deployable revenue forecast.
+
+## 16. Current exclusions
 
 The current release excludes a licensed contracted/day-ahead auction price benchmark, detailed cell-level degradation, site-specific grid-connection/network constraints, weather-ensemble probabilistic forecasts and independently validated city-level generation/error targets. The historical firming evidence remains national forecast-error behaviour scaled to a virtual portfolio. Spatial-zone outputs are reconciled allocation proxies, not individual-asset forecasts.
