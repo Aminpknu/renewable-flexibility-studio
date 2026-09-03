@@ -40,3 +40,36 @@ This is an extrapolation of empirical exposure, not a forecast of future market 
 ## Packet boundary
 
 Packet 1 contains no monetary consequence value, CAPEX, OPEX, NPV, BCR, payback, Monte Carlo, VaR or CVaR. Those belong to later Stage 6 packets after the physical-risk equations and tests are accepted.
+## Stage 6A Packet 2: value appraisal
+
+Packet 2 monetises **avoided physical exposure** using a visible user/scenario consequence value in £/MWh. This value is not presented as an observed market price or trading revenue.
+
+```text
+annual baseline risk cost = annual baseline exposure * consequence value
+annual residual risk cost = annual residual exposure * consequence value
+annual risk reduction = baseline risk cost - residual risk cost
+```
+
+Lifecycle appraisal then combines risk-reduction benefit with upfront CAPEX, fixed OPEX, variable OPEX, asset life, discount rate and a simple annual degradation assumption.
+
+```text
+NPV = -CAPEX + sum((benefit_t - OPEX_t) / (1+r)^t)
+BCR = PV(benefits) / (CAPEX + PV(OPEX))
+```
+
+Simple payback is the first year in which cumulative undiscounted net benefit recovers CAPEX. If that point is not reached within the assumed asset life, payback is reported as unavailable.
+### Switching values
+
+The engine reports decision thresholds rather than only one NPV:
+
+- break-even consequence value (£/MWh) for NPV = 0;
+- maximum upfront CAPEX consistent with NPV = 0;
+- minimum year-one annual avoided exposure required for NPV = 0.
+
+These are calculated from the same discounted cash-flow assumptions, not by a separate heuristic.
+
+### Sensitivity
+
+A reusable sensitivity table varies consequence value and CAPEX while holding the remaining assumptions constant. NPV must rise monotonically with consequence value and fall with CAPEX; this behaviour is unit tested.
+
+Detailed tax, debt/equity financing, ancillary-service revenue stacking, site-specific grid connection costs and market trading P&L remain out of scope. Monte Carlo, P10/P50/P90 NPV and CVaR remain Stage 6B.
