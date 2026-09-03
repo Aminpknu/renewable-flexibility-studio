@@ -289,6 +289,16 @@ def optimise_wholesale_arbitrage(
     upper = np.full(variable_count, np.inf, dtype=float)
     upper[charge_offset:charge_offset + n] = battery.power_mw
     upper[discharge_offset:discharge_offset + n] = battery.power_mw
+    if "max_charge_mw" in frame.columns:
+        max_charge = pd.to_numeric(frame["max_charge_mw"], errors="raise").to_numpy(float)
+        if not np.isfinite(max_charge).all() or (max_charge < 0).any():
+            raise ValueError("Per-period maximum charge power must be finite and non-negative.")
+        upper[charge_offset:charge_offset + n] = np.minimum(max_charge, battery.power_mw)
+    if "max_discharge_mw" in frame.columns:
+        max_discharge = pd.to_numeric(frame["max_discharge_mw"], errors="raise").to_numpy(float)
+        if not np.isfinite(max_discharge).all() or (max_discharge < 0).any():
+            raise ValueError("Per-period maximum discharge power must be finite and non-negative.")
+        upper[discharge_offset:discharge_offset + n] = np.minimum(max_discharge, battery.power_mw)
     lower[soc_offset:soc_offset + n] = battery.minimum_soc_mwh
     upper[soc_offset:soc_offset + n] = battery.maximum_soc_mwh
     corridor_columns = {"soc_floor_mwh", "soc_ceiling_mwh"}

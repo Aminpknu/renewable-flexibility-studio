@@ -52,7 +52,13 @@ def _prepare_day(
     ):
         if {"settlement_period", column}.difference(source.columns):
             raise ValueError(f"{label} frame is missing required columns.")
-        selected = source[["settlement_period", column]].copy()
+        extra_columns = []
+        if label == "Market Index":
+            extra_columns = [
+                candidate for candidate in ("soc_floor_mwh", "soc_ceiling_mwh")
+                if candidate in source.columns
+            ]
+        selected = source[["settlement_period", column, *extra_columns]].copy()
         if selected["settlement_period"].duplicated().any():
             raise ValueError(f"{label} frame contains duplicate settlement periods.")
         frame = frame.merge(selected, on="settlement_period", how="left", validate="one_to_one")
@@ -158,6 +164,17 @@ def optimise_firming_arbitrage_and_services(
     upper[arb_discharge_offset:arb_discharge_offset + n] = arb_power
     lower[soc_offset:soc_offset + n] = battery.minimum_soc_mwh
     upper[soc_offset:soc_offset + n] = battery.maximum_soc_mwh
+    if {"soc_floor_mwh", "soc_ceiling_mwh"}.issubset(frame.columns):
+        corridor_floor = pd.to_numeric(frame["soc_floor_mwh"], errors="raise").to_numpy(float)
+        corridor_ceiling = pd.to_numeric(frame["soc_ceiling_mwh"], errors="raise").to_numpy(float)
+        if not np.isfinite(np.column_stack([corridor_floor, corridor_ceiling])).all():
+            raise ValueError("Multi-service SOC corridor contains non-finite values.")
+        corridor_floor = np.maximum(corridor_floor, battery.minimum_soc_mwh)
+        corridor_ceiling = np.minimum(corridor_ceiling, battery.maximum_soc_mwh)
+        if (corridor_floor > corridor_ceiling + 1e-9).any():
+            raise ValueError("Multi-service SOC reserve corridor is infeasible.")
+        lower[soc_offset:soc_offset + n] = corridor_floor
+        upper[soc_offset:soc_offset + n] = corridor_ceiling
     upper[mode_offset:mode_offset + n] = 1.0
     if m:
         upper[service_offset:] = np.minimum(
@@ -392,5 +409,22 @@ def optimise_firming_arbitrage_and_services(
         "ending_soc_pct": float(100.0 * soc_end[-1] / battery.energy_capacity_mwh),
         "assumption": "price-taker acceptance at observed EAC clearing prices; realised prices/error; conservative no-double-selling across simultaneous services",
         "solver_status": str(solution.message),
+        "service_contracts": (
+            [
+                {
+                    "product": str(row.product),
+                    "family": str(row.family),
+                    "direction": str(row.direction),
+                    "delivery_start_utc": row.delivery_start_utc.isoformat(),
+                    "delivery_end_utc": row.delivery_end_utc.isoformat(),
+                    "window_hours": float(row.window_hours),
+                    "contracted_mw": float(row.contracted_mw),
+                    "clearing_price_gbp_per_mw_per_hour": float(row.clearing_price_gbp_per_mw_per_hour),
+                    "energy_guard_hours": float(row.energy_guard_hours),
+                    "bm_required": bool(row.bm_required),
+                }
+                for row in svc.loc[svc["contracted_mw"].gt(1e-7)].itertuples(index=False)
+            ] if m else []
+        ),
     }
     return frame, summary

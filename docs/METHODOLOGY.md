@@ -202,9 +202,9 @@ For annual operating value `V_1`, revenue degradation `g`, fixed annual OPEX `O`
 NPV = -C_0 + sum[y=1..N] ((V_1 (1-g)^(y-1) - O - R_y) / (1+r)^y)
 ```
 
-The market-backed BCR is present value of market operating value divided by present value of CAPEX + fixed OPEX + replacement. The switching values are the maximum CAPEX compatible with zero NPV and the minimum year-one annual operating value required for zero NPV. Historical dispatch margins already include the frozen ?2/MWh throughput-cost assumption, so that cost is not applied again.
+The market-backed BCR is present value of market operating value divided by present value of CAPEX + fixed OPEX + replacement. The switching values are the maximum CAPEX compatible with zero NPV and the minimum year-one annual operating value required for zero NPV. Historical dispatch margins already include the frozen £2/MWh throughput-cost assumption, so that cost is not applied again.
 
-The market-backed Monte Carlo resamples contiguous blocks of realised daily forecast-selected market value, preserving short-run market-regime dependence, and varies CAPEX, fixed OPEX, availability and degradation. It reports P10/P50/P90 NPV, probability of negative NPV, VaR and CVaR using `investment loss = -NPV`. Quick Reserve is excluded from the probabilistic base until asset-specific auction acceptance is identified. The aligned Apr?Jun QR case is deterministic upside screening only.
+The market-backed Monte Carlo resamples contiguous blocks of realised daily forecast-selected market value, preserving short-run market-regime dependence, and varies CAPEX, fixed OPEX, availability and degradation. It reports P10/P50/P90 NPV, probability of negative NPV, VaR and CVaR using `investment loss = -NPV`. Ancillary-service value remains outside the probabilistic base. Stage 13 now supplies a separate deterministic issue-time/expected-acceptance screen, while the older aligned Apr-Jun QR and Stage 11 cases remain upper-bound comparisons.
 
 
 ## 15. NESO multi-service availability stacking
@@ -215,16 +215,24 @@ Quick Reserve and Slow Reserve use 30-minute EAC windows; Dynamic Containment, D
 
 Each product also carries a transparent screening energy-headroom duration used to prevent physically impossible reserve sales. These durations are conservative modelling guards, not substitutes for the complete service terms. Stage 11 values availability at observed EAC clearing prices and excludes utilisation energy/payments, performance penalties and asset-specific auction acceptance. Therefore the 90-day evidence is an ex-post price-taker upper-bound screen, not a deployable revenue forecast.
 
-## 16. Project-finance screening
+## 16. Issue-time multi-service and acceptance calibration
 
-Stage 12 uses the Stage 10 year-one operating value as the finance-base revenue input. A constant-annuity debt schedule is built from total CAPEX, debt share, debt interest rate and tenor. Equity funds the remaining upfront CAPEX. Annual operating value degrades by the entered rate; fixed OPEX and optional replacement cost are then applied.
+Stage 13 replaces observed ancillary clearing prices in the **decision** with product-specific prior-date forecasts. The forecast features use calendar position, same-product/window lagged clearing prices and cleared volumes, and never use target-date clearing results. Capacity selection shares the Stage B SOC reserve corridor and the forecast wholesale schedule. For capacity selection, each product's forecast clearing price is weighted by an acceptance prior estimated from earlier EAC Sell Orders; target-day system-cleared volume is replaced by the battery's own nameplate capability before optimisation.
+
+For each selected service contract, a separate forecast-wholesale optimisation estimates the value lost by reserving that MW/headroom. The resulting standalone opportunity cost divided by contracted MW-hours forms the ancillary bid floor. The bid-specific acceptance ratio is then estimated from earlier non-looped EAC parent orders using product, bid margin relative to the previous same-product/window clearing price, and quantity bin. The hierarchy prefers standalone parent-only baskets and relaxes only when the sample is sparse. Participant and unit identity fields are excluded.
+
+Historical scoring freezes the capacity and bid first. Realised APX Market Index price and realised EAC clearing price/system volume are then used only for ex-post scoring. An offer above the realised clearing price receives zero; otherwise expected accepted MW is the offered/system-volume cap multiplied by the issue-time acceptance ratio. Rejected service capacity is not retroactively reused for a new wholesale schedule. This is deliberately conservative, but it is still a **counterfactual expected-acceptance model**, not an exact reconstruction of a battery that was absent from the historical merit order.
+
+## 17. Project-finance screening
+
+Stage 12 uses the Stage 10 year-one operating value as the finance-base revenue input. Stage 13 non-BM/BM expected-acceptance values are added as deterministic intermediate scenarios, while Stage 11 remains the perfect-information upper bound. A constant-annuity debt schedule is built from total CAPEX, debt share, debt interest rate and tenor. Equity funds the remaining upfront CAPEX. Annual operating value degrades by the entered rate; fixed OPEX and optional replacement cost are then applied.
 
 For each debt year, interest is calculated on opening debt, principal is the balance of the constant debt payment, and cash available for debt service (CFADS) is EBITDA less the simplified cash-tax scenario. DSCR is `CFADS / debt service`. LLCR is the present value of loan-life CFADS discounted at the debt rate divided by initial debt. Project IRR uses unlevered project cashflows; equity IRR uses equity cashflows after debt service.
 
 Tax is intentionally a screening abstraction. The user enters corporation-tax rate, year-1 capital-allowance fraction and a straight-line period for remaining CAPEX. Interest reduces taxable income, but tax losses are not carried forward. The model does not determine legal eligibility for UK allowances and excludes VAT, group relief, refinancing, hedging, debt sculpting, reserve accounts and working capital.
 
-The probabilistic finance case resamples contiguous blocks of realised Stage 10 forecast-selected daily wholesale value and varies CAPEX, fixed OPEX, availability, degradation and debt rate. It reports project/equity NPV and IRR quantiles, DSCR-breach probability and LLCR distribution. Stage 11 multi-service values remain deterministic perfect-information upside screens and are excluded from this finance-base Monte Carlo.
+The probabilistic finance case resamples contiguous blocks of realised Stage 10 forecast-selected daily wholesale value and varies CAPEX, fixed OPEX, availability, degradation and debt rate. It reports project/equity NPV and IRR quantiles, DSCR-breach probability and LLCR distribution. Stage 13 expected-acceptance and Stage 11 perfect-information multi-service values remain deterministic comparison scenarios and are excluded from this finance-base Monte Carlo.
 
-## 17. Current exclusions
+## 18. Current exclusions
 
 The current release excludes a licensed contracted/day-ahead auction price benchmark, detailed cell-level degradation, site-specific grid-connection/network constraints, weather-ensemble probabilistic forecasts and independently validated city-level generation/error targets. The historical firming evidence remains national forecast-error behaviour scaled to a virtual portfolio. Spatial-zone outputs are reconciled allocation proxies, not individual-asset forecasts.

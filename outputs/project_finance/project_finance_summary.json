@@ -47,6 +47,34 @@
       "total_interest_gbp": 5380193.733057577,
       "total_cash_tax_gbp": 228123.32838576913
     },
+    "stage13_non_bm_calibrated": {
+      "annual_operating_value_gbp": 2223233.3562767827,
+      "project_npv_gbp": -13059723.518233709,
+      "project_irr_fraction": -0.029862100726039474,
+      "equity_npv_gbp": -11636028.084508575,
+      "equity_irr_fraction": -0.10373435134354633,
+      "debt_amount_gbp": 15000000.0,
+      "annual_debt_service_gbp": 2038019.373305756,
+      "minimum_dscr": 0.6641820255581015,
+      "llcr": 0.7491239637162738,
+      "dscr_breach_years": 10,
+      "total_interest_gbp": 5380193.733057577,
+      "total_cash_tax_gbp": 1433323.132654665
+    },
+    "stage13_bm_calibrated": {
+      "annual_operating_value_gbp": 2210841.870522426,
+      "project_npv_gbp": -13148493.151526066,
+      "project_irr_fraction": -0.030802920990384456,
+      "equity_npv_gbp": -11707721.8450593,
+      "equity_irr_fraction": -0.10543305916402793,
+      "debt_amount_gbp": 15000000.0,
+      "annual_debt_service_gbp": 2038019.373305756,
+      "minimum_dscr": 0.6591127049949683,
+      "llcr": 0.7437038980277619,
+      "dscr_breach_years": 10,
+      "total_interest_gbp": 5380193.733057577,
+      "total_cash_tax_gbp": 1420596.7285680214
+    },
     "stage11_non_bm_upside": {
       "annual_operating_value_gbp": 4801234.034043706,
       "project_npv_gbp": 3298644.6309853196,
@@ -119,13 +147,14 @@
     "tax_boundary": "screening tax only; no loss carry-forward, VAT, group relief or legal eligibility opinion"
   },
   "base_case_rule": "forecast-selected Stage 10 wholesale operating value is the finance base",
-  "stage11_rule": "Stage 11 multi-service cases are perfect-information price-taker upside screens, not finance-base revenue",
+  "stage13_rule": "Stage 13 uses issue-time price/capacity decisions and empirical expected acceptance; it is an intermediate screening case, not bankable contracted revenue",
+  "stage11_rule": "Stage 11 multi-service cases are perfect-information price-taker upper bounds, not finance-base revenue",
   "tax_boundary": "simplified screening tax and user-defined allowance schedule; no tax advice or legal eligibility opinion",
   "excluded": [
     "tax-loss carry-forward and group relief",
     "VAT and transaction taxes",
     "refinancing, hedging and sculpted debt",
     "working capital and reserve accounts",
-    "asset-specific ancillary-service bid acceptance"
+    "exact counterfactual ancillary-service auction acceptance and bankable contracted revenue"
   ]
 }

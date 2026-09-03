@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "source": "NESO EAC Sell Orders monthly archives",
+  "rights": "NESO Open Data Licence",
+  "months_used": [
+    "202604",
+    "202605"
+  ],
+  "april_only_output_rows": 947,
+  "april_only_output_sha256": "697e3986f6c0643e92217f63f967b6d3be97a1138a947b54ecbfb5c966fbdb1f",
+  "april_may_output_rows": 998,
+  "april_may_output_sha256": "aa724ebdfdd61b061f29ef5c8e6245fbdd334bb1195550ad8676507f1a085083",
+  "raw_source_sha256": {
+    "sell_202604.csv": "fd13084616addd798fa68a93ab800e38a061b6231db5d86b8e152cc92212a44c",
+    "sell_202605.csv": "1422bd7d0dceced74ab3b0c9407117ca15a938721cca8c5245355c31e379c8a3"
+  },
+  "participant_or_unit_identifiers_retained": false,
+  "purpose": "issue-time acceptance lookup for June 2026 and later screening"
+}

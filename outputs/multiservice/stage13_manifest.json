@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "stage": "13_issue_time_multiservice_acceptance_calibrated",
+  "evidence_files": {
+    "data/neso_multiservice_forecast_history_manifest.json": "fd3eac4f133c41799cd1ae70eec9c654a696c1fe3365d35ca280c0085a229267",
+    "data/neso_multiservice_acceptance_calibration_manifest.json": "ebbbe52b182c6bcb3b5386e12f20c39646200a74693d2e3299f9b0525a1c161d",
+    "outputs/multiservice/stage13_price_forecast_summary.json": "66a0287dc22f4bfc796bcf1973d1cd97f6daf18e1c2f8af1b5e3ccf992e35e98",
+    "outputs/multiservice/stage13_price_forecast_backtest.csv": "63db5f6f17a3b982d4cb4ba637765cc25a7b1c2fdbd4e76d1b054523707df7e6",
+    "outputs/multiservice/stage13_acceptance_summary.json": "ce29a837109bdd68432158ba59f8008e8e1d92d41e23b51e3b92fb5f7d3d7707",
+    "outputs/multiservice/stage13_acceptance_validation.csv": "1a7ee719de0518b6cf6e8783ac7b19999fd503a8788bceed4f2e720f47c2ccb8",
+    "outputs/multiservice/stage13_issue_time_multiservice_summary.json": "55b984ee7acb3d81c10cb76db4ec51461d060e2e37ad802fdb0584e775f97b55",
+    "outputs/multiservice/stage13_issue_time_multiservice_daily.csv": "ba0abbb5badd38e950beb2ab9a22dc9df8ab2400ce66122daeb7f4d32a63085d",
+    "outputs/multiservice/stage13_issue_time_multiservice_offers.csv": "e5e650f2db092901388a82939faf2049a263c26282c832b88fe6b703e19256bc"
+  },
+  "headline": {
+    "eligible_days": 60,
+    "excluded_calendar_dates": [
+      "2026-06-24"
+    ],
+    "non_bm_annualised_value_gbp": 2223233.3562767827,
+    "non_bm_capture_vs_stage11_pct": 47.92389655958974,
+    "price_forecast_mae": 1.6476628078451905,
+    "price_forecast_mae_improvement_pct": 13.054044617710247,
+    "acceptance_validation_orders": 514583,
+    "acceptance_brier_improvement_pct": 22.81948687669577
+  },
+  "identity_fields_retained": false,
+  "raw_sell_order_archives_committed": false
+}

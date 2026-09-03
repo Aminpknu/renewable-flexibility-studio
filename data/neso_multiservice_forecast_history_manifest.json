@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0",
+  "stage": "13_multiservice_issue_time_history",
+  "source": "NESO EAC Results Summary FY2025 archive + Stage 11 current-results archive",
+  "rights": "NESO Open Data Licence",
+  "rows": 92378,
+  "products": [
+    "DCH",
+    "DCL",
+    "DMH",
+    "DML",
+    "DRH",
+    "DRL",
+    "NBR",
+    "NQR",
+    "NSR",
+    "PBR",
+    "PQR",
+    "PSR"
+  ],
+  "coverage": {
+    "DCH": {
+      "rows": 2737,
+      "first_delivery_date": "2025-03-31",
+      "last_delivery_date": "2026-06-30"
+    },
+    "DCL": {
+      "rows": 2737,
+      "first_delivery_date": "2025-03-31",
+      "last_delivery_date": "2026-06-30"
+    },
+    "DMH": {
+      "rows": 2737,
+      "first_delivery_date": "2025-03-31",
+      "last_delivery_date": "2026-06-30"
+    },
+    "DML": {
+      "rows": 2737,
+      "first_delivery_date": "2025-03-31",
+      "last_delivery_date": "2026-06-30"
+    },
+    "DRH": {
+      "rows": 2737,
+      "first_delivery_date": "2025-03-31",
+      "last_delivery_date": "2026-06-30"
+    },
+    "DRL": {
+      "rows": 2737,
+      "first_delivery_date": "2025-03-31",
+      "last_delivery_date": "2026-06-30"
+    },
+    "NBR": {
+      "rows": 11714,
+      "first_delivery_date": "2025-10-29",
+      "last_delivery_date": "2026-07-01"
+    },
+    "NQR": {
+      "rows": 21892,
+      "first_delivery_date": "2025-03-31",
+      "last_delivery_date": "2026-07-01"
+    },
+    "NSR": {
+      "rows": 4372,
+      "first_delivery_date": "2026-03-31",
+      "last_delivery_date": "2026-07-01"
+    },
+    "PBR": {
+      "rows": 11714,
+      "first_delivery_date": "2025-10-29",
+      "last_delivery_date": "2026-07-01"
+    },
+    "PQR": {
+      "rows": 21892,
+      "first_delivery_date": "2025-03-31",
+      "last_delivery_date": "2026-07-01"
+    },
+    "PSR": {
+      "rows": 4372,
+      "first_delivery_date": "2026-03-31",
+      "last_delivery_date": "2026-07-01"
+    }
+  },
+  "fy2025_source_sha256": "901fd1ad49cf9c1d3a5803b0d7c6a1466cbe429bb4a92c5a333bbce60bafb3cf",
+  "stage11_source_sha256": "13d7eaf66dc851e5f937d13492847ad76e63f7c778be17d693d5644eff988e99",
+  "output_sha256": "4ef144456926ba5d7ff634f45fdfbdf0492da098a05c4301f84576823f2c93f6",
+  "boundary": "system clearing results only; no participant or sell-order identity fields"
+}

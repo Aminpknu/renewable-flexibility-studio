@@ -32,7 +32,7 @@ Forecast-day planning reads `data/latest_forecast.csv`, validated separately fro
 
 The standalone Studio does not run or import the forecasting ML models. The forecasting project remains the producer of the forecast bundle; `scripts/sync_latest_forecast.py` is the local/manual handoff until automated cross-repository publishing is enabled.
 
-`data/latest_spatial_forecast.csv` is the companion ten-zone allocation bundle produced from the same target-day weather run. It contains one row per `(settlement_period, zone)` and therefore 10?46/48/50 rows. Wind and solar allocation shares must each sum to one within every settlement period. The bundle is reconciled to the national V2 forecast; it is not an independently observed city-generation target.
+`data/latest_spatial_forecast.csv` is the companion ten-zone allocation bundle produced from the same target-day weather run. It contains one row per `(settlement_period, zone)` and therefore 10×46/48/50 rows. Wind and solar allocation shares must each sum to one within every settlement period. The bundle is reconciled to the national V2 forecast; it is not an independently observed city-generation target.
 
 `data/spatial_capacity_weights.csv` contains fixed DESNZ REPD operational wind/solar proxy shares assigned to the nearest of the ten V2 weather locations. Its manifest records the July 2026 REPD source URL, checksum, OGL status and limitations. NESO national embedded capacity remains authoritative for total MW.
 
@@ -106,9 +106,9 @@ Required fields are product/direction, UTC delivery start/end, 0.5 h window leng
 
 ## Market-backed investment evidence
 
-`outputs/market_investment/market_investment_summary.json` freezes the Stage 10 default 100 MW 50/50, 25 MW / 200 MWh market-backed investment evidence. The core operating-value input is the 420-day realised margin of the prior-date forecast-selected APX Market Index schedule in `pre_delivery_strategy_daily.csv`; the reserve-aware case uses the matching Stage B SOC-corridor schedule. The historical market margin already includes the frozen ?2/MWh throughput-cost scenario and it must not be charged a second time in the lifecycle appraisal.
+`outputs/market_investment/market_investment_summary.json` freezes the Stage 10 default 100 MW 50/50, 25 MW / 200 MWh market-backed investment evidence. The core operating-value input is the 420-day realised margin of the prior-date forecast-selected APX Market Index schedule in `pre_delivery_strategy_daily.csv`; the reserve-aware case uses the matching Stage B SOC-corridor schedule. The historical market margin already includes the frozen £2/MWh throughput-cost scenario and it must not be charged a second time in the lifecycle appraisal.
 
-The JSON records deterministic lifecycle scenarios, a 5,000-run forecast-wholesale Monte Carlo, a reserve-aware Monte Carlo and convergence diagnostics. Quick Reserve is included only in deterministic Apr?Jun aligned price-taker upside cases; it is excluded from the probabilistic base because asset-specific EAC acceptance remains unidentified. CAPEX, fixed OPEX, asset life, discount rate, degradation and optional replacement cost are explicit pre-feasibility assumptions rather than observed supplier/financing terms.
+The JSON records deterministic lifecycle scenarios, a 5,000-run forecast-wholesale Monte Carlo, a reserve-aware Monte Carlo and convergence diagnostics. Quick Reserve is included only in deterministic Apr–Jun aligned price-taker upside cases; it is excluded from the probabilistic base because asset-specific EAC acceptance remains unidentified. CAPEX, fixed OPEX, asset life, discount rate, degradation and optional replacement cost are explicit pre-feasibility assumptions rather than observed supplier/financing terms.
 
 ## NESO multi-service EAC archive
 
@@ -116,10 +116,20 @@ The JSON records deterministic lifecycle scenarios, a 5,000-run forecast-wholesa
 
 `outputs/multiservice/multiservice_daily.csv` contains the 90-date default-reference audit for QR+SR, full non-BM and BM-eligible service sets. `multiservice_summary.json` stores annualised value/error-reduction results and the modelling boundary. The archive contains availability clearing-price evidence only; it does not establish asset-specific auction acceptance, utilisation instructions/payments or performance penalties.
 
+## Stage 13 issue-time multi-service evidence
+
+`data/neso_multiservice_forecast_history.csv` stitches the NESO FY2025 Results Summary archive to the current Stage 11 result archive and contains system-level clearing evidence only. Its manifest records source checksums and product coverage. `stage13_price_forecast_backtest.csv` contains the 12-product prior-date clearing-price forecasts and previous-same-product/window baseline used for the May-Jun validation.
+
+`data/neso_multiservice_acceptance_calibration_april.csv` is the April-only acceptance lookup used for May decisions. `neso_multiservice_acceptance_calibration.csv` combines April+May and is used for June. Both are aggregate tables derived from raw monthly NESO Sell Orders; no participant or auction-unit identity fields are retained. The raw Sell Orders archives remain under ignored build-source storage and are represented by SHA-256 checksums in the acceptance manifest.
+
+`stage13_issue_time_multiservice_daily.csv` and `stage13_issue_time_multiservice_offers.csv` store the 60 eligible May-Jun decision/scoring audit. `stage13_issue_time_multiservice_summary.json` locks the non-BM/BM headline results and explicitly records 24 June 2026 as excluded because the V2 historical forecast-error bundle has no target day. `stage13_manifest.json` checksum-locks the complete Stage 13 evidence chain.
+
+The Stage 13 offer file contains forecast/previous prices, capacity, opportunity-cost bid, empirical acceptance ratio and ex-post scoring fields. Realised EAC price/system volume appear only in scoring columns; target-day realised EAC values are not used to select capacity or set the bid. The exact counterfactual merit-order acceptance of a virtual asset remains unobservable.
+
 ## Stage 12 project-finance evidence
 
-`outputs/project_finance/project_finance_summary.json` freezes the default Stage 12 screening case. The finance-base operating value comes from the Stage 10 forecast-selected wholesale strategy; Stage 11 non-BM/BM multi-service values are retained only as separately labelled perfect-information upside screens.
+`outputs/project_finance/project_finance_summary.json` freezes the default Stage 12 screening case. The finance-base operating value comes from the Stage 10 forecast-selected wholesale strategy; Stage 13 non-BM/BM values are retained as issue-time expected-acceptance comparison screens and Stage 11 non-BM/BM values remain separately labelled perfect-information upper bounds.
 
 The reference assumptions are explicit: CAPEX, fixed OPEX, asset life, project discount rate, revenue degradation, debt share/rate/tenor, corporation-tax scenario, capital-allowance schedule, equity hurdle, DSCR threshold and optional replacement. `project_finance_monte_carlo_2000.csv` stores the 2,000-draw audit used for the frozen downside summary.
 
-The tax layer is screening-only. It does not determine legal eligibility for UK capital allowances and excludes tax-loss carry-forward, VAT, group relief, refinancing, hedging, debt sculpting, reserve accounts and working capital. The probabilistic finance base excludes Stage 11 ancillary-service upside because service bid/acceptance remains perfect-information/price-taker screening.
+The tax layer is screening-only. It does not determine legal eligibility for UK capital allowances and excludes tax-loss carry-forward, VAT, group relief, refinancing, hedging, debt sculpting, reserve accounts and working capital. The probabilistic finance base remains wholesale-only; both Stage 13 expected-acceptance and Stage 11 perfect-information ancillary-service cases are deterministic comparisons.

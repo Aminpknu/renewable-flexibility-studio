@@ -89,6 +89,9 @@ MARKET_BACKTEST_PATH = ROOT / "outputs" / "market_optimisation" / "default_mixed
 QUICK_RESERVE_PATH = ROOT / "data" / "neso_quick_reserve_prices.csv"
 MULTISERVICE_PATH = ROOT / "data" / "neso_multiservice_prices.csv"
 MULTISERVICE_SUMMARY_PATH = ROOT / "outputs" / "multiservice" / "multiservice_summary.json"
+STAGE13_SUMMARY_PATH = ROOT / "outputs" / "multiservice" / "stage13_issue_time_multiservice_summary.json"
+STAGE13_ACCEPTANCE_SUMMARY_PATH = ROOT / "outputs" / "multiservice" / "stage13_acceptance_summary.json"
+STAGE13_PRICE_SUMMARY_PATH = ROOT / "outputs" / "multiservice" / "stage13_price_forecast_summary.json"
 QUICK_RESERVE_SUMMARY_PATH = ROOT / "outputs" / "quick_reserve" / "quick_reserve_summary.json"
 QUICK_RESERVE_PREDELIVERY_SUMMARY_PATH = ROOT / "outputs" / "quick_reserve" / "quick_reserve_predelivery_summary.json"
 QUICK_RESERVE_PREDELIVERY_DAILY_PATH = ROOT / "outputs" / "quick_reserve" / "quick_reserve_predelivery_daily.csv"
@@ -110,6 +113,9 @@ MARKET_INDEX_PRICES = load_market_index_history(MARKET_INDEX_PATH)
 QUICK_RESERVE = load_quick_reserve_history(str(QUICK_RESERVE_PATH))
 MULTISERVICE = load_eac_service_history(MULTISERVICE_PATH)
 MULTISERVICE_SUMMARY = json.loads(MULTISERVICE_SUMMARY_PATH.read_text(encoding="utf-8"))
+STAGE13_SUMMARY = json.loads(STAGE13_SUMMARY_PATH.read_text(encoding="utf-8"))
+STAGE13_ACCEPTANCE_SUMMARY = json.loads(STAGE13_ACCEPTANCE_SUMMARY_PATH.read_text(encoding="utf-8"))
+STAGE13_PRICE_SUMMARY = json.loads(STAGE13_PRICE_SUMMARY_PATH.read_text(encoding="utf-8"))
 LATEST_FORECAST = load_latest_forecast(LATEST_FORECAST_PATH)
 LATEST_SPATIAL_FORECAST = load_latest_spatial_forecast(LATEST_SPATIAL_FORECAST_PATH)
 LATEST_SPATIAL_DEMAND = load_latest_spatial_demand(LATEST_SPATIAL_DEMAND_PATH)
@@ -1287,6 +1293,56 @@ def _multiservice_figure(frame: pd.DataFrame, summary: dict[str, Any], assume_bm
     return figure
 
 
+def _stage13_evidence_cards() -> list[Any]:
+    non_bm = STAGE13_SUMMARY["scenarios"]["non_bm"]
+    bm = STAGE13_SUMMARY["scenarios"]["bm_eligible"]
+    acceptance = STAGE13_ACCEPTANCE_SUMMARY["validation"]
+    price = STAGE13_PRICE_SUMMARY
+    expected_acceptance = (
+        100.0 * non_bm["expected_accepted_mw_hours"] / non_bm["offered_mw_hours"]
+        if non_bm["offered_mw_hours"] > 0 else 0.0
+    )
+    return [
+        _kpi_card("Stage 13 non-BM value", f"£{non_bm['annualised_acceptance_calibrated_total_gbp']/1e6:.2f}m/yr", "60 eligible May–Jun dates"),
+        _kpi_card("Acceptance-calibrated ancillary", f"£{non_bm['annualised_acceptance_calibrated_ancillary_gbp']/1e6:.2f}m/yr", "Availability only"),
+        _kpi_card("Value captured vs Stage 11", f"{non_bm['capture_vs_stage11_perfect_information_pct']:.1f}%", "Issue-time vs perfect-information upper bound"),
+        _kpi_card("Increment vs reserve-aware wholesale", f"£{non_bm['incremental_value_vs_reserve_aware_wholesale_gbp_per_year']/1e6:.2f}m/yr", "Same Stage B reserve corridor"),
+        _kpi_card("Expected accepted MW-hours", f"{expected_acceptance:.1f}%", "Empirical issue-time acceptance calibration"),
+        _kpi_card("EAC price forecast MAE", f"£{price['forecast']['mae']:.2f}/MW/h", f"{price['mae_improvement_vs_naive_pct']:.1f}% better than naive"),
+        _kpi_card("Acceptance Brier improvement", f"{acceptance['brier_improvement_vs_product_baseline_pct']:.1f}%", f"{int(acceptance['orders']):,} held-out orders"),
+        _kpi_card("BM-eligible Stage 13 value", f"£{bm['annualised_acceptance_calibrated_total_gbp']/1e6:.2f}m/yr", "BR eligibility does not improve this screen"),
+    ]
+
+
+def _stage13_evidence_figure() -> go.Figure:
+    non_bm = STAGE13_SUMMARY["scenarios"]["non_bm"]
+    bm = STAGE13_SUMMARY["scenarios"]["bm_eligible"]
+    figure = make_subplots(rows=3, cols=1, vertical_spacing=0.12, row_heights=[0.32, 0.33, 0.35])
+    labels = ["Reserve-aware wholesale", "Stage 13 non-BM", "Stage 13 BM", "Stage 11 non-BM upper", "Stage 11 BM upper"]
+    values = [
+        non_bm["annualised_reserve_aware_wholesale_only_gbp"],
+        non_bm["annualised_acceptance_calibrated_total_gbp"],
+        bm["annualised_acceptance_calibrated_total_gbp"],
+        non_bm["annualised_stage11_perfect_information_gbp"],
+        bm["annualised_stage11_perfect_information_gbp"],
+    ]
+    figure.add_trace(go.Bar(x=labels, y=[v / 1e6 for v in values], name="Annualised value"), row=1, col=1)
+    product_rows = non_bm["by_product"]
+    products = list(product_rows)
+    annual_factor = 365.25 / float(non_bm["days"])
+    product_value = [product_rows[p]["acceptance_calibrated_payment_gbp"] * annual_factor / 1e6 for p in products]
+    figure.add_trace(go.Bar(x=products, y=product_value, name="Acceptance-calibrated ancillary"), row=2, col=1)
+    calibration = STAGE13_ACCEPTANCE_SUMMARY["validation"]["by_product"]
+    cal_products = list(calibration)
+    figure.add_trace(go.Bar(x=cal_products, y=[calibration[p]["actual_acceptance_pct"] for p in cal_products], name="Actual acceptance"), row=3, col=1)
+    figure.add_trace(go.Bar(x=cal_products, y=[calibration[p]["predicted_acceptance_pct"] for p in cal_products], name="Predicted acceptance"), row=3, col=1)
+    figure.update_yaxes(title_text="£m/yr", row=1, col=1)
+    figure.update_yaxes(title_text="£m/yr", row=2, col=1)
+    figure.update_yaxes(title_text="Acceptance (%)", row=3, col=1)
+    figure.update_layout(height=900, barmode="group", margin=dict(l=60, r=20, t=55, b=80), legend={"orientation":"h", "y":1.02, "yanchor":"bottom", "x":0})
+    return figure
+
+
 def _quick_reserve_figure(analysis: dict[str, Any]) -> go.Figure:
     frame = analysis["triple_frame"]
     triple = frame
@@ -1606,6 +1662,8 @@ def _project_finance_scenarios(assumptions: ProjectFinanceAssumptions) -> dict[s
     annual_values = {
         "Forecast wholesale base": float(MARKET_INVESTMENT_SUMMARY["scenarios"]["forecast_wholesale_420d"]["annual_operating_value_gbp"]),
         "Reserve-aware wholesale": float(MARKET_INVESTMENT_SUMMARY["scenarios"]["reserve_aware_wholesale_420d"]["annual_operating_value_gbp"]),
+        "Stage 13 non-BM calibrated": float(STAGE13_SUMMARY["scenarios"]["non_bm"]["annualised_acceptance_calibrated_total_gbp"]),
+        "Stage 13 BM calibrated": float(STAGE13_SUMMARY["scenarios"]["bm_eligible"]["annualised_acceptance_calibrated_total_gbp"]),
         "Stage 11 non-BM upside": float(MULTISERVICE_SUMMARY["scenarios"]["non_bm_multiservice"]["annualised_net_value_gbp"]),
         "Stage 11 BM upside": float(MULTISERVICE_SUMMARY["scenarios"]["bm_multiservice"]["annualised_net_value_gbp"]),
     }
@@ -2564,6 +2622,24 @@ app.layout = html.Div(
                             config={"displaylogo": False},
                         ),
                         html.Hr(),
+                        html.H3("Issue-time, acceptance-calibrated multi-service strategy (Stage 13)"),
+                        html.P(
+                            "This view removes Stage 11 service-price perfect foresight. Capacity is chosen from prior-date wholesale and EAC price forecasts, the Stage B SOC reserve corridor and earlier-order acceptance evidence. Opportunity-cost bids are frozen before delivery and then scored against the subsequent auction outcome.",
+                            className="section-copy",
+                        ),
+                        html.Div([
+                            html.Div("Decision inputs are issue-time only: prior-date price forecasts, prior-data renewable uncertainty, prior-order acceptance calibration and forecast wholesale opportunity cost.", className="scenario-note-line"),
+                            html.Div("Realised APX Market Index and EAC clearing price/volume are used only for ex-post scoring. The exact counterfactual auction acceptance of a battery that was not actually in the auction remains unknowable.", className="scenario-note-line uncertainty-warning"),
+                            html.Div("The 60-date May-Jun 2026 evidence excludes 24 June because that date is absent from the V2 historical forecast-error bundle. Rejected ancillary offers do not retroactively release headroom for a new wholesale schedule, making the score conservative.", className="scenario-note-line uncertainty-line"),
+                        ], className="scenario-note"),
+                        html.Div(_stage13_evidence_cards(), className="kpi-grid"),
+                        html.Div("Issue-time value capture, product mix and acceptance calibration", className="chart-title"),
+                        html.Div(
+                            "The top panel compares the Stage B wholesale baseline, Stage 13 obtainable-style screens and Stage 11 perfect-information upper bounds. The lower panels show non-BM ancillary value by product and held-out acceptance calibration.",
+                            className="chart-subtitle",
+                        ),
+                        dcc.Graph(id="stage13-evidence-chart", figure=_stage13_evidence_figure(), config={"displaylogo": False}),
+                        html.Hr(),
                         html.H3(f"Forecast-day market schedule · {LATEST_TARGET_DATE}"),
                         html.P(
                             "This view combines the latest renewable forecast, the Stage B reserve corridor and a prior-data-only APX Market Index price forecast. It shows how much wholesale scheduling value is given up to preserve battery energy/headroom for renewable uncertainty.",
@@ -3185,6 +3261,7 @@ def update_project_finance(
         message = f"Project-finance screening could not be calculated: {error}"
         return message, [], _empty_figure(message)
     base = scenarios["Forecast wholesale base"]
+    calibrated = scenarios["Stage 13 non-BM calibrated"]
     upside = scenarios["Stage 11 non-BM upside"]
     def irr_text(value):
         return "No finite IRR" if value is None else f"{100.0*value:.1f}%"
@@ -3196,13 +3273,15 @@ def update_project_finance(
         _kpi_card("Annual debt service", f"£{base['annual_debt_service_gbp']/1e6:.2f}m/yr", "Constant-annuity debt screening"),
         _kpi_card("Minimum DSCR", f"{base['minimum_dscr']:.2f}x", f"Threshold {float(dscr_threshold):.2f}x"),
         _kpi_card("LLCR", f"{base['llcr']:.2f}x", "PV of loan-life CFADS / initial debt"),
-        _kpi_card("DSCR breach years", f"{base['dscr_breach_years']}", f"Of {int(debt_tenor_years)} debt years"),
-        _kpi_card("Stage 11 upside project NPV", f"£{upside['project_npv_gbp']/1e6:.2f}m", "Perfect-information non-BM multi-service screen only"),
-        _kpi_card("Stage 11 upside equity IRR", irr_text(upside["equity_irr_fraction"]), "Not the finance-base revenue case"),
+        _kpi_card("Stage 13 calibrated NPV", f"£{calibrated['project_npv_gbp']/1e6:.2f}m", "Issue-time non-BM acceptance-calibrated screen"),
+        _kpi_card("Stage 13 equity IRR", irr_text(calibrated["equity_irr_fraction"]), f"Minimum DSCR {calibrated['minimum_dscr']:.2f}x"),
+        _kpi_card("Stage 11 upside project NPV", f"£{upside['project_npv_gbp']/1e6:.2f}m", "Perfect-information non-BM upper bound"),
+        _kpi_card("Stage 11 upside equity IRR", irr_text(upside["equity_irr_fraction"]), "Not bankable revenue evidence"),
     ]
     note = html.Div([
-        html.Div("The finance base uses the realised value of schedules selected from prior-date Stage 10 wholesale price forecasts. This is the only operating-value case used as the core financing evidence.", className="scenario-note-line"),
-        html.Div("Stage 11 multi-service values are shown as upside sensitivity only because they still use realised EAC clearing prices and price-taker acceptance. They are not treated as bankable debt-service revenue.", className="scenario-note-line uncertainty-warning"),
+        html.Div("The finance base remains the realised value of schedules selected from prior-date Stage 10 wholesale price forecasts.", className="scenario-note-line"),
+        html.Div("Stage 13 is shown as the stronger ancillary-service evidence case: capacity and bids are issue-time, and acceptance is calibrated from held-out historical orders. It is still a counterfactual expected-acceptance screen, not bankable debt-service revenue.", className="scenario-note-line uncertainty-warning"),
+        html.Div("Stage 11 remains a perfect-information upper bound. The gap between Stage 13 and Stage 11 shows how forecasting and auction acceptance materially reduce the apparent finance case.", className="scenario-note-line uncertainty-line"),
         html.Div("Tax is a simplified scenario: interest reduces taxable income, capital allowance follows the entered screening schedule, and tax losses are not carried forward. This is not tax, accounting or lending advice.", className="scenario-note-line uncertainty-line"),
     ])
     return note, cards, _project_finance_figure(scenarios, assumptions)
@@ -3364,7 +3443,8 @@ def download_project_finance(
         "monte_carlo": mc_payload,
         "boundaries": [
             "Stage 10 forecast-selected wholesale is the finance-base revenue case",
-            "Stage 11 multi-service cases are perfect-information price-taker upside screens",
+            "Stage 13 multi-service cases use issue-time decisions and empirical expected acceptance; they are counterfactual screening evidence, not bankable contracted revenue",
+            "Stage 11 multi-service cases are perfect-information price-taker upper-bound screens",
             "screening tax only; no loss carry-forward, VAT, group relief or legal eligibility opinion",
             "no refinancing, hedging, sculpted debt, working-capital or reserve-account model",
         ],

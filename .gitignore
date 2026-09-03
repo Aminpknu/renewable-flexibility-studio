@@ -54,3 +54,4 @@ data/build_sources/
 !outputs/project_finance/
 !outputs/project_finance/*.json
 !outputs/project_finance/*.csv
+*.err
