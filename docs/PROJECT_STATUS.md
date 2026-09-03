@@ -27,6 +27,8 @@
 - frozen 450-day Elexon System Price/Net Imbalance Volume archive aligned to all 21,600 V2 historical periods;
 - selected-day BSC-style imbalance settlement view before/after battery firming;
 - 450-day gross cash-out exposure and daily tail-risk benchmark, explicitly separated from profit;
+- Stage 6A deterministic physical risk and value appraisal: NPV, BCR, payback, switching values, availability, sensitivity and risk-value frontier;
+- Stage 6B block-resampled Monte Carlo: P10/P50/P90 NPV, negative-NPV probability, VaR/CVaR, technical-gate failure probability and stress scenarios;
 - one-page Dash interface and CSV export;
 - public GitHub repository with GitHub Actions configuration;
 - automated test suite covering physical, uncertainty, tomorrow-planning and settlement logic;
@@ -39,12 +41,11 @@ Forecasting V2 is packaged separately on branch `feature/v2-spatial-production`,
 
 ## Next analytical stages
 
-1. **Economics / Risk & Value:** price pre-day SOC preparation and restoration, add a contracted/day-ahead reference price, battery CAPEX/OPEX/degradation, NPV, BCR, payback and switching values.
+1. Promote/deploy the reviewed Stage 6 release and verify the public Render service.
 2. Add date-range, seasonal and weather-regime comparison and quantify sizing/reserve sensitivity by wind/solar mix.
-3. Add Monte Carlo/block-bootstrap downside metrics, P10/P50/P90 economic value, VaR/CVaR and availability/derating stress cases.
-4. Upgrade the operational directional residual range to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty and compare both approaches.
-5. Automate the versioned forecast-bundle handoff, freshness/stale-data checks and fallback behavior.
-6. Deploy the public standalone GitHub repository as a separate Render service after the current UI review.
+3. Upgrade the operational directional residual range to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty and compare both approaches.
+4. Automate the versioned forecast-bundle handoff, freshness/stale-data checks and fallback behavior.
+5. Add a correctly defined contracted/day-ahead price reference only if moving from scenario consequence values toward market-based economics.
 
 ## Learning fixture
 

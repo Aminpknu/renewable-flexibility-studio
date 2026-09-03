@@ -29,3 +29,5 @@ data/*.parquet
 !outputs/design_sizing_grid_manifest.json
 !outputs/reserve_planning_validation.json
 !outputs/reserve_planning_daily.csv
+!outputs/risk_value/
+!outputs/risk_value/*.json

@@ -19,11 +19,23 @@ from adapters.imbalance_settlement import load_system_price_history, select_syst
 from adapters.latest_forecast import latest_target_date, load_latest_forecast
 from engine.battery import BatteryConfig, simulate_reactive_firming
 from engine.design_sizing import select_stable_design
+from engine.frontier import build_risk_value_frontier
+from engine.sensitivity import build_capex_consequence_sensitivity
+from engine.value import (
+    ValueAssumptions,
+    break_even_consequence_value_gbp_per_mwh,
+    maximum_capex_for_zero_npv_gbp,
+)
 from engine.imbalance import apply_imbalance_settlement, summarise_imbalance_settlement
 from engine.metrics import calculate_firming_metrics
+from engine.monte_carlo import (
+    MonteCarloConfig, MonteCarloDistributions, TriangularMultiplier,
+    build_daily_value_evidence, run_value_monte_carlo,
+)
 from engine.portfolio import build_virtual_forecast, build_virtual_portfolio
 from engine.reserve_planning import ReservePlanningConfig, build_reserve_plan
 from engine.sizing import find_minimum_battery
+from engine.stress import run_value_stress_scenarios
 from engine.uncertainty import (
     PredictionIntervalConfig,
     build_forecast_only_directional_interval,
@@ -403,6 +415,286 @@ def _initial_energy_explanation(power_mw: float, duration_hours: float, initial_
             "This energy must come from earlier periods; it is not created on the selected day.")
 
 
+def _historical_baseline_exposure(
+    portfolio_type: str,
+    capacity_mw: float,
+    wind_share_pct: float,
+) -> tuple[float, float]:
+    portfolio = build_virtual_portfolio(
+        HISTORICAL_DATA,
+        portfolio_type=portfolio_type,
+        capacity_mw=float(capacity_mw),
+        wind_share=float(wind_share_pct) / 100.0,
+    )
+    error = portfolio["actual_mw"].astype(float) - portfolio["forecast_mw"].astype(float)
+    exposure_mwh = float(error.abs().sum() * 0.5)
+    observed_days = float(pd.to_datetime(portfolio["settlement_date"]).dt.normalize().nunique())
+    return exposure_mwh, observed_days
+
+
+def _risk_value_frontier_figure(
+    frontier: pd.DataFrame,
+    selected_power_mw: float,
+    selected_duration_hours: float,
+) -> go.Figure:
+    figure = go.Figure()
+    for status, symbol in (("value-efficient", "circle"), ("dominated", "x")):
+        subset = frontier.loc[frontier["frontier_status"].eq(status)]
+        if subset.empty:
+            continue
+        figure.add_trace(go.Scatter(
+            x=subset["lifecycle_cost_gbp"] / 1e6,
+            y=subset["pv_avoided_loss_gbp"] / 1e6,
+            mode="markers",
+            name=status.replace("-", " ").title(),
+            marker={"symbol": symbol, "size": 9},
+            customdata=subset[["power_mw", "duration_hours", "energy_mwh", "npv_gbp", "benefit_cost_ratio"]],
+            hovertemplate=(
+                "%{customdata[0]:.0f} MW / %{customdata[2]:.0f} MWh (%{customdata[1]:.0f} h)<br>"
+                "Lifecycle cost £%{x:.2f}m<br>PV avoided loss £%{y:.2f}m<br>"
+                "NPV £%{customdata[3]:,.0f}<br>BCR %{customdata[4]:.2f}<extra></extra>"
+            ),
+        ))
+    selected = frontier.loc[
+        frontier["power_mw"].sub(float(selected_power_mw)).abs().lt(1e-9)
+        & frontier["duration_hours"].sub(float(selected_duration_hours)).abs().lt(1e-9)
+    ]
+    if not selected.empty:
+        row = selected.iloc[0]
+        figure.add_trace(go.Scatter(
+            x=[row["lifecycle_cost_gbp"] / 1e6],
+            y=[row["pv_avoided_loss_gbp"] / 1e6],
+            mode="markers",
+            name="Selected Stage A design",
+            marker={"symbol": "star", "size": 16},
+            hovertemplate=(
+                f"Selected {row['power_mw']:.0f} MW / {row['energy_mwh']:.0f} MWh<br>"
+                f"NPV £{row['npv_gbp']/1e6:.2f}m<br>BCR {row['benefit_cost_ratio']:.2f}<extra></extra>"
+            ),
+        ))
+    figure.update_layout(
+        xaxis_title="Lifecycle cost (£m)",
+        yaxis_title="PV avoided expected loss (£m)",
+        hovermode="closest",
+        margin=dict(l=60, r=20, t=55, b=50),
+        legend={"orientation": "h", "y": 1.03, "yanchor": "bottom", "x": 0},
+        height=430,
+    )
+    return figure
+
+
+def _risk_value_sensitivity_figure(
+    annual_avoided_exposure_mwh: float,
+    annual_throughput_mwh: float,
+    assumptions: ValueAssumptions,
+) -> go.Figure:
+    consequence = assumptions.consequence_value_gbp_per_mwh
+    consequence_values = [0.5 * consequence, 0.75 * consequence, consequence, 1.25 * consequence, 1.5 * consequence]
+    table = build_capex_consequence_sensitivity(
+        annual_avoided_exposure_mwh, annual_throughput_mwh, assumptions,
+        consequence_values_gbp_per_mwh=consequence_values,
+        capex_multipliers=[0.75, 1.0, 1.25],
+    )
+    pivot = table.pivot(index="consequence_value_gbp_per_mwh", columns="capex_multiplier", values="npv_gbp") / 1e6
+    figure = go.Figure(go.Heatmap(
+        x=[f"{value:.0%} CAPEX" for value in pivot.columns],
+        y=[f"£{value:,.0f}/MWh" for value in pivot.index],
+        z=pivot.to_numpy(),
+        colorbar={"title": "NPV £m"},
+        hovertemplate="%{y}<br>%{x}<br>NPV £%{z:.2f}m<extra></extra>",
+    ))
+    figure.update_layout(
+        xaxis_title="Selected-design CAPEX sensitivity",
+        yaxis_title="Consequence-value sensitivity",
+        margin=dict(l=85, r=20, t=35, b=55), height=380,
+    )
+    return figure
+
+
+def _risk_value_analysis(
+    portfolio_type: str,
+    capacity_mw: float,
+    wind_share_pct: float,
+    design_target_pct: float,
+    design_reliability_pct: float,
+    consequence_value: float,
+    reference_capex_million: float,
+    fixed_opex_million_per_year: float,
+    variable_opex_per_mwh: float,
+    asset_life_years: int,
+    discount_rate_pct: float,
+    degradation_pct: float,
+    availability_pct: float,
+):
+    grid = scaled_design_grid(
+        DESIGN_GRID, portfolio_type, float(capacity_mw), float(wind_share_pct)
+    )
+    selected = select_stable_design(grid, design_target_pct, design_reliability_pct)
+    if selected is None:
+        raise ValueError("No stable future design exists for the selected design gate.")
+    baseline_exposure, observed_days = _historical_baseline_exposure(
+        portfolio_type, capacity_mw, wind_share_pct
+    )
+    reference_capex_gbp = float(reference_capex_million) * 1e6
+    fixed_opex_gbp = float(fixed_opex_million_per_year) * 1e6
+    frontier = build_risk_value_frontier(
+        grid,
+        baseline_exposure_total_mwh=baseline_exposure,
+        observed_days=observed_days,
+        reference_energy_mwh=float(selected["energy_mwh"]),
+        reference_capex_gbp=reference_capex_gbp,
+        reference_fixed_opex_gbp_per_year=fixed_opex_gbp,
+        consequence_value_gbp_per_mwh=float(consequence_value),
+        variable_opex_gbp_per_mwh=float(variable_opex_per_mwh),
+        asset_life_years=int(asset_life_years),
+        discount_rate=float(discount_rate_pct) / 100.0,
+        annual_degradation_fraction=float(degradation_pct) / 100.0,
+        availability_fraction=float(availability_pct) / 100.0,
+    )
+    selected_row = frontier.loc[
+        frontier["power_mw"].sub(float(selected["power_mw"])).abs().lt(1e-9)
+        & frontier["duration_hours"].sub(float(selected["duration_hours"])).abs().lt(1e-9)
+    ].iloc[0]
+    assumptions = ValueAssumptions(
+        consequence_value_gbp_per_mwh=float(consequence_value),
+        total_capex_gbp=reference_capex_gbp,
+        fixed_opex_gbp_per_year=fixed_opex_gbp,
+        variable_opex_gbp_per_mwh=float(variable_opex_per_mwh),
+        asset_life_years=int(asset_life_years),
+        discount_rate=float(discount_rate_pct) / 100.0,
+        annual_degradation_fraction=float(degradation_pct) / 100.0,
+    )
+    break_even = break_even_consequence_value_gbp_per_mwh(
+        float(selected_row["annual_avoided_exposure_mwh"]),
+        float(selected_row["annual_throughput_mwh"]),
+        assumptions,
+    )
+    max_capex = maximum_capex_for_zero_npv_gbp(
+        float(selected_row["annual_avoided_exposure_mwh"]),
+        float(selected_row["annual_throughput_mwh"]),
+        assumptions,
+    )
+    return frontier, selected, selected_row, break_even, max_capex
+
+
+
+def _npv_distribution_figure(draws: pd.DataFrame, summary: dict[str, Any]) -> go.Figure:
+    figure = go.Figure()
+    figure.add_trace(go.Histogram(
+        x=draws["npv_gbp"] / 1e6,
+        nbinsx=40,
+        name="Simulated NPV",
+        hovertemplate="NPV £%{x:.2f}m<extra></extra>",
+    ))
+    for key, label, dash in (
+        ("npv_p10_gbp", "P10", "dash"),
+        ("npv_p50_gbp", "P50", "solid"),
+        ("npv_p90_gbp", "P90", "dash"),
+    ):
+        figure.add_vline(
+            x=float(summary[key]) / 1e6,
+            line_dash=dash,
+            annotation_text=label,
+            annotation_position="top",
+        )
+    figure.update_layout(
+        xaxis_title="NPV (£m)", yaxis_title="Simulation count",
+        margin=dict(l=55, r=20, t=55, b=45), height=390,
+    )
+    return figure
+
+
+def _stress_scenario_figure(stress: pd.DataFrame) -> go.Figure:
+    figure = go.Figure(go.Bar(
+        x=stress["scenario"].str.replace("_", " ").str.title(),
+        y=stress["npv_gbp"] / 1e6,
+        customdata=stress[["benefit_cost_ratio"]],
+        hovertemplate="NPV £%{y:.2f}m<br>BCR %{customdata[0]:.2f}<extra></extra>",
+    ))
+    figure.add_hline(y=0.0, line_dash="dash")
+    figure.update_layout(
+        yaxis_title="NPV (£m)", xaxis_title="Stress scenario",
+        margin=dict(l=55, r=20, t=45, b=85), height=390,
+    )
+    return figure
+
+
+def _downside_risk_analysis(
+    portfolio_type: str,
+    capacity_mw: float,
+    wind_share_pct: float,
+    design_target_pct: float,
+    design_reliability_pct: float,
+    consequence_value: float,
+    reference_capex_million: float,
+    fixed_opex_million_per_year: float,
+    variable_opex_per_mwh: float,
+    asset_life_years: int,
+    discount_rate_pct: float,
+    degradation_pct: float,
+    availability_pct: float,
+    simulations: int,
+    block_days: int,
+    seed: int,
+):
+    grid = scaled_design_grid(
+        DESIGN_GRID, portfolio_type, float(capacity_mw), float(wind_share_pct)
+    )
+    selected = select_stable_design(grid, design_target_pct, design_reliability_pct)
+    if selected is None:
+        raise ValueError("No stable future design exists for the selected design gate.")
+    portfolio = build_virtual_portfolio(
+        HISTORICAL_DATA, portfolio_type=portfolio_type, capacity_mw=float(capacity_mw),
+        wind_share=float(wind_share_pct) / 100.0,
+    )
+    battery = BatteryConfig(
+        power_mw=float(selected["power_mw"]), duration_hours=float(selected["duration_hours"]),
+        round_trip_efficiency=0.90, initial_soc_fraction=0.50,
+    )
+    daily = build_daily_value_evidence(portfolio, battery)
+    assumptions = ValueAssumptions(
+        consequence_value_gbp_per_mwh=float(consequence_value),
+        total_capex_gbp=float(reference_capex_million) * 1e6,
+        fixed_opex_gbp_per_year=float(fixed_opex_million_per_year) * 1e6,
+        variable_opex_gbp_per_mwh=float(variable_opex_per_mwh),
+        asset_life_years=int(asset_life_years),
+        discount_rate=float(discount_rate_pct) / 100.0,
+        annual_degradation_fraction=float(degradation_pct) / 100.0,
+    )
+    availability_mode = float(availability_pct) / 100.0
+    availability_distribution = TriangularMultiplier(
+        max(0.0, availability_mode - 0.05),
+        availability_mode,
+        min(1.0, availability_mode + 0.05),
+    )
+    distributions = MonteCarloDistributions(
+        availability_fraction=availability_distribution,
+    )
+    config = MonteCarloConfig(
+        simulations=int(simulations), seed=int(seed), sample_days=365,
+        block_days=int(block_days), confidence=0.95,
+        firming_target_pct=float(design_target_pct),
+        reliability_target_pct=float(design_reliability_pct),
+    )
+    draws, summary = run_value_monte_carlo(daily, assumptions, config, distributions)
+    annualisation = 365.25 / float(len(daily))
+    annual_avoided = float(daily["avoided_exposure_mwh"].sum()) * annualisation * availability_mode
+    annual_throughput = float(daily["throughput_mwh"].sum()) * annualisation * availability_mode
+    stress = run_value_stress_scenarios(annual_avoided, annual_throughput, assumptions)
+    distribution_metadata = {
+        "consequence_multiplier": [0.70, 1.00, 1.30],
+        "capex_multiplier": [0.85, 1.00, 1.20],
+        "opex_multiplier": [0.90, 1.00, 1.15],
+        "availability_fraction": [
+            availability_distribution.low,
+            availability_distribution.mode,
+            availability_distribution.high,
+        ],
+        "degradation_multiplier": [0.75, 1.00, 1.25],
+        "dependence": "parameter multipliers independent; temporal forecast-error dependence retained through contiguous day blocks; daily outage states independent conditional on sampled availability",
+    }
+    return draws, summary, stress, selected, distribution_metadata
+
 def _tomorrow_planning_data(
     portfolio_type: str,
     capacity_mw: float,
@@ -768,6 +1060,146 @@ app.layout = html.Div(
                 ),
                 html.Section(
                     [
+                        html.H2("Risk & Value decision layer"),
+                        html.P(
+                            "This pre-feasibility layer converts the 450-day physical firming evidence into avoided exposure and discounted lifecycle value. All monetary inputs below are visible scenario assumptions, not observed market prices or bankable project costs.",
+                            className="section-copy",
+                        ),
+                        html.Div(
+                            [
+                                html.Div([
+                                    html.Label("Consequence value (£/MWh)"),
+                                    dcc.Input(id="risk-consequence-input", type="number", min=0, step=10, value=100),
+                                ]),
+                                html.Div([
+                                    html.Label("Selected-design CAPEX (£m)"),
+                                    dcc.Input(id="risk-capex-input", type="number", min=0, step=1, value=25),
+                                ]),
+                                html.Div([
+                                    html.Label("Selected-design fixed OPEX (£m/year)"),
+                                    dcc.Input(id="risk-fixed-opex-input", type="number", min=0, step=0.1, value=0.5),
+                                ]),
+                                html.Div([
+                                    html.Label("Variable OPEX (£/MWh throughput)"),
+                                    dcc.Input(id="risk-variable-opex-input", type="number", min=0, step=0.5, value=2.0),
+                                ]),
+                            ],
+                            className="design-controls",
+                        ),
+                        html.Div(
+                            [
+                                html.Div([
+                                    html.Label("Asset life (years)"),
+                                    dcc.Input(id="risk-life-input", type="number", min=1, step=1, value=15),
+                                ]),
+                                html.Div([
+                                    html.Label("Discount rate (%)"),
+                                    dcc.Input(id="risk-discount-input", type="number", min=-99, step=0.5, value=8),
+                                ]),
+                                html.Div([
+                                    html.Label("Annual degradation (%)"),
+                                    dcc.Input(id="risk-degradation-input", type="number", min=0, max=99, step=0.5, value=2),
+                                ]),
+                                html.Div([
+                                    html.Label("Expected battery availability (%)"),
+                                    dcc.Input(id="risk-availability-input", type="number", min=0, max=100, step=1, value=95),
+                                ]),
+                            ],
+                            className="design-controls",
+                        ),
+                        html.Div(
+                            "For comparison across battery configurations, CAPEX and fixed OPEX are scaled in proportion to candidate MWh relative to the Stage A selected design. This is a transparent screening assumption, not a supplier cost curve.",
+                            className="control-help",
+                        ),
+                        html.Div(id="risk-value-note", className="recommendation-box"),
+                        html.Div(id="risk-value-kpi-grid", className="kpi-grid"),
+                        html.Div("Risk–value frontier", className="chart-title"),
+                        html.Div(
+                            "Each point is one tested battery configuration. The x-axis is discounted lifecycle cost; the y-axis is present value of avoided expected loss under the consequence-value assumption. Dominated options cost at least as much while avoiding no more loss than another tested option.",
+                            className="chart-subtitle",
+                        ),
+                        dcc.Graph(
+                            id="risk-value-frontier",
+                            figure=_empty_figure("Risk-value appraisal is loading."),
+                            config={"displaylogo": False},
+                        ),
+                        html.Div("CAPEX and consequence-value sensitivity", className="chart-title"),
+                        html.Div("This heatmap varies the selected-design CAPEX by ±25% and consequence value from 50% to 150% of the entered scenario value while holding other assumptions constant.", className="chart-subtitle"),
+                        dcc.Graph(id="risk-value-sensitivity", figure=_empty_figure("Sensitivity analysis is loading."), config={"displaylogo": False}),
+                        html.Button("Download risk-value scenario JSON", id="risk-value-download-button", n_clicks=0, className="secondary-button"),
+                        dcc.Download(id="risk-value-download"),
+                        html.Hr(),
+                        html.H3("Quantitative downside risk (Stage 6B)"),
+                        html.P(
+                            "Run complete-day block-resampled Monte Carlo around the selected Stage A battery. Forecast-error dependence is preserved by sampling contiguous historical day blocks; CAPEX, consequence value, OPEX, availability and degradation use visible scenario distributions.",
+                            className="section-copy",
+                        ),
+                        html.Div(
+                            [
+                                html.Div([
+                                    html.Label("Monte Carlo simulations"),
+                                    dcc.Dropdown(
+                                        id="downside-simulations-input",
+                                        options=[{"label": f"{v:,}", "value": v} for v in (500, 1000, 2000)],
+                                        value=1000, clearable=False,
+                                    ),
+                                ]),
+                                html.Div([
+                                    html.Label("Contiguous block length (days)"),
+                                    dcc.Dropdown(
+                                        id="downside-block-input",
+                                        options=[{"label": f"{v} day" if v == 1 else f"{v} days", "value": v} for v in (1, 3, 7, 14)],
+                                        value=7, clearable=False,
+                                    ),
+                                ]),
+                                html.Div([
+                                    html.Label("Random seed"),
+                                    dcc.Input(
+                                        id="downside-seed-input", type="number", step=1,
+                                        value=20260903,
+                                    ),
+                                ]),
+                            ],
+                            className="design-controls",
+                        ),
+                        html.Button(
+                            "Run downside-risk analysis", id="downside-risk-button",
+                            n_clicks=0, className="primary-button",
+                        ),
+                        html.Div(id="downside-risk-note", className="scenario-note"),
+                        html.Div(id="downside-risk-kpi-grid", className="kpi-grid"),
+                        html.Div("Probabilistic NPV distribution", className="chart-title"),
+                        html.Div(
+                            "P10/P50/P90 are NPV quantiles. Tail loss uses the explicit convention investment loss = -NPV, so 95% CVaR is the average loss in the worst 5% of simulations.",
+                            className="chart-subtitle",
+                        ),
+                        dcc.Graph(
+                            id="downside-risk-chart",
+                            figure=_empty_figure("Run the downside-risk analysis to generate probabilistic NPV."),
+                            config={"displaylogo": False},
+                        ),
+                        html.Div("Deterministic downside stress cases", className="chart-title"),
+                        html.Div(
+                            "Named stresses reduce physical benefit or availability and/or worsen cost/value assumptions. They are transparent screening scenarios, not calibrated forecasts.",
+                            className="chart-subtitle",
+                        ),
+                        dcc.Graph(
+                            id="downside-stress-chart",
+                            figure=_empty_figure("Stress scenarios will appear after the downside-risk run."),
+                            config={"displaylogo": False},
+                        ),
+                        dcc.Store(id="downside-risk-store"),
+                        html.Button(
+                            "Download downside-risk summary JSON",
+                            id="downside-risk-download-button", n_clicks=0,
+                            className="secondary-button",
+                        ),
+                        dcc.Download(id="downside-risk-download"),
+                    ],
+                    className="download-section risk-value-section",
+                ),
+                html.Section(
+                    [
                         html.Div(
                             [
                                 html.H2("Selected-day battery sizing (exploratory)"),
@@ -943,6 +1375,254 @@ def update_future_design(
     except (TypeError, ValueError, KeyError) as error:
         message = f"Future battery sizing could not be calculated: {error}"
         return message, [], _empty_figure(message)
+
+
+@app.callback(
+    Output("risk-value-note", "children"),
+    Output("risk-value-kpi-grid", "children"),
+    Output("risk-value-frontier", "figure"),
+    Output("risk-value-sensitivity", "figure"),
+    Input("portfolio-input", "value"),
+    Input("capacity-input", "value"),
+    Input("wind-share-input", "value"),
+    Input("design-target-input", "value"),
+    Input("design-reliability-input", "value"),
+    Input("risk-consequence-input", "value"),
+    Input("risk-capex-input", "value"),
+    Input("risk-fixed-opex-input", "value"),
+    Input("risk-variable-opex-input", "value"),
+    Input("risk-life-input", "value"),
+    Input("risk-discount-input", "value"),
+    Input("risk-degradation-input", "value"),
+    Input("risk-availability-input", "value"),
+)
+def update_risk_value(
+    portfolio_type: str,
+    capacity_mw: float,
+    wind_share_pct: float,
+    design_target_pct: float,
+    design_reliability_pct: float,
+    consequence_value: float,
+    reference_capex_million: float,
+    fixed_opex_million_per_year: float,
+    variable_opex_per_mwh: float,
+    asset_life_years: int,
+    discount_rate_pct: float,
+    degradation_pct: float,
+    availability_pct: float,
+):
+    try:
+        frontier, selected, row, break_even, max_capex = _risk_value_analysis(
+            portfolio_type, capacity_mw, wind_share_pct,
+            design_target_pct, design_reliability_pct,
+            consequence_value, reference_capex_million,
+            fixed_opex_million_per_year, variable_opex_per_mwh,
+            asset_life_years, discount_rate_pct, degradation_pct, availability_pct,
+        )
+    except (TypeError, ValueError, KeyError) as error:
+        message = f"Risk-value appraisal could not be calculated: {error}"
+        return message, [], _empty_figure(message), _empty_figure(message)
+
+    payback = row["simple_payback_years"]
+    payback_text = "Not within life" if pd.isna(payback) else f"{int(payback)} years"
+    break_even_text = "N/A" if break_even is None else f"£{break_even:.0f}/MWh"
+    cards = [
+        _kpi_card(
+            "Selected design",
+            f"{selected['power_mw']:.0f} MW / {selected['energy_mwh']:.0f} MWh",
+            f"Stage A {design_target_pct:.0f}% / {design_reliability_pct:.0f}% gate",
+        ),
+        _kpi_card(
+            "Annual avoided exposure",
+            f"{row['annual_avoided_exposure_mwh']:,.0f} MWh/yr",
+            "Annualised from the 450-day physical backtest",
+        ),
+        _kpi_card(
+            "Annual risk reduction",
+            f"£{row['annual_avoided_exposure_mwh'] * float(consequence_value) / 1e6:.2f}m/yr",
+            f"Using scenario consequence value £{float(consequence_value):,.0f}/MWh",
+        ),
+        _kpi_card(
+            "NPV",
+            f"£{row['npv_gbp'] / 1e6:.2f}m",
+            f"{int(asset_life_years)}-year discounted pre-feasibility value",
+        ),
+        _kpi_card("Benefit-cost ratio", f"{row['benefit_cost_ratio']:.2f}", "PV avoided loss / PV lifecycle cost"),
+        _kpi_card("Simple payback", payback_text, "Undiscounted net benefit recovery"),
+        _kpi_card("Break-even consequence", break_even_text, "£/MWh required for NPV = 0"),
+        _kpi_card("Max CAPEX at NPV = 0", f"£{max_capex / 1e6:.2f}m", "Switching value under current assumptions"),
+        _kpi_card("Expected availability", f"{float(availability_pct):.0f}%", "Stage 6A expected-availability scaling assumption"),
+    ]
+    status = str(row["frontier_status"])
+    if bool(row["diminishing_return"]):
+        decision = "The selected technical design lies on the efficient set but its incremental avoided-loss value is below the incremental lifecycle cost versus the next cheaper efficient option."
+    elif status == "dominated":
+        decision = "Under these assumptions, at least one tested battery configuration costs no more while avoiding at least as much expected loss, so the selected technical design is economically dominated."
+    else:
+        decision = "Under these assumptions, the selected Stage A technical design is not economically dominated by another tested configuration."
+    note = html.Div([
+        html.Strong(decision),
+        html.P(
+            "Monetary results are scenario-based screening outputs. The consequence value is user supplied, and candidate CAPEX/fixed OPEX are scaled from the selected design in proportion to MWh. The frontier includes all tested configurations, including some that do not meet the selected Stage A firming gate, so economic efficiency alone does not make a design technically acceptable. No actual market-revenue claim is made."
+        ),
+    ])
+    figure = _risk_value_frontier_figure(
+        frontier, float(selected["power_mw"]), float(selected["duration_hours"])
+    )
+    sensitivity_assumptions = ValueAssumptions(
+        consequence_value_gbp_per_mwh=float(consequence_value),
+        total_capex_gbp=float(reference_capex_million) * 1e6,
+        fixed_opex_gbp_per_year=float(fixed_opex_million_per_year) * 1e6,
+        variable_opex_gbp_per_mwh=float(variable_opex_per_mwh),
+        asset_life_years=int(asset_life_years),
+        discount_rate=float(discount_rate_pct) / 100.0,
+        annual_degradation_fraction=float(degradation_pct) / 100.0,
+    )
+    sensitivity = _risk_value_sensitivity_figure(
+        float(row["annual_avoided_exposure_mwh"]),
+        float(row["annual_throughput_mwh"]),
+        sensitivity_assumptions,
+    )
+    return note, cards, figure, sensitivity
+
+
+@app.callback(
+    Output("risk-value-download", "data"),
+    Input("risk-value-download-button", "n_clicks"),
+    State("portfolio-input", "value"), State("capacity-input", "value"), State("wind-share-input", "value"),
+    State("design-target-input", "value"), State("design-reliability-input", "value"),
+    State("risk-consequence-input", "value"), State("risk-capex-input", "value"),
+    State("risk-fixed-opex-input", "value"), State("risk-variable-opex-input", "value"),
+    State("risk-life-input", "value"), State("risk-discount-input", "value"),
+    State("risk-degradation-input", "value"), State("risk-availability-input", "value"),
+    prevent_initial_call=True,
+)
+def download_risk_value_scenario(
+    _clicks, portfolio_type, capacity_mw, wind_share_pct, design_target_pct,
+    design_reliability_pct, consequence_value, reference_capex_million,
+    fixed_opex_million_per_year, variable_opex_per_mwh, asset_life_years,
+    discount_rate_pct, degradation_pct, availability_pct,
+):
+    frontier, selected, row, break_even, max_capex = _risk_value_analysis(
+        portfolio_type, capacity_mw, wind_share_pct, design_target_pct,
+        design_reliability_pct, consequence_value, reference_capex_million,
+        fixed_opex_million_per_year, variable_opex_per_mwh, asset_life_years,
+        discount_rate_pct, degradation_pct, availability_pct,
+    )
+    payload = {
+        "schema_version": "1.0",
+        "stage": "6A_risk_value_pre_feasibility",
+        "portfolio": {"type": portfolio_type, "capacity_mw": float(capacity_mw), "wind_share_pct": float(wind_share_pct)},
+        "design_gate": {"firming_target_pct": float(design_target_pct), "reliability_pct": float(design_reliability_pct)},
+        "selected_design": {"power_mw": float(selected["power_mw"]), "duration_hours": float(selected["duration_hours"]), "energy_mwh": float(selected["energy_mwh"])},
+        "assumptions": {
+            "consequence_value_gbp_per_mwh": float(consequence_value), "selected_design_capex_gbp": float(reference_capex_million) * 1e6,
+            "selected_design_fixed_opex_gbp_per_year": float(fixed_opex_million_per_year) * 1e6, "variable_opex_gbp_per_mwh_throughput": float(variable_opex_per_mwh),
+            "asset_life_years": int(asset_life_years), "discount_rate_pct": float(discount_rate_pct), "annual_degradation_pct": float(degradation_pct),
+            "expected_availability_pct": float(availability_pct), "candidate_cost_scaling": "CAPEX and fixed OPEX proportional to MWh relative to selected design",
+        },
+        "selected_results": {key: (None if pd.isna(row[key]) else float(row[key])) for key in ["annual_avoided_exposure_mwh", "annual_throughput_mwh", "pv_avoided_loss_gbp", "lifecycle_cost_gbp", "npv_gbp", "benefit_cost_ratio"]},
+        "switching_values": {"break_even_consequence_value_gbp_per_mwh": break_even, "maximum_capex_for_zero_npv_gbp": max_capex},
+        "frontier": frontier.to_dict(orient="records"),
+        "limitations": ["scenario assumptions, not observed market prices", "pre-feasibility screening, not bankable valuation", "economic efficiency does not override the selected technical firming gate"],
+    }
+    return dcc.send_string(json.dumps(payload, indent=2), "risk_value_scenario.json")
+
+
+@app.callback(
+    Output("downside-risk-note", "children"),
+    Output("downside-risk-kpi-grid", "children"),
+    Output("downside-risk-chart", "figure"),
+    Output("downside-stress-chart", "figure"),
+    Output("downside-risk-store", "data"),
+    Input("downside-risk-button", "n_clicks"),
+    State("portfolio-input", "value"), State("capacity-input", "value"),
+    State("wind-share-input", "value"), State("design-target-input", "value"),
+    State("design-reliability-input", "value"), State("risk-consequence-input", "value"),
+    State("risk-capex-input", "value"), State("risk-fixed-opex-input", "value"),
+    State("risk-variable-opex-input", "value"), State("risk-life-input", "value"),
+    State("risk-discount-input", "value"), State("risk-degradation-input", "value"),
+    State("risk-availability-input", "value"), State("downside-simulations-input", "value"),
+    State("downside-block-input", "value"), State("downside-seed-input", "value"),
+    prevent_initial_call=True,
+)
+def run_downside_risk(
+    _clicks, portfolio_type, capacity_mw, wind_share_pct, design_target_pct,
+    design_reliability_pct, consequence_value, reference_capex_million,
+    fixed_opex_million_per_year, variable_opex_per_mwh, asset_life_years,
+    discount_rate_pct, degradation_pct, availability_pct, simulations,
+    block_days, seed,
+):
+    try:
+        draws, summary, stress, selected, distributions = _downside_risk_analysis(
+            portfolio_type, capacity_mw, wind_share_pct, design_target_pct,
+            design_reliability_pct, consequence_value, reference_capex_million,
+            fixed_opex_million_per_year, variable_opex_per_mwh, asset_life_years,
+            discount_rate_pct, degradation_pct, availability_pct, simulations,
+            block_days, seed,
+        )
+    except (TypeError, ValueError, KeyError) as error:
+        message = f"Downside-risk analysis could not be calculated: {error}"
+        return message, [], _empty_figure(message), _empty_figure(message), None
+
+    cards = [
+        _kpi_card("P10 NPV", f"£{summary['npv_p10_gbp']/1e6:.2f}m", "Lower NPV quantile"),
+        _kpi_card("P50 NPV", f"£{summary['npv_p50_gbp']/1e6:.2f}m", "Median simulated NPV"),
+        _kpi_card("P90 NPV", f"£{summary['npv_p90_gbp']/1e6:.2f}m", "Upper NPV quantile"),
+        _kpi_card("Probability NPV < 0", f"{summary['probability_negative_npv_pct']:.1f}%", "Share of simulations with negative NPV"),
+        _kpi_card("95% CVaR loss", f"£{summary['cvar_expected_shortfall_gbp']/1e6:.2f}m", "Average investment loss in worst 5% tail"),
+        _kpi_card(
+            "Fail design gate",
+            f"{summary['probability_failing_firming_gate_pct']:.1f}%",
+            f"Bootstrap years failing {design_target_pct:.0f}% firming on {design_reliability_pct:.0f}% of days",
+        ),
+    ]
+    note = html.Div([
+        html.Div(
+            f"Selected design: {selected['power_mw']:.0f} MW / {selected['energy_mwh']:.0f} MWh ({selected['duration_hours']:.0f} h). "
+            f"The analysis resamples {int(summary['sample_days'])}-day years in {int(summary['block_days'])}-day contiguous historical blocks using seed {int(summary['seed'])}.",
+            className="scenario-note-line",
+        ),
+        html.Div(
+            "Scenario multipliers are triangular and independently sampled across consequence value, CAPEX, OPEX, availability and degradation. "
+            "Chronological forecast-error dependence is retained within the sampled day blocks. Conditional on the sampled availability fraction, daily outage states are independently drawn; cross-parameter correlations are not modelled.",
+            className="scenario-note-line uncertainty-line",
+        ),
+        html.Div(
+            "Loss convention: investment loss = -NPV. These are pre-feasibility uncertainty results based on transparent assumptions, not calibrated market distributions or a bankable valuation.",
+            className="scenario-note-line",
+        ),
+    ])
+    payload = {
+        "schema_version": "1.0",
+        "stage": "6B_quantitative_downside_risk",
+        "selected_design": {
+            "power_mw": float(selected["power_mw"]),
+            "duration_hours": float(selected["duration_hours"]),
+            "energy_mwh": float(selected["energy_mwh"]),
+        },
+        "summary": summary,
+        "distributions": distributions,
+        "stress_scenarios": stress.to_dict(orient="records"),
+        "simulation_settings": {
+            "simulations": int(simulations), "block_days": int(block_days), "seed": int(seed),
+        },
+    }
+    return note, cards, _npv_distribution_figure(draws, summary), _stress_scenario_figure(stress), payload
+
+
+@app.callback(
+    Output("downside-risk-download", "data"),
+    Input("downside-risk-download-button", "n_clicks"),
+    State("downside-risk-store", "data"),
+    prevent_initial_call=True,
+)
+def download_downside_risk(_clicks, payload):
+    if not payload:
+        return no_update
+    return dcc.send_string(
+        json.dumps(payload, indent=2), "downside_risk_summary.json"
+    )
 
 
 @app.callback(
