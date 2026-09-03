@@ -177,6 +177,7 @@ def build_models_data_validation_guide(
             html.Li("Stage 14 model selection uses development OOF only. Locked Apr–Jun 2026 metrics are recorded before the production conformal-width calibration is frozen."),
             html.Li("Battery equations, reserve rules, market value, service stacking, acceptance calibration and finance equations have automated tests."),
             html.Li("Market/acceptance evidence keeps explicit issue-time versus realised-scoring boundaries and stores compact manifests/checksums."),
+            html.Li("Stage 16 validates the imported V2 forecast schema, period completeness, target date and freshness before atomic publication; the prior valid bundle is archived before replacement."),
             html.Li("The app is presentation/inference. Long-running evidence builders and model training are reproducible scripts outside normal page callbacks."),
             html.Li("DST settlement days are handled as 46/48/50 periods; incomplete evidence is rejected or explicitly labelled partial where appropriate."),
         ], className="guide-limit-list"),

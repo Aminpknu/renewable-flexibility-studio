@@ -10,7 +10,7 @@
   "sha256": "1509bd507e9e68a9db3ae18abc16dd3d08c130319aff032002cfe789da836cde",
   "health_at_publication": {
     "status": "CURRENT",
-    "issue_age_hours": 35.828291496944445,
+    "issue_age_hours": 35.82792181083334,
     "target_lag_days": 0
   },
   "source_summary_file": "latest_forecast_summary.json"

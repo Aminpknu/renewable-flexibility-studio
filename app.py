@@ -27,6 +27,7 @@ from adapters.market_forecast_bundle import assess_market_forecast_bundle, valid
 from engine.battery import BatteryConfig, simulate_reactive_firming
 from engine.design_sizing import select_stable_design
 from engine.frontier import build_risk_value_frontier
+from engine.forecast_handoff import assess_forecast_freshness, select_forecast_bundle, validate_national_forecast
 from engine.sensitivity import build_capex_consequence_sensitivity
 from engine.value import (
     ValueAssumptions,
@@ -84,6 +85,9 @@ EXTENDED_SIZING_PATH = ROOT / "outputs" / "extended_sizing.csv"
 IMBALANCE_SUMMARY_PATH = ROOT / "outputs" / "imbalance_backtest_summary.json"
 DESIGN_GRID_PATH = ROOT / "outputs" / "design_sizing_grid_100mw.csv"
 LATEST_FORECAST_PATH = ROOT / "data" / "latest_forecast.csv"
+LATEST_FORECAST_MANIFEST_PATH = ROOT / "data" / "latest_forecast_manifest.json"
+LAST_VALID_FORECAST_PATH = ROOT / "data" / "last_valid_forecast.csv"
+LAST_VALID_FORECAST_MANIFEST_PATH = ROOT / "data" / "last_valid_forecast_manifest.json"
 LATEST_SPATIAL_FORECAST_PATH = ROOT / "data" / "latest_spatial_forecast.csv"
 LATEST_SPATIAL_DEMAND_PATH = ROOT / "data" / "latest_spatial_demand_forecast.csv"
 SPATIAL_DEMAND_MANIFEST_PATH = ROOT / "data" / "spatial_demand_manifest.json"
@@ -128,7 +132,13 @@ MULTISERVICE_SUMMARY = json.loads(MULTISERVICE_SUMMARY_PATH.read_text(encoding="
 STAGE13_SUMMARY = json.loads(STAGE13_SUMMARY_PATH.read_text(encoding="utf-8"))
 STAGE13_ACCEPTANCE_SUMMARY = json.loads(STAGE13_ACCEPTANCE_SUMMARY_PATH.read_text(encoding="utf-8"))
 STAGE13_PRICE_SUMMARY = json.loads(STAGE13_PRICE_SUMMARY_PATH.read_text(encoding="utf-8"))
-LATEST_FORECAST = load_latest_forecast(LATEST_FORECAST_PATH)
+ACTIVE_FORECAST_PATH, LATEST_FORECAST_MANIFEST, LATEST_FORECAST_HANDOFF = select_forecast_bundle(
+    LATEST_FORECAST_PATH, LATEST_FORECAST_MANIFEST_PATH,
+    LAST_VALID_FORECAST_PATH, LAST_VALID_FORECAST_MANIFEST_PATH,
+)
+LATEST_FORECAST = load_latest_forecast(ACTIVE_FORECAST_PATH)
+LATEST_FORECAST_METADATA = validate_national_forecast(LATEST_FORECAST)
+LATEST_FORECAST_HEALTH = assess_forecast_freshness(LATEST_FORECAST_METADATA)
 PROBABILISTIC_MODELS, PROBABILISTIC_METADATA = load_probabilistic_bundle(
     PROBABILISTIC_MODEL_PATH, PROBABILISTIC_METADATA_PATH
 )
@@ -4352,7 +4362,7 @@ def run_tomorrow_planning(
         ))
 
     note_parts.append(html.Div(
-        f"Renewable forecast target {LATEST_TARGET_DATE}; V2 bundle created {issue}. This is reserve planning only: no actual future generation or dispatch path is assumed.",
+        f"Renewable forecast target {LATEST_TARGET_DATE}; V2 bundle created {issue}. Handoff {LATEST_FORECAST_HANDOFF} / {LATEST_FORECAST_HEALTH['status']} (source rev {str(LATEST_FORECAST_MANIFEST.get('source_revision', 'unknown'))[:8]}, bundle {LATEST_FORECAST_MANIFEST.get('sha256', 'unknown')[:8]}). This is reserve planning only: no actual future generation or dispatch path is assumed.",
         className="scenario-note-line",
     ))
     if uncertainty.get("available"):
