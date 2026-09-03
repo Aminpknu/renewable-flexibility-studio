@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "source": "DESNZ Renewable Energy Planning Database (REPD), July 2026",
+  "source_url": "https://assets.publishing.service.gov.uk/media/6a6cbdc00c36759b5ccaa305/REPD_Publication_Q2_2026.csv",
+  "source_sha256": "84c1b5f958a934d8b4b86ec88f50bdcf43830ded7ff2efc27bffca0c98695035",
+  "licence": "UK Open Government Licence",
+  "scope": "Operational wind onshore/offshore and solar PV in England, Scotland and Wales",
+  "allocation": "Each REPD project is assigned to the nearest of the ten V2 representative weather locations using OSGB36 easting/northing converted to WGS84.",
+  "purpose": "Spatial weighting proxy only; NESO national embedded capacity remains authoritative for total MW.",
+  "limitations": [
+    "REPD tracks projects above 150 kW and had a 1 MW threshold before 2021.",
+    "The weights are not a complete census of embedded renewable capacity.",
+    "Nearest-zone assignment is a spatial proxy, not a network connection-zone model."
+  ],
+  "rows_used": 2118,
+  "proxy_capacity_mw": {
+    "solar": 10916.55,
+    "wind": 30303.65
+  }
+}

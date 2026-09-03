@@ -159,3 +159,13 @@ The QR clearing-price model uses an extended NESO EAC Results Summary history fr
 Across 242 eligible days, forecast MAE is **£2.09/MW/h** versus **£2.44/MW/h** for a previous-same-product/period lag. On the 90 V2 locked Apr–Jun dates, MAE is **£2.17/MW/h** versus **£2.55/MW/h** naive. The forecast-selected PQR/NQR split retains **93.1%** of perfect-information QR-only availability value (**£1.26m/yr** regime annualisation), versus **88.0% / £1.19m/yr** for the naive capacity signal.
 
 This result is deliberately labelled capacity-allocation capture, not acceptance-adjusted revenue. An aggregate diagnostic over **2,061,840** Apr–Jun 2026 QR Sell Orders finds that `priceLimit <= clearingPrice` has only **28.9% precision** for actual execution, with 497,315 rejected orders satisfying that simple threshold. The project therefore does not infer virtual-asset acceptance from clearing price alone.
+
+## Grid-context partial-day and spatial allocation validation
+
+The forecast-day NESO demand adapter now distinguishes a complete 46/48/50-period target day from a contiguous remaining-day suffix returned after delivery has started. A partial suffix is accepted only when settlement periods are contiguous and terminate at SP46/48/50; the UI labels it as remaining-day context instead of presenting it as a complete day.
+
+The companion V2 spatial bundle for 3 September 2026 contains **480 rows: 48 settlement periods × 10 zones**. Wind allocation shares and solar allocation shares each sum to one in every period, and the allocated wind/solar MW sums reconcile numerically to the national V2 forecast. The ten zones are Inverness, Edinburgh, Newcastle, Manchester, Leeds, Birmingham, Norwich, Cardiff, Bristol and London.
+
+Fixed spatial weights use operational wind/solar capacity in the July 2026 DESNZ REPD as a proxy, with projects assigned to the nearest V2 weather location. REPD limitations are explicit: it is not a complete census of embedded renewable capacity, and the zone output is therefore an allocation proxy rather than independently validated city generation.
+
+For the default 100 MW 50/50 virtual portfolio, the current London allocation has a **15.2 MW nameplate proxy** and the proportional Stage A battery share is **3.8 MW / 30.4 MWh (8 h)**. This is not independent local BESS sizing. After the grid/spatial packet, the full Flexibility Studio suite passes **135 tests**.

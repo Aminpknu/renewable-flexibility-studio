@@ -170,6 +170,14 @@ The reported **gross cash-out exposure** is \(\sum_t |C_t^{imb}|\). It is used a
 
 The frozen Elexon System Price/NIV archive covers all 450 historical target days and 21,600 settlement periods. A proper trading-value calculation still requires a contracted/day-ahead reference price and battery operating/degradation costs.
 
-## 12. Current exclusions
+## 12. Spatial renewable allocation zones
 
-The current release excludes intraday or optimised grid charging beyond the tracked pre-day SOC restoration, revenue stacking, a contracted/day-ahead price benchmark for trading P&L, detailed degradation, grid-connection limits, perfect-foresight optimisation, weather-ensemble probabilistic forecasts and site-specific network conditions. The historical evidence is national forecast-error behaviour scaled to a virtual portfolio, not an individual asset's error process.
+The authoritative V2 forecast remains a national embedded wind/solar forecast. For presentation and flexibility screening, the forecast-day bundle is reconciled into ten spatial zones matching the V2 weather sampling locations. Fixed technology weights come from operational wind/solar projects in the July 2026 DESNZ Renewable Energy Planning Database (REPD), assigned to the nearest V2 weather location. REPD is used only as a spatial proxy because its project threshold/history does not constitute a complete census of embedded capacity.
+
+Within each half-hour, wind raw allocation is proportional to the fixed wind-capacity proxy multiplied by the local 100 m wind-speed cubed; solar raw allocation is proportional to the fixed solar-capacity proxy multiplied by local instantaneous shortwave radiation. Each technology is then normalised across all ten zones so allocated MW sums exactly to the national V2 wind/solar forecast. If all weather signals are zero, the fixed capacity-proxy shares are used as the fallback.
+
+For a user-defined virtual portfolio, wind and solar nameplate are split by the selected portfolio mix and the same dynamic spatial shares are applied. The displayed city/zone BESS is the national Stage A MW/MWh design multiplied by that zone's fixed virtual-capacity proxy share. It is therefore an **indicative proportional allocation**, not an independently optimised city battery. No city-specific actual generation/error history, local demand, distribution-network constraint or local market price is inferred.
+
+## 13. Current exclusions
+
+The current release excludes a licensed contracted/day-ahead auction price benchmark, detailed cell-level degradation, site-specific grid-connection/network constraints, weather-ensemble probabilistic forecasts and independently validated city-level generation/error targets. The historical firming evidence remains national forecast-error behaviour scaled to a virtual portfolio. Spatial-zone outputs are reconciled allocation proxies, not individual-asset forecasts.

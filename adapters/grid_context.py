@@ -31,10 +31,24 @@ def fetch_day_ahead_demand(target_date: str, timeout_seconds: int = 20) -> pd.Da
     frame["national_demand_mw"] = pd.to_numeric(frame["nationalDemand"], errors="raise")
     frame["transmission_system_demand_mw"] = pd.to_numeric(frame["transmissionSystemDemand"], errors="raise")
     frame = frame.sort_values(["settlement_period", "publish_time_utc"]).drop_duplicates("settlement_period", keep="last")
-    count = frame["settlement_period"].nunique()
-    if count not in {46, 48, 50}:
-        raise ValueError(f"Elexon target date {target} has {count} settlement periods, expected 46/48/50.")
+    periods = frame["settlement_period"].astype(int).tolist()
+    count = len(periods)
+    if count in {46, 48, 50} and periods == list(range(1, count + 1)):
+        context_status = "complete_day"
+    else:
+        first_period = min(periods)
+        last_period = max(periods)
+        contiguous = periods == list(range(first_period, last_period + 1))
+        if not contiguous or last_period not in {46, 48, 50} or first_period <= 1:
+            raise ValueError(
+                f"Elexon target date {target} has an incomplete/non-contiguous demand series "
+                f"({count} periods, SP{first_period}-SP{last_period})."
+            )
+        context_status = "partial_remaining_day"
+    frame["grid_context_status"] = context_status
+    frame["grid_context_period_count"] = count
     return frame[[
         "settlement_period", "valid_time_utc", "publish_time_utc",
         "national_demand_mw", "transmission_system_demand_mw",
+        "grid_context_status", "grid_context_period_count",
     ]].reset_index(drop=True)

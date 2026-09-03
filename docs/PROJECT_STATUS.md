@@ -23,7 +23,8 @@
 - Stage B reserve-readiness planner: operator current SOC, rolling downward/upward energy requirements, safe starting-SOC band, minimum pre-day adjustment and critical risk windows;
 - guardrail that holds current SOC and reports reserve shortfall when no two-sided safe SOC band exists;
 - 420-day-per-portfolio prior-data-only validation of the Stage B policy;
-- live half-hourly GB National Demand Forecast context from Elexon/NESO;
+- live half-hourly GB National Demand Forecast context from Elexon/NESO, including explicitly labelled remaining-day partial forecasts after delivery starts;
+- ten-zone weather-informed spatial allocation of the national V2 forecast using DESNZ REPD capacity-proxy weights, with exact national reconciliation and proportional BESS-allocation proxy;
 - frozen 450-day Elexon System Price/Net Imbalance Volume archive aligned to all 21,600 V2 historical periods;
 - selected-day BSC-style imbalance settlement view before/after battery firming;
 - 450-day gross cash-out exposure and daily tail-risk benchmark, explicitly separated from profit;
