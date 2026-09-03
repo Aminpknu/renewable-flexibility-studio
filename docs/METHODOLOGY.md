@@ -114,7 +114,43 @@ The Apr–Jun period is a robustness regime, not a new sealed battery-design hol
 
 Durations ≤4 h are labelled short-duration BESS, 6–12 h extended-duration BESS, and >12 h long-duration storage territory. The renewable-only continuous-SOC analysis remains as a stress test showing what happens if grid SOC restoration is prohibited entirely.
 
-## 10. GB imbalance settlement exposure
+## 10. Forecast-day directional reserve and SOC planning
+
+Operational planning uses an **asymmetric signed-residual range**, separate from the symmetric historical-review band. For each forecast level, up to 600 earlier out-of-sample residuals with the closest forecast capacity factor are selected from a 180-day lookback window (minimum 30 prior dates). With residual \(r=CF^{actual}-\widehat{CF}\), the lower and upper bounds use conservative empirical q10 and q90 residual quantiles:
+
+\[
+L_t=\widehat G_t+q_{0.10}(r),\qquad U_t=\widehat G_t+q_{0.90}(r)
+\]
+
+with physical clipping to [0, portfolio capacity]. This is directional empirical reserve evidence, not an ECMWF ensemble or dedicated probabilistic P10/P90 forecast.
+
+The instantaneous downward and upward requirements are:
+
+\[
+d_t=\max(\widehat G_t-L_t,0),\qquad u_t=\max(U_t-\widehat G_t,0)
+\]
+
+The reserve horizon \(H\) equals the installed battery duration (capped at the remaining forecast day). For every possible window start, the planner sums half-hourly requirements over the following \(H\) hours. Let \(D^*\) be the largest rolling downward-output energy requirement and \(U^*\) the largest rolling upward-input energy requirement. The stored-energy requirements are then:
+
+\[
+E^{down}_{req}=D^*/\eta_d,\qquad E^{up}_{req}=U^*\eta_c
+\]
+
+For battery stored-energy limits \(E_{min}\) and \(E_{max}\), the energy-feasible starting-SOC band is:
+
+\[
+E_{safe,low}=E_{min}+E^{down}_{req}
+\]
+
+\[
+E_{safe,high}=E_{max}-E^{up}_{req}
+\]
+
+If \(E_{safe,low}\le E_{safe,high}\), the recommended starting SOC is the **minimum adjustment** from the operator-entered current SOC into this band. If current SOC is already inside the band, it is held. Grid import required to raise SOC is \(\Delta E/\eta_c\); potential export when lowering SOC is \(\Delta E\eta_d\). Peak downward/upward MW requirements are also compared with installed battery power.
+
+If the two-sided energy envelope is infeasible (\(E_{safe,low}>E_{safe,high}\)), no SOC can fully cover both directions. The planner therefore **holds current SOC and reports the reserve-coverage shortfall** instead of forcing a risk-balanced SOC shift that has not been validated. The output is reserve readiness and pre-day preparation guidance; no future actual generation or battery dispatch trajectory is simulated.
+
+## 11. GB imbalance settlement exposure
 
 For each historical settlement period, the V2 point forecast is treated as an illustrative contracted/scheduled export. With a 30-minute interval, the portfolio energy imbalance is:
 
@@ -134,6 +170,6 @@ The reported **gross cash-out exposure** is \(\sum_t |C_t^{imb}|\). It is used a
 
 The frozen Elexon System Price/NIV archive covers all 450 historical target days and 21,600 settlement periods. A proper trading-value calculation still requires a contracted/day-ahead reference price and battery operating/degradation costs.
 
-## 11. Current exclusions
+## 12. Current exclusions
 
 The current release excludes intraday or optimised grid charging beyond the tracked pre-day SOC restoration, revenue stacking, a contracted/day-ahead price benchmark for trading P&L, detailed degradation, grid-connection limits, perfect-foresight optimisation, weather-ensemble probabilistic forecasts and site-specific network conditions. The historical evidence is national forecast-error behaviour scaled to a virtual portfolio, not an individual asset's error process.

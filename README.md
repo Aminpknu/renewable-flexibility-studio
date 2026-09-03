@@ -16,7 +16,8 @@ A user can:
 - compare forecast error before and after the battery;
 - inspect a leakage-safe rolling **80% prediction interval** and see which historical periods fell outside the expected range;
 - size a battery for **future operation** using a 2,541-cell stability grid across 450 out-of-sample days, with 80/90/95% firming and reliability targets;
-- inspect the latest **tomorrow** V2 renewable forecast as a planning schedule with a future uncertainty band;
+- inspect the latest V2 **forecast-day** renewable schedule with a directional empirical uncertainty range;
+- carry the selected future battery into an operational reserve planner that checks current SOC, calculates a safe starting-SOC band, recommends only the minimum necessary pre-day adjustment, and identifies critical downside/upside reserve windows;
 - place that schedule in real GB grid context using the official half-hourly NESO National Demand Forecast served by Elexon Insights;
 - translate each historical forecast deviation into a BSC-style imbalance volume and official Elexon System-Price cashflow, before and after battery firming;
 - inspect gross imbalance-settlement exposure separately from signed settlement cashflow, without labelling exposure reduction as profit;
@@ -104,6 +105,16 @@ For the default **90% firming / 90% of days** gate on a 100 MW portfolio:
 
 Power and energy scale linearly with portfolio nameplate capacity; duration and percentage performance do not. Mixed-portfolio evidence is precomputed at every 5% wind-share value supported by the UI. Durations above 12 h are labelled **long-duration storage territory** rather than conventional short-duration BESS.
 
+## Forecast-day reserve and SOC planning
+
+The Stage B planner carries the selected future design into the latest V2 forecast day. It builds an asymmetric empirical **q10–q90 signed-residual range** using only earlier out-of-sample dates, then converts the distance below/above the scheduled export into downward discharge-reserve and upward charging-headroom requirements.
+
+Reserve energy is evaluated over a rolling horizon equal to the installed battery duration. These requirements define an energy-feasible starting-SOC band. If the operator-entered current SOC is already inside that band, the planner recommends **hold current SOC**. If it is outside, the planner moves only to the nearest safe boundary and reports the grid energy needed for that preparation. If no starting SOC can cover both directional energy requirements simultaneously, it does not force an unvalidated compromise: it holds current SOC and reports the reserve-coverage shortfall.
+
+For the default 100 MW 50/50 portfolio and 25 MW / 200 MWh (8 h) design, the current 3 September forecast gives a safe starting-SOC band around **33.6–76.6%**; therefore a current 50% SOC requires no adjustment. The largest rolling downside requirement is about **44.8 MWh** and the largest upward headroom requirement about **28.3 MWh**. This is a reserve-readiness calculation, not a simulated future dispatch trajectory.
+
+A formal prior-data-only backtest covers 420 eligible dates. At a 50% baseline SOC, the solar and mixed designs remain inside their calculated safe bands on all eligible dates, so the conservative policy makes no unnecessary adjustments. The directional interval achieves about **88.7% solar, 83.3% mixed and 81.9% wind coverage** on Apr–Jun 2026. Wind is explicitly flagged when its 24 h two-sided energy envelope cannot fit inside the installed usable SOC range.
+
 ## Renewable-only continuous-SOC stress test
 
 For a 100 MW virtual portfolio with a 25 MW / 50 MWh battery, 90% round-trip efficiency, 10–90% SOC limits and no grid charging, continuous operation absorbs about **33.5% of wind**, **50.2% of solar** and **44.4% of 50/50 mixed** absolute forecast-deviation energy. SOC ends at its minimum bound, showing that energy availability and conversion losses matter across long horizons.
@@ -162,9 +173,9 @@ A valid GB target day has 46, 48 or 50 settlement periods. Duplicate or incomple
 
 ### Release 3
 
-- P10/P50/P90 forecast bundles;
-- uncertainty-aware initial SOC and reserve allocation;
-- upgrade the current Tomorrow planning band to dedicated P10/P50/P90 or weather-ensemble probabilistic forecasts.
+- dedicated P10/P50/P90 forecast bundles or weather-ensemble probabilistic forecasts;
+- compare the current residual-based directional reserve envelope with true probabilistic forecast tails;
+- refine forecast-day reserve planning with price-aware preparation timing after the economics layer is defined.
 
 ### Release 4
 

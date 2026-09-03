@@ -27,3 +27,5 @@ data/*.parquet
 !data/elexon_system_prices_manifest.json
 !outputs/design_sizing_grid_100mw.csv
 !outputs/design_sizing_grid_manifest.json
+!outputs/reserve_planning_validation.json
+!outputs/reserve_planning_daily.csv
