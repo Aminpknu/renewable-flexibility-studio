@@ -17,6 +17,7 @@ from adapters.forecast_data import available_dates, load_historical_predictions,
 from adapters.grid_context import fetch_day_ahead_demand
 from adapters.imbalance_settlement import load_system_price_history, select_system_prices
 from adapters.latest_forecast import latest_target_date, load_latest_forecast
+from adapters.market_reference import load_market_index_history, select_market_index_prices
 from engine.battery import BatteryConfig, simulate_reactive_firming
 from engine.design_sizing import select_stable_design
 from engine.frontier import build_risk_value_frontier
@@ -28,6 +29,11 @@ from engine.value import (
 )
 from engine.imbalance import apply_imbalance_settlement, summarise_imbalance_settlement
 from engine.metrics import calculate_firming_metrics
+from engine.market_optimisation import (
+    SettlementOptimisationConfig, WholesaleArbitrageConfig,
+    optimise_firming_and_arbitrage, optimise_settlement_aware_firming,
+    optimise_wholesale_arbitrage,
+)
 from engine.monte_carlo import (
     MonteCarloConfig, MonteCarloDistributions, TriangularMultiplier,
     build_daily_value_evidence, run_value_monte_carlo,
@@ -51,12 +57,16 @@ IMBALANCE_SUMMARY_PATH = ROOT / "outputs" / "imbalance_backtest_summary.json"
 DESIGN_GRID_PATH = ROOT / "outputs" / "design_sizing_grid_100mw.csv"
 LATEST_FORECAST_PATH = ROOT / "data" / "latest_forecast.csv"
 SYSTEM_PRICES_PATH = ROOT / "data" / "elexon_system_prices.csv"
+MARKET_INDEX_PATH = ROOT / "data" / "elexon_market_index_prices.csv"
+MARKET_BACKTEST_PATH = ROOT / "outputs" / "market_optimisation" / "default_mixed_summary.json"
 HISTORICAL_DATA = load_historical_predictions(DATA_PATH)
 SYSTEM_PRICES = load_system_price_history(SYSTEM_PRICES_PATH)
+MARKET_INDEX_PRICES = load_market_index_history(MARKET_INDEX_PATH)
 LATEST_FORECAST = load_latest_forecast(LATEST_FORECAST_PATH)
 LATEST_TARGET_DATE = latest_target_date(LATEST_FORECAST)
 FULL_BACKTEST = json.loads(FULL_BACKTEST_PATH.read_text(encoding="utf-8"))
 IMBALANCE_BACKTEST = json.loads(IMBALANCE_SUMMARY_PATH.read_text(encoding="utf-8"))
+MARKET_BACKTEST = json.loads(MARKET_BACKTEST_PATH.read_text(encoding="utf-8"))
 EXTENDED_SIZING = pd.read_csv(EXTENDED_SIZING_PATH)
 DESIGN_GRID = load_design_grid(DESIGN_GRID_PATH)
 DATE_OPTIONS = available_dates(HISTORICAL_DATA)
@@ -695,6 +705,163 @@ def _downside_risk_analysis(
     }
     return draws, summary, stress, selected, distribution_metadata
 
+def _market_vwap(frame: pd.DataFrame) -> float:
+    volume = float(frame["market_index_volume_mwh"].sum())
+    if volume <= 0:
+        raise ValueError("Market Index volume must be positive for a daily VWAP.")
+    return float(
+        (frame["market_index_price_gbp_per_mwh"] * frame["market_index_volume_mwh"]).sum()
+        / volume
+    )
+
+
+def _reactive_market_value(
+    portfolio: pd.DataFrame,
+    system_prices: pd.DataFrame,
+    battery: BatteryConfig,
+    restoration_price: float,
+    throughput_cost: float,
+) -> tuple[pd.DataFrame, dict[str, float]]:
+    simulation = simulate_reactive_firming(portfolio, battery)
+    settlement = apply_imbalance_settlement(simulation, system_prices)
+    summary = summarise_imbalance_settlement(settlement)
+    ending_soc = float(simulation["soc_end_mwh"].iloc[-1])
+    if ending_soc < battery.initial_soc_mwh:
+        restore_import = (battery.initial_soc_mwh - ending_soc) / battery.charge_efficiency
+        restore_export = 0.0
+    else:
+        restore_import = 0.0
+        restore_export = (ending_soc - battery.initial_soc_mwh) * battery.discharge_efficiency
+    restoration_net_cost = (restore_import - restore_export) * restoration_price
+    throughput = float(
+        (simulation["charge_mw"].sum() + simulation["discharge_mw"].sum())
+        * battery.interval_hours
+    )
+    throughput_cost_gbp = throughput * throughput_cost
+    settlement_improvement = (
+        float(summary["signed_cashflow_before_gbp"])
+        - float(summary["signed_cashflow_after_gbp"])
+    )
+    before = float(summary["absolute_imbalance_before_mwh"])
+    after = float(summary["absolute_imbalance_after_mwh"])
+    return settlement, {
+        "error_reduction_pct": 100.0 * (1.0 - after / before) if before > 0 else 0.0,
+        "settlement_value_improvement_gbp": settlement_improvement,
+        "restoration_net_cost_gbp": float(restoration_net_cost),
+        "throughput_mwh": throughput,
+        "throughput_cost_gbp": throughput_cost_gbp,
+        "net_value_improvement_gbp": float(
+            settlement_improvement - restoration_net_cost - throughput_cost_gbp
+        ),
+        "restore_import_mwh": float(restore_import),
+        "restore_export_mwh": float(restore_export),
+    }
+
+
+def _market_day_analysis(
+    date_value: str,
+    portfolio_type: str,
+    capacity_mw: float,
+    wind_share_pct: float,
+    design_target_pct: float,
+    design_reliability_pct: float,
+    throughput_cost: float,
+):
+    grid = scaled_design_grid(
+        DESIGN_GRID, portfolio_type, float(capacity_mw), float(wind_share_pct)
+    )
+    selected = select_stable_design(grid, design_target_pct, design_reliability_pct)
+    if selected is None:
+        raise ValueError("No stable future design exists for the selected design gate.")
+    source_day = select_date(HISTORICAL_DATA, date_value)
+    portfolio = build_virtual_portfolio(
+        source_day, portfolio_type, float(capacity_mw),
+        wind_share=float(wind_share_pct) / 100.0,
+    )
+    system = select_system_prices(SYSTEM_PRICES, date_value)
+    market = select_market_index_prices(MARKET_INDEX_PRICES, date_value)
+    restoration_price = _market_vwap(market)
+    battery = BatteryConfig(
+        power_mw=float(selected["power_mw"]),
+        duration_hours=float(selected["duration_hours"]),
+        round_trip_efficiency=0.90,
+        initial_soc_fraction=0.50,
+    )
+    market_frame, settlement_aware = optimise_settlement_aware_firming(
+        portfolio, system, battery,
+        SettlementOptimisationConfig(restoration_price, float(throughput_cost)),
+    )
+    _reactive_frame, reactive = _reactive_market_value(
+        portfolio, system, battery, restoration_price, float(throughput_cost)
+    )
+    arbitrage_frame, arbitrage = optimise_wholesale_arbitrage(
+        market, battery, WholesaleArbitrageConfig(float(throughput_cost))
+    )
+    coopt_frame, coopt = optimise_firming_and_arbitrage(
+        portfolio, system, market, battery, float(throughput_cost)
+    )
+    return {
+        "selected": selected,
+        "battery": battery,
+        "market": market,
+        "system": system,
+        "market_frame": market_frame,
+        "arbitrage_frame": arbitrage_frame,
+        "coopt_frame": coopt_frame,
+        "restoration_price": restoration_price,
+        "settlement_aware": settlement_aware,
+        "reactive": reactive,
+        "arbitrage": arbitrage,
+        "coopt": coopt,
+    }
+
+
+def _market_optimisation_figure(analysis: dict[str, Any]) -> go.Figure:
+    market_frame = analysis["market_frame"]
+    market = analysis["market"]
+    coopt = analysis["coopt_frame"]
+    figure = make_subplots(
+        rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.12,
+        row_heights=[0.45, 0.55],
+    )
+    figure.add_trace(go.Scatter(
+        x=market_frame["valid_time_utc"],
+        y=market_frame["system_price_gbp_per_mwh"],
+        mode="lines", name="Elexon System Price",
+    ), row=1, col=1)
+    figure.add_trace(go.Scatter(
+        x=market_frame["valid_time_utc"],
+        y=market["market_index_price_gbp_per_mwh"],
+        mode="lines", name="APX Market Index Price",
+        line={"dash": "dash"},
+    ), row=1, col=1)
+    figure.add_trace(go.Scatter(
+        x=market_frame["valid_time_utc"],
+        y=market_frame["forecast_error_mw"],
+        mode="lines", name="Original forecast error",
+    ), row=2, col=1)
+    figure.add_trace(go.Scatter(
+        x=market_frame["valid_time_utc"],
+        y=market_frame["market_optimised_residual_error_mw"],
+        mode="lines", name="Settlement-aware residual",
+    ), row=2, col=1)
+    figure.add_trace(go.Scatter(
+        x=coopt["valid_time_utc"],
+        y=coopt["coopt_residual_error_mw"],
+        mode="lines", name="Co-optimised residual",
+        line={"dash": "dot"},
+    ), row=2, col=1)
+    figure.add_hline(y=0.0, line_dash="dash", row=2, col=1)
+    figure.update_yaxes(title_text="£/MWh", row=1, col=1)
+    figure.update_yaxes(title_text="MW", row=2, col=1)
+    figure.update_xaxes(title_text="Settlement time (UTC)", row=2, col=1)
+    figure.update_layout(
+        hovermode="x unified", height=620,
+        margin=dict(l=60, r=20, t=55, b=50),
+        legend={"orientation": "h", "y": 1.02, "yanchor": "bottom", "x": 0},
+    )
+    return figure
+
 def _tomorrow_planning_data(
     portfolio_type: str,
     capacity_mw: float,
@@ -1240,6 +1407,48 @@ app.layout = html.Div(
                         ),
                     ],
                     className="download-section",
+                ),
+                html.Section(
+                    [
+                        html.H2("GB market-linked battery optimisation"),
+                        html.P(
+                            "This section uses actual historical Elexon System Price plus APX Market Index Data to test how the selected battery would allocate scarce MW and SOC when financial value matters. These are ex-post perfect-information benchmarks, not deployable trading forecasts.",
+                            className="section-copy",
+                        ),
+                        html.P(
+                            "APX Market Index Price is an open short-term GB wholesale reference from Elexon. It is not labelled as a day-ahead auction price. A separate validated contract is ready for a future licensed Nord Pool/EPEX day-ahead feed without changing the optimiser architecture.",
+                            className="section-copy",
+                        ),
+                        html.Div(
+                            [
+                                html.Div([
+                                    html.Label("Battery throughput / degradation cost (£/MWh)"),
+                                    dcc.Input(
+                                        id="market-throughput-cost-input", type="number",
+                                        min=0, step=0.5, value=2.0,
+                                    ),
+                                ]),
+                            ],
+                            className="design-controls",
+                        ),
+                        html.Button(
+                            "Run market optimisation", id="market-optimisation-button",
+                            n_clicks=0, className="primary-button",
+                        ),
+                        html.Div(id="market-optimisation-note", className="scenario-note"),
+                        html.Div(id="market-optimisation-kpi-grid", className="kpi-grid"),
+                        html.Div("Market prices and financially selected residual error", className="chart-title"),
+                        html.Div(
+                            "System Price is the realised imbalance-settlement price. APX Market Index Price is the realised short-term wholesale reference. The lower panel shows that market optimisation deliberately leaves some forecast error unfirmed when battery energy has a more valuable use.",
+                            className="chart-subtitle",
+                        ),
+                        dcc.Graph(
+                            id="market-optimisation-chart",
+                            figure=_empty_figure("Select a historical day and run the market optimisation."),
+                            config={"displaylogo": False},
+                        ),
+                    ],
+                    className="download-section market-optimisation-section",
                 ),
                 html.Section(
                     [
@@ -1803,6 +2012,104 @@ def update_imbalance_settlement(stored: str | None, date_value: str):
     ])
     return note, cards, _imbalance_figure(settled)
 
+
+@app.callback(
+    Output("market-optimisation-note", "children"),
+    Output("market-optimisation-kpi-grid", "children"),
+    Output("market-optimisation-chart", "figure"),
+    Input("market-optimisation-button", "n_clicks"),
+    State("date-input", "value"),
+    State("portfolio-input", "value"),
+    State("capacity-input", "value"),
+    State("wind-share-input", "value"),
+    State("design-target-input", "value"),
+    State("design-reliability-input", "value"),
+    State("market-throughput-cost-input", "value"),
+)
+def run_market_optimisation(
+    _clicks: int,
+    date_value: str,
+    portfolio_type: str,
+    capacity_mw: float,
+    wind_share_pct: float,
+    design_target_pct: float,
+    design_reliability_pct: float,
+    throughput_cost: float,
+):
+    try:
+        analysis = _market_day_analysis(
+            date_value, portfolio_type, capacity_mw, wind_share_pct,
+            design_target_pct, design_reliability_pct, throughput_cost,
+        )
+    except (TypeError, ValueError, KeyError, RuntimeError) as error:
+        message = f"Market optimisation could not be calculated: {error}"
+        return message, [], _empty_figure(message)
+    selected = analysis["selected"]
+    settlement_aware = analysis["settlement_aware"]
+    reactive = analysis["reactive"]
+    arbitrage = analysis["arbitrage"]
+    coopt = analysis["coopt"]
+    cards = [
+        _kpi_card(
+            "Installed design",
+            f"{selected['power_mw']:.0f} MW / {selected['energy_mwh']:.0f} MWh",
+            "Selected by the current Stage A technical design gate",
+        ),
+        _kpi_card(
+            "APX market VWAP",
+            f"£{analysis['restoration_price']:.2f}/MWh",
+            "Open Elexon short-term wholesale reference; not day-ahead auction price",
+        ),
+        _kpi_card(
+            "Settlement-aware value",
+            f"£{settlement_aware['net_settlement_value_improvement_gbp']:,.0f}",
+            "Selected-day improvement after SOC restoration and throughput cost",
+        ),
+        _kpi_card(
+            "Wholesale arbitrage",
+            f"£{arbitrage['net_arbitrage_margin_gbp']:,.0f}",
+            "Perfect-foresight Market Index arbitrage with terminal SOC restored",
+        ),
+        _kpi_card(
+            "Co-optimised value",
+            f"£{coopt['net_cooptimised_value_gbp']:,.0f}",
+            "Shared MW/SOC allocated jointly between firming and wholesale arbitrage",
+        ),
+        _kpi_card(
+            "Co-opt error reduction",
+            f"{coopt['error_reduction_pct']:.1f}%",
+            "Forecast-error energy still absorbed after financial co-optimisation",
+        ),
+        _kpi_card(
+            "Reactive firming value",
+            f"£{reactive['net_value_improvement_gbp']:,.0f}",
+            f"Error-minimising strategy absorbs {reactive['error_reduction_pct']:.1f}% on this day",
+        ),
+        _kpi_card(
+            "Settlement-aware error reduction",
+            f"{settlement_aware['error_reduction_pct']:.1f}%",
+            "Lower physical firming can be financially preferable",
+        ),
+    ]
+    annual_coopt = float(MARKET_BACKTEST.get("cooptimised_annualised_net_value_gbp", 0.0))
+    annual_arb = float(MARKET_BACKTEST.get("arbitrage_annualised_net_margin_gbp", 0.0))
+    annual_settlement = float(MARKET_BACKTEST.get("market_aware_annualised_net_value_improvement_gbp", 0.0))
+    annual_reactive = float(MARKET_BACKTEST.get("reactive_annualised_net_value_improvement_gbp", 0.0))
+    note = html.Div([
+        html.Div(
+            f"Historical target {date_value}. This is an ex-post perfect-information benchmark: realised renewable error, System Price and Market Index Price are all known to the optimiser. It is an upper-bound diagnostic, not an executable day-ahead trading instruction.",
+            className="scenario-note-line uncertainty-warning",
+        ),
+        html.Div(
+            f"Frozen 450-day default reference at £{MARKET_BACKTEST['throughput_cost_gbp_per_mwh']:.0f}/MWh throughput cost: co-optimised value £{annual_coopt/1e6:.2f}m/year; wholesale-arbitrage-only £{annual_arb/1e6:.2f}m/year; settlement-aware firming £{annual_settlement/1e6:.2f}m/year; error-minimising reactive firming £{annual_reactive/1e6:.2f}m/year.",
+            className="scenario-note-line",
+        ),
+        html.Div(
+            "The co-optimiser does not add separate revenue streams independently: firming and arbitrage share one physical battery power limit, SOC trajectory and throughput budget. A licensed day-ahead auction feed can later replace or complement the Market Index reference through the prepared data contract.",
+            className="scenario-note-line",
+        ),
+    ])
+    return note, cards, _market_optimisation_figure(analysis)
 
 @app.callback(
     Output("tomorrow-note", "children"),

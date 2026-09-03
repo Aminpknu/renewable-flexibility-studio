@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "source": "Elexon Insights Market Index Data",
+  "endpoint": "balancing/pricing/market-index",
+  "data_provider": "APXMIDP",
+  "semantic_label": "short-term GB wholesale market reference; not day-ahead auction price",
+  "target_days": 450,
+  "rows": 21600,
+  "target_date_start": "2025-04-01",
+  "target_date_end": "2026-06-30",
+  "sha256": "a040e79fddb1200a44afa00664fc2e30d82d7b368367ec68eaacc9b44ddf2a11",
+  "sha256_normalisation": "UTF-8 text with LF line endings",
+  "public_api_key_required": false
+}

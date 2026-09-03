@@ -78,3 +78,49 @@ def test_stage6b_default_summary_artifact() -> None:
     assert relative and max(relative) < 2.0
     stress_names = {row["scenario"] for row in summary["stress_scenarios"]}
     assert {"poor_forecast_accuracy", "derating_availability_loss", "adverse_cost_value", "combined_downside"}.issubset(stress_names)
+
+
+def test_elexon_market_index_archive_integrity() -> None:
+    import hashlib
+    import pandas as pd
+
+    csv_path = ROOT / "data" / "elexon_market_index_prices.csv"
+    manifest = json.loads(
+        (ROOT / "data" / "elexon_market_index_prices_manifest.json").read_text(encoding="utf-8")
+    )
+    frame = pd.read_csv(csv_path)
+    assert manifest["schema_version"] == "1.0"
+    assert manifest["data_provider"] == "APXMIDP"
+    assert manifest["target_days"] == 450
+    assert manifest["rows"] == 21600
+    assert "not day-ahead" in manifest["semantic_label"]
+    assert len(frame) == 21600
+    assert frame["settlement_date"].nunique() == 450
+    assert not frame.duplicated(["settlement_date", "settlement_period", "market_index_provider"]).any()
+    canonical = csv_path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == manifest["sha256"]
+
+
+def test_market_optimisation_evidence_artifact() -> None:
+    import pandas as pd
+
+    summary = json.loads(
+        (ROOT / "outputs" / "market_optimisation" / "default_mixed_summary.json")
+        .read_text(encoding="utf-8")
+    )
+    daily = pd.read_csv(
+        ROOT / "outputs" / "market_optimisation" / "default_mixed_daily.csv"
+    )
+    assert summary["schema_version"] == "1.0"
+    assert summary["stage"] == "9_market_optimisation_packet1"
+    assert summary["perfect_information"] is True
+    assert summary["observed_days"] == 450
+    assert "not day-ahead" in summary["market_reference"]["semantic_label"]
+    assert len(daily) == 450
+    assert daily["settlement_date"].nunique() == 450
+    assert summary["cooptimised_total_net_value_gbp"] >= (
+        summary["arbitrage_total_net_margin_gbp"] - 1e-5
+    )
+    assert summary["mean_daily_error_reduction_pct_reactive"] > (
+        summary["mean_daily_error_reduction_pct_market_aware"]
+    )

@@ -111,3 +111,13 @@ The table uses the conservative start-at-minimum-SOC sensitivity so no one-time 
 The Dash application was launched on the user's workstation with `data/historical_backtest.csv`. The root endpoint and `/_dash-layout` both returned HTTP 200; the rendered layout included dates from 1 April 2025 through 30 June 2026. The server was then terminated cleanly.
 
 The original 1 June 2025 scenario remains only as a compact learning/unit-test fixture and should not be used as the headline sizing result.
+
+## Stage 9 market-optimisation validation
+
+The public Elexon APX Market Index archive covers all 450 V2 target dates and 21,600 settlement periods, including 46/50-period daylight-saving days. The archive is checksum-locked and aligned by settlement date/period with the historical forecast and System Price bundles.
+
+The market optimiser is tested against hand-calculated cases for price-priority firming, terminal SOC restoration, throughput-cost switching, negative wholesale prices, wholesale arbitrage, mutually exclusive charging/discharging and shared MW/SOC constraints in the firming/arbitrage co-optimiser. The full repository suite passes after the market layer is installed.
+
+For the default 100 MW 50/50 portfolio and Stage A 25 MW / 200 MWh design, using a £2/MWh scenario throughput cost, the 450-day ex-post evidence annualises to approximately **-£0.061m reactive firming**, **£0.270m settlement-aware firming**, **£1.904m wholesale arbitrage-only**, and **£2.049m co-optimised firming plus arbitrage**. Mean daily physical error reduction is about **98.3% reactive**, **47.8% settlement-aware**, and **40.1% co-optimised**.
+
+These market values use realised forecast error and/or realised prices and are therefore perfect-information upper-bound evidence. APX Market Index Price is labelled a short-term wholesale reference, not a day-ahead auction price. No public result is described as deployable revenue until an issue-time-correct price forecast or authorised day-ahead price feed is connected.

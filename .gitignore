@@ -31,3 +31,6 @@ data/*.parquet
 !outputs/reserve_planning_daily.csv
 !outputs/risk_value/
 !outputs/risk_value/*.json
+!outputs/market_optimisation/
+!outputs/market_optimisation/*.json
+!outputs/market_optimisation/*.csv
