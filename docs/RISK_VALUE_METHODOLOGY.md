@@ -82,3 +82,36 @@ Candidate CAPEX and fixed OPEX are scaled in proportion to MWh relative to the S
 Expected availability is a Stage 6A scalar assumption: annual avoided exposure and throughput are multiplied by the entered availability fraction, while upfront CAPEX and fixed OPEX remain. This approximates randomly distributed expected unavailability only. Explicit outage timing, correlated derating and outage blocks belong to Stage 6B stress/Monte Carlo analysis.
 
 The interface also shows a CAPEX/consequence sensitivity heatmap and downloads all portfolio, design-gate, cost, lifetime, degradation and availability assumptions with the selected results and frontier. Default monetary values are illustrative starting inputs only and are not sourced market prices or bankable project estimates.
+## Stage 6B: quantitative downside risk
+
+Stage 6B resamples the same daily-restored-SOC historical BESS evidence used by the practical sizing benchmark. It never samples individual half-hours independently. Each simulated year is assembled from contiguous circular blocks of complete historical settlement days, so 46/48/50-period DST days remain intact and short-run forecast-error regimes remain grouped.
+
+For each Monte Carlo run, transparent triangular scenario distributions are applied to consequence value, CAPEX, OPEX, expected availability and degradation. These parameter multipliers are sampled independently. Cross-parameter correlations are therefore **not** claimed. Given the sampled availability fraction, complete simulated days are independently marked available/unavailable; unavailable days receive zero BESS firming benefit and zero throughput. This makes availability affect both economic value and the probability of meeting the selected daily-firming/reliability gate.
+
+The default distribution multipliers are:
+
+```text
+consequence value: 0.70 / 1.00 / 1.30
+CAPEX:             0.85 / 1.00 / 1.20
+OPEX:              0.90 / 1.00 / 1.15
+degradation:       0.75 / 1.00 / 1.25
+availability:      entered value ±5 percentage points, clipped to [0,1]
+```
+NPV uncertainty is reported as P10/P50/P90 plus the probability of NPV < 0. Tail risk uses the explicit convention:
+
+```text
+investment loss = -NPV
+```
+
+The 95% VaR is the 95th percentile of this loss distribution. The 95% CVaR / Expected Shortfall is the average loss at or beyond that threshold and is the preferred tail-severity metric.
+
+The technical gate is also resampled. For each simulated year the share of days meeting the selected firming target is calculated after availability outages. The reported probability of failing the firming gate is the share of Monte Carlo years in which this day-reliability percentage falls below the selected design reliability.
+
+Named deterministic stresses cover poor forecast performance, availability/derating loss, adverse cost/value assumptions and a combined downside case. They are scenario tests, not calibrated event probabilities.
+### Default Stage 6B evidence
+
+For the default 100 MW 50/50 portfolio, 90% firming / 90%-of-days gate and illustrative Stage 6A monetary assumptions, 2,000-run comparisons show an important technical/economic trade-off. The 25 MW / 50 MWh option has a positive median NPV under these assumptions but fails the 90/90 technical gate in every bootstrap year. The selected 25 MW / 200 MWh design remains technically much stronger, but its median NPV is negative and daily availability uncertainty makes the 90/90 gate fail in a material share of bootstrap years. This is exactly why technical sufficiency and investment value are reported separately.
+
+For the selected 25 MW / 200 MWh case, increasing simulation count from 1,000 to 5,000 changes P10/P50/P90 NPV and 95% CVaR by about 0.1–1.7% in the frozen default run. The project therefore reports results to sensible screening precision and does not imply false monetary accuracy.
+
+The frozen default evidence is stored in `outputs/risk_value/stage6b_default_summary.json`.

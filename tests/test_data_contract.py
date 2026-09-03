@@ -59,3 +59,22 @@ def test_reserve_planning_validation_artifact() -> None:
     assert mixed["locked_test"]["mean_directional_interval_coverage_pct"] > 80.0
     wind = summary["summaries"]["wind"]
     assert wind["all_eligible"]["infeasible_safe_band_days"] > 0
+
+
+def test_stage6b_default_summary_artifact() -> None:
+    summary = json.loads(
+        (ROOT / "outputs" / "risk_value" / "stage6b_default_summary.json").read_text(encoding="utf-8")
+    )
+    assert summary["schema_version"] == "1.0"
+    assert summary["stage"] == "6B_quantitative_downside_risk"
+    assert summary["selected_design"]["energy_mwh"] == 200.0
+    comparison = summary["comparison_2000_simulations"]
+    assert set(comparison) == {"25mw_2h", "25mw_4h", "25mw_8h"}
+    assert comparison["25mw_8h"]["loss_convention"] == "investment_loss_gbp = -NPV_gbp"
+    assert comparison["25mw_2h"]["probability_failing_firming_gate_pct"] == 100.0
+    assert 0 <= comparison["25mw_8h"]["probability_failing_firming_gate_pct"] <= 100
+    convergence = summary["selected_design_convergence"]
+    relative = [float(value) for key, value in convergence.items() if "relative_difference_pct" in key]
+    assert relative and max(relative) < 2.0
+    stress_names = {row["scenario"] for row in summary["stress_scenarios"]}
+    assert {"poor_forecast_accuracy", "derating_availability_loss", "adverse_cost_value", "combined_downside"}.issubset(stress_names)
