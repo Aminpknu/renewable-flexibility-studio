@@ -1230,8 +1230,8 @@ def run_tomorrow_planning(
         else:
             action_text = (
                 f"No starting SOC can fully cover both directional energy requirements over the "
-                f"{reserve['reserve_horizon_hours']:.0f} h horizon. The planner gives a risk-balanced "
-                f"{reserve['recommended_start_soc_pct']:.1f}% compromise with {reserve['overall_reserve_coverage_pct']:.0f}% reserve coverage."
+                f"{reserve['reserve_horizon_hours']:.0f} h horizon. The planner therefore holds the current "
+                f"{reserve['current_soc_pct']:.0f}% SOC and reports {reserve['overall_reserve_coverage_pct']:.0f}% reserve coverage instead of forcing an unvalidated SOC shift."
             )
         note_parts.append(html.Div(action_text, className="scenario-note-line uncertainty-line"))
 

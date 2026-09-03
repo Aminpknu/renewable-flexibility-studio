@@ -103,16 +103,12 @@ def build_reserve_plan(
         recommendation_mode = "minimum_adjustment_to_safe_band"
     else:
         total_requirement = down_required_stored + up_required_stored
-        discharge_allocation = (
-            usable_stored * down_required_stored / total_requirement
-            if total_requirement > 0 else usable_stored / 2.0
-        )
-        recommended_mwh = battery.minimum_soc_mwh + discharge_allocation
+        recommended_mwh = current_mwh
         energy_coverage_fraction = (
             min(1.0, usable_stored / total_requirement)
             if total_requirement > 0 else 1.0
         )
-        recommendation_mode = "risk_balanced_compromise"
+        recommendation_mode = "hold_current_soc_when_no_full_safe_band"
 
     recommended_fraction = float(np.clip(
         recommended_mwh / battery.energy_capacity_mwh,

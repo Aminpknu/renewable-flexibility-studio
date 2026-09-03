@@ -64,5 +64,7 @@ def test_infeasible_two_sided_energy_envelope_is_flagged() -> None:
         ReservePlanningConfig(current_soc_fraction=0.5, reserve_horizon_hours=2),
     )
     assert plan["energy_band_feasible"] is False
-    assert plan["recommendation_mode"] == "risk_balanced_compromise"
+    assert plan["recommendation_mode"] == "hold_current_soc_when_no_full_safe_band"
+    assert plan["recommended_start_soc_pct"] == 50.0
+    assert plan["preparation_action"] == "hold current SOC"
     assert plan["overall_reserve_coverage_pct"] < 100
