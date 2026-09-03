@@ -137,3 +137,17 @@ The market forecast publisher now writes to temporary files first and validates 
 The scheduled workflow is configured for 18:15 UTC daily plus manual dispatch. The application reads the validated manifest and reports LIVE, RECONSTRUCTED, STALE_TARGET or STALE_TIME alongside pipeline fallback status. The current 3 September 2026 bundle is correctly classified RECONSTRUCTED because it was generated after target start; no claim of a genuinely issued pre-delivery schedule is made for that file.
 
 After this operational pipeline change, the complete offline suite passes **114 tests** and `git diff --check` is clean.
+
+## Quick Reserve availability-stacking validation
+
+The QR archive contains **8,744 PQR/NQR rows across 4,372 half-hour delivery windows** from the NESO EAC Results Summary, checksum-locked under the NESO Open Data Licence. The model enforces whole-MW reserve commitments, `PQR + NQR <= BESS MW`, conservative directional power headroom, 10–90% SOC, terminal SOC restoration and configurable consecutive-window state-of-energy protection.
+
+For the default 25 MW / 200 MWh BESS on the 90 locked Apr–Jun 2026 dates, the two-window guard annualises to **£2.38m wholesale arbitrage-only**, **£1.35m QR availability-only**, and **£3.13m shared-battery stacked** under realised prices and a £2/MWh throughput assumption. The independent sum is **£3.73m/yr**, so physical co-optimisation removes about **£0.61m/yr** of double-counted value. Mean stacked PQR/NQR commitments are about **13.0 / 8.6 MW**.
+
+One-, two- and four-window energy guards give stacked regime annualisations of about **£3.17m, £3.13m and £3.08m/yr**, respectively. QR utilisation payment/activation is excluded; the asset is assumed to be a price taker accepted at the observed clearing price, so these are perfect-information screening values and not proof of prequalification, acceptance or earned service revenue.
+
+After the Quick Reserve packet and UI integration, the complete offline repository suite passes **122 tests** and `git diff --check` is clean.
+
+The three-use extension adds System-Price-valued renewable firming to the same wholesale/QR battery. Under the baseline two-window guard, firming + arbitrage annualises to **£2.51m/yr** and the full firming + arbitrage + QR stack to **£3.27m/yr**, an incremental **£0.76m/yr** QR availability value. The independent firming/arbitrage + QR-only sum is about **£3.86m/yr**, so shared-battery optimisation removes approximately **£0.60m/yr** of double-counting while retaining **37.0%** mean renewable-error reduction.
+
+After the full three-use firming/arbitrage/Quick Reserve integration, the repository suite passes **124 tests** with a clean diff check.

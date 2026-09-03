@@ -70,3 +70,33 @@ Reason: failed refreshes cannot corrupt the published market bundle; valid pre-d
 Validation: 114 offline tests pass; current target correctly classified as RECONSTRUCTED
 Known limitations: scheduler depends on the renewable latest-forecast target being updated upstream; GitHub-hosted publication does not itself generate the V2 renewable forecast
 Next allowed stage: promote Stage 9 to main, then begin first ancillary/reserve-service stacking model
+
+## Stage 9D — Quick Reserve availability stacking
+
+Stage: 9D Quick Reserve availability stacking
+Decision: EVIDENCE READY
+Decision date: 2026-09-03
+Branch: feature/stage9-quick-reserve
+Primary evidence: NESO EAC PQR/NQR clearing-price archive, 90-day Apr–Jun 2026 stacking backtest, selected-day Studio view
+Acceptance result: PASS for perfect-information availability-value screening
+Production impact: none; feature branch pending promotion
+Reason: the model encodes whole-MW contracts, PQR/NQR splitting within one nameplate, shared wholesale/reserve headroom, SOC/terminal constraints and consecutive-window energy protection; utilisation is excluded rather than inferred
+Default two-window evidence: £2.38m/yr arbitrage-only; £1.35m/yr QR-only; £3.13m/yr stacked; £0.61m/yr independent-sum double-count avoided on the 90-day regime
+Validation: 122 offline tests pass; `git diff --check` clean
+Known limitations: realised clearing prices; price-taker acceptance; no utilisation dispatch/payment; energy guard is screening not prequalification proof; no site/telemetry/bid-execution model
+Next allowed stage: pre-delivery QR bid/acceptance modelling and market-backed investment integration
+
+## Stage 9E — Firming + arbitrage + Quick Reserve co-optimisation
+
+Stage: 9E three-use revenue stacking
+Decision: EVIDENCE READY
+Decision date: 2026-09-03
+Branch: feature/stage9-quick-reserve
+Primary evidence: 90-day Apr–Jun 2026 triple-stack backtest and selected-day Studio comparison
+Acceptance result: PASS for perfect-information shared-battery screening
+Production impact: none; feature branch pending promotion
+Reason: renewable firming, wholesale arbitrage and PQR/NQR now share one charge/discharge mode, MW nameplate, SOC trajectory, terminal SOC and QR crossover-energy constraints
+Default two-window evidence: £2.51m/yr firming+arbitrage; £3.27m/yr full triple stack; +£0.76m/yr QR increment; ~£0.60m/yr independent-sum double-count avoided; 37.0% mean renewable-error reduction retained
+Validation: 124 offline tests pass; `git diff --check` clean
+Known limitations: realised forecast error/prices and observed EAC clearing prices; price-taker acceptance; QR utilisation excluded; no site/telemetry/bid-execution model
+Next allowed stage: issue-time-correct Quick Reserve bid/acceptance modelling, then market-backed lifecycle NPV/Monte Carlo

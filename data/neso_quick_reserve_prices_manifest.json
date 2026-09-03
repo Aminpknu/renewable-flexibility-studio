@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "source": "NESO Enduring Auction Capability Results Summary",
+  "resource_id": "596f29ac-0387-4ba4-a6d3-95c243140707",
+  "rights": "NESO Open Data Licence",
+  "service": "Quick Reserve",
+  "products": [
+    "PQR",
+    "NQR"
+  ],
+  "clearing_price_unit": "GBP per MW per hour",
+  "availability_payment_formula": "contracted_MW * clearing_price_GBP_per_MW_per_h * window_hours",
+  "window_hours": 0.5,
+  "query_start_utc": "2026-03-31T22:00:00",
+  "query_end_utc": "2026-07-01T00:00:00",
+  "rows": 8744,
+  "delivery_windows": 4372,
+  "delivery_start_min_utc": "2026-03-31T22:00:00+00:00",
+  "delivery_start_max_utc": "2026-06-30T23:30:00+00:00",
+  "sha256": "780ef46b50c677530926d10d023c68c58b6e75284d48210120ac76d92215008d",
+  "sha256_normalisation": "UTF-8 text with LF line endings",
+  "scope_note": "availability clearing prices only; utilisation revenue excluded"
+}

@@ -65,3 +65,31 @@ def test_forecast_day_market_schedule_uses_price_forecast_and_stage_b_reserve() 
     text = str(note)
     assert "as-if pre-delivery reconstruction" in text
     assert "excludes every target-day Market Index observation" in text
+
+
+def test_quick_reserve_layer_uses_shared_battery_and_availability_only() -> None:
+    note, cards, figure = app.run_quick_reserve_stacking(
+        1, "2026-06-30", "mixed", 100, 50, 90, 90, 2.0, 2
+    )
+    values = {card.children[0].children: card.children[1].children for card in cards}
+    assert values["Installed design"] == "25 MW / 200 MWh"
+    assert "Arbitrage-only value" in values
+    assert "QR-only availability" in values
+    assert "Firming + arbitrage" in values
+    assert "Arbitrage + QR" in values
+    assert "Firming + market + QR" in values
+    assert "Triple-stack firming" in values
+    assert "Triple independent-sum overstatement" in values
+    assert "Mean PQR / NQR" in values
+    names = [trace.name for trace in figure.data]
+    assert "PQR clearing price" in names
+    assert "NQR clearing price" in names
+    assert "PQR contracted MW" in names
+    assert "NQR contracted MW (shown negative)" in names
+    assert "Triple-stack residual" in names
+    assert "Triple-stack SOC" in names
+    text = str(note)
+    assert "availability only" in text
+    assert "Utilisation revenue" in text
+    assert "price taker" in text
+    assert "not proof" in text.lower()

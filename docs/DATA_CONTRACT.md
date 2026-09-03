@@ -81,3 +81,9 @@ A separate licensed day-ahead adapter accepts `settlement_date`, `settlement_per
 `data/latest_market_price_forecast.csv` and its manifest are the current published market-price forecast bundle. Schema 1.1 adds `row_count`, SHA-256 and line-ending normalisation. Publication is atomic and occurs only after the candidate bundle validates.
 
 `data/last_valid_market_price_forecast.csv` plus its manifest preserve the previous validated bundle before replacement. `data/market_forecast_pipeline_status.json` records refresh/publish/fallback state and the current bundle-health classification. A fallback can remain available for audit while being explicitly marked stale if its target does not match the renewable forecast target.
+
+## NESO Quick Reserve clearing-price archive
+
+`data/neso_quick_reserve_prices.csv` contains PQR/NQR Enduring Auction Capability clearing results used by the first ancillary-service stacking benchmark. It covers the Apr–Jun 2026 market regime plus the UTC crossover required to align the first GB delivery day, with one PQR and one NQR result per 30-minute delivery window where available.
+
+Required fields are product/direction, UTC delivery start/end, 0.5 h window length, system cleared volume (MW), clearing price (£/MW/h) and the derived availability payment per contracted MW. The manifest records the NESO EAC resource ID, NESO Open Data Licence, query window, row/window counts and SHA-256. These are system auction results, not asset-specific accepted bids or utilisation instructions.
