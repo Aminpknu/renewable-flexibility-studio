@@ -246,6 +246,13 @@ A valid GB target day has 46, 48 or 50 settlement periods. Duplicate or incomple
 - direct comparison against the prior rolling residual envelope;
 - forecast-day reserve/headroom and safe-SOC planning driven by P10/P90 tails.
 
+### Stage 16 - validated cross-repository forecast handoff (in progress)
+
+- schema/period/target-date validation before a V2 bundle is accepted;
+- explicit CURRENT / STALE_TARGET / STALE_ISSUE health status;
+- atomic latest-bundle publication with a last-valid archive and checksum manifest;
+- app-level display of the active handoff status and bundle checksum prefix.
+
 ### Stage 15 - seasonal and forecast-defined regimes (implemented)
 
 - interactive date-range comparison across calendar seasons and forecast-defined wind, solar and ramp-stress regimes;
