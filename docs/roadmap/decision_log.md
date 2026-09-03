@@ -41,3 +41,18 @@ Production impact: none; feature branch only
 Reason: open GB wholesale reference is checksum-locked; terminal SOC, negative prices, efficiency, shared MW/SOC, mutual charge/discharge exclusion and throughput costs are explicitly enforced and tested
 Known limitations: realised future error/prices are known; APX MIP is not a day-ahead auction price; £2/MWh throughput cost is a scenario assumption; no ancillary-service stacking, transaction costs, site constraints, tax or financing
 Next allowed stage: connect an authorised day-ahead auction feed or issue-time-correct price forecast, then evaluate a deployable co-optimised strategy without future-price/error leakage
+
+## Stage 9 Packet 2 — Pre-delivery price forecast and reserve-aware scheduling
+
+Stage: 9 Market optimisation, Packet 2
+Decision: EVIDENCE READY
+Decision date: 2026-09-03
+Branch/commit: feature/stage9-market-optimisation / 0745370
+Data snapshot: 450-day APX Market Index archive; 420 forecast-eligible days after 30-day warm-up; V2 renewable archive and Stage B reserve evidence
+Primary metrics: price MAE/RMSE/R²; forecast-vs-naive MAE improvement; realised forecast-strategy margin; perfect-information capture rate; reserve-aware capture rate; positive-margin days
+Acceptance gate result: PASS for public Market Index strategy benchmark
+Production impact: feature branch only
+Reason: target-day price leakage is excluded, DST days are supported, forecast-selected schedules are scored only after delivery, perfect-information upper bounds remain separate, and the reserve corridor quantifies the value/resilience trade-off
+Known limitations: APX MIP is not a licensed day-ahead auction price; realised MIP scoring does not prove trade execution; no fees/spread/site grid limit; current 3 Sep latest bundle is an as-if reconstruction generated after target start
+Next allowed stage: automate pre-delivery bundle issuance/freshness; authorised day-ahead feed comparison; ancillary-service eligibility/commitment modelling
+
