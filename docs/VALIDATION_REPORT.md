@@ -179,3 +179,11 @@ The Stage B reserve-aware wholesale case annualises to about **£0.94m/year** an
 The frozen 5,000-run wholesale-base Monte Carlo uses contiguous 7-day blocks of realised forecast-selected daily market value. It gives approximately **P10/P50/P90 NPV = -£24.18m / -£21.46m / -£19.00m**, **100% probability of negative NPV** and **95% CVaR loss = £25.42m** under the stated screening distributions. The 1,000-vs-5,000 convergence differences for the reported NPV/tail metrics remain below about **0.32%**. Quick Reserve is excluded from the probabilistic base.
 
 The interactive Stage 10 callbacks reuse the visible CAPEX, fixed OPEX, lifetime, discount-rate and degradation controls, add optional replacement year/cost, refuse unsupported scaling away from the frozen 100 MW 50/50 and 90%/90% reference case, and provide a downloadable deterministic/Monte Carlo JSON summary. After Stage 10 UI integration and the grid/spatial merge, the repository suite passes **145 tests** at the release gate.
+
+## Spatial demand and net-load validation
+
+The spatial-demand packet maps all 350 DESNZ 2024 Local Authorities to the ten V2 zones and to NESO GSP-region polygons; no Local Authority required a GSP polygon fallback. Elexon CDCA-I029 evidence consolidates 403,414 settlement/group rows across 14 GSP Groups from January 2025 to August 2026.
+
+The historical GSP within-day shape is fitted only through March 2026 for the validation check. Across 1,267 Apr-Jun 2026 GSP-days, mean absolute profile error is **0.268 percentage points of daily energy**, versus **0.415** for a flat-period profile, a **35.4% improvement**.
+
+For the 3 September 2026 forecast, the complete pre-delivery NESO National Demand Forecast used by the spatial bundle was published by 11:48 UTC on 2 September. The ten underlying-demand allocations sum to `NDF + embedded wind + embedded solar` in every settlement period; after subtracting the identical ten-zone embedded-renewable allocation, zone net load sums back to NESO National Demand to numerical precision. These results validate reconciliation and profile construction, not municipal-city metering accuracy.

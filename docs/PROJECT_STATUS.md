@@ -25,6 +25,7 @@
 - 420-day-per-portfolio prior-data-only validation of the Stage B policy;
 - live half-hourly GB National Demand Forecast context from Elexon/NESO, including explicitly labelled remaining-day partial forecasts after delivery starts;
 - ten-zone weather-informed spatial allocation of the national V2 forecast using DESNZ REPD capacity-proxy weights, with exact national reconciliation and proportional BESS-allocation proxy;
+- ten-zone underlying-demand/net-load proxy using DESNZ Local Authority consumption + Elexon GSP Group Take shapes + NESO GSP boundaries, with exact underlying-demand and NDF reconciliation;
 - frozen 450-day Elexon System Price/Net Imbalance Volume archive aligned to all 21,600 V2 historical periods;
 - selected-day BSC-style imbalance settlement view before/after battery firming;
 - 450-day gross cash-out exposure and daily tail-risk benchmark, explicitly separated from profit;
@@ -49,11 +50,11 @@ Forecasting V2 is packaged separately on branch `feature/v2-spatial-production`,
 
 ## Next analytical stages
 
-1. Build an explicit structured QR bid/acceptance model from EAC Sell Orders/Results by Unit; the current price/capacity signal is issue-time-correct but intentionally not acceptance-adjusted.
-2. Connect an authorised day-ahead auction feed when available and compare it with the public Market Index forecast benchmark.
-3. Add date-range, seasonal and weather-regime comparison and quantify sizing/reserve sensitivity by wind/solar mix and spatial zone.
-4. Upgrade the operational directional residual range to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty and compare both approaches.
-5. Automate the renewable V2 forecast + spatial-bundle handoff and cross-bundle freshness/fallback behavior.
+1. Generalise ancillary-service stacking into a reusable NESO service framework, then add representative Slow Reserve, Dynamic Response and Balancing Reserve/BM cases while sharing the same BESS MW/SOC budget.
+2. Add a project-finance screening layer: project/equity IRR, debt schedule, DSCR/LLCR, transparent tax/capital-allowance assumptions and downside simulation.
+3. Build an explicit structured QR bid/acceptance model from EAC Sell Orders/Results by Unit; the current price/capacity signal is issue-time-correct but intentionally not acceptance-adjusted.
+4. Add date-range, seasonal and weather-regime comparison and quantify sizing/reserve sensitivity by wind/solar mix and spatial zone.
+5. Upgrade the operational directional residual range to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty and automate renewable/spatial-bundle handoff.
 
 ## Learning fixture
 

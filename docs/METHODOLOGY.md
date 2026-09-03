@@ -176,9 +176,23 @@ The authoritative V2 forecast remains a national embedded wind/solar forecast. F
 
 Within each half-hour, wind raw allocation is proportional to the fixed wind-capacity proxy multiplied by the local 100 m wind-speed cubed; solar raw allocation is proportional to the fixed solar-capacity proxy multiplied by local instantaneous shortwave radiation. Each technology is then normalised across all ten zones so allocated MW sums exactly to the national V2 wind/solar forecast. If all weather signals are zero, the fixed capacity-proxy shares are used as the fallback.
 
-For a user-defined virtual portfolio, wind and solar nameplate are split by the selected portfolio mix and the same dynamic spatial shares are applied. The displayed city/zone BESS is the national Stage A MW/MWh design multiplied by that zone's fixed virtual-capacity proxy share. It is therefore an **indicative proportional allocation**, not an independently optimised city battery. No city-specific actual generation/error history, local demand, distribution-network constraint or local market price is inferred.
+For a user-defined virtual portfolio, wind and solar nameplate are split by the selected portfolio mix and the same dynamic spatial shares are applied. The displayed city/zone BESS is the national Stage A MW/MWh design multiplied by that zone's fixed virtual-capacity proxy share. It is therefore an **indicative proportional allocation**, not an independently optimised city battery. No city-specific actual generation/error history or distribution-network constraint is inferred.
 
-## 13. Market-backed lifecycle investment appraisal
+## 13. Spatial underlying-demand and net-load proxy
+
+DESNZ 2024 Local Authority electricity consumption provides annual spatial weights for the ten zones. Each Local Authority is assigned to its nearest V2 zone and to the containing NESO GSP region. Elexon CDCA-I029 GSP Group Take is used only to learn within-day regional shape because it is net regional grid take, not gross customer consumption. Month, weekday/Saturday/Sunday and settlement period define the historical shape cells.
+
+Because embedded wind and solar suppress NESO National Demand, the national underlying-demand proxy is:
+
+\[
+D^{under}_{GB,t}=D^{NDF}_{t}+G^{wind,emb}_{t}+G^{solar,emb}_{t}
+\]
+
+If \(a_z\) is the DESNZ annual-consumption share and \(p_{z,t}\) the zone's weighted GSP within-day profile, the period allocation weight is normalised across zones and applied to \(D^{under}_{GB,t}\). Thus \(\sum_z D^{under}_{z,t}=D^{under}_{GB,t}\). Zone net load is then \(L_{z,t}=D^{under}_{z,t}-G^{wind,emb}_{z,t}-G^{solar,emb}_{z,t}\), so \(\sum_z L_{z,t}=D^{NDF}_{t}\) by construction. These are system-zone allocation proxies, not measured city feeder loads.
+
+The GSP shape is validated with training through March 2026 and an Apr-Jun 2026 check. Mean absolute within-day profile error is 0.268 percentage points of daily energy versus 0.415 for a flat-period baseline, a 35.4% improvement.
+
+## 14. Market-backed lifecycle investment appraisal
 
 Stage 10 uses the realised daily operating value of the **forecast-selected** wholesale schedule as the core investment-benefit series. The schedule itself is chosen from prior-date APX Market Index price forecasts; realised APX Market Index prices are used only afterward to score the fixed schedule. The base annual operating value is the observed daily sum annualised by `365.25 / observed_days`. The reserve-aware case uses the same price forecast while constraining SOC inside the Stage B reserve corridor.
 
@@ -192,6 +206,6 @@ The market-backed BCR is present value of market operating value divided by pres
 
 The market-backed Monte Carlo resamples contiguous blocks of realised daily forecast-selected market value, preserving short-run market-regime dependence, and varies CAPEX, fixed OPEX, availability and degradation. It reports P10/P50/P90 NPV, probability of negative NPV, VaR and CVaR using `investment loss = -NPV`. Quick Reserve is excluded from the probabilistic base until asset-specific auction acceptance is identified. The aligned Apr?Jun QR case is deterministic upside screening only.
 
-## 14. Current exclusions
+## 15. Current exclusions
 
 The current release excludes a licensed contracted/day-ahead auction price benchmark, detailed cell-level degradation, site-specific grid-connection/network constraints, weather-ensemble probabilistic forecasts and independently validated city-level generation/error targets. The historical firming evidence remains national forecast-error behaviour scaled to a virtual portfolio. Spatial-zone outputs are reconciled allocation proxies, not individual-asset forecasts.

@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.0",
+  "stage": "spatial_demand_allocation",
+  "method": "DESNZ 2024 local-authority annual electricity weights + Elexon CDCA-I029 GSP Group Take within-day shapes; underlying demand reconciled to NDF + V2 embedded wind/solar, with net load reconciling to NDF",
+  "zones": 10,
+  "spatial_weighting": {
+    "desnz_year": 2024,
+    "local_authorities": 350,
+    "ons_centroid_name_fallbacks": 2,
+    "gsp_polygon_fallback_local_authorities": 0,
+    "zone_anchor_gsp_groups": {
+      "Inverness": "_P",
+      "Edinburgh": "_N",
+      "Newcastle": "_F",
+      "Manchester": "_G",
+      "Leeds": "_M",
+      "Birmingham": "_E",
+      "Norwich": "_A",
+      "Cardiff": "_K",
+      "Bristol": "_L",
+      "London": "_C"
+    }
+  },
+  "gsp_history": {
+    "start": "2025-01-01",
+    "end": "2026-08-27",
+    "rows": 403414,
+    "groups": 14,
+    "export_or_negative_shape_rows_clipped_to_zero": 7252
+  },
+  "profile_validation": {
+    "validation_start": "2026-04-01",
+    "validation_end": "2026-06-30",
+    "gsp_days": 1267,
+    "profile_mae_percentage_points_of_daily_energy": 0.2683736210662441,
+    "flat_profile_mae_percentage_points_of_daily_energy": 0.41528836020440385,
+    "improvement_vs_flat_pct": 35.376560774746665
+  },
+  "latest_forecast": {
+    "target_date": "2026-09-03",
+    "settlement_periods": 48,
+    "demand_publish_time_utc": "2026-09-02T11:48:00+00:00",
+    "national_demand_peak_mw": 29600.0,
+    "national_underlying_demand_proxy_peak_mw": 34952.09415203333
+  },
+  "sources": {
+    "elexon_gsp_take": {
+      "description": "Aggregated GSP Group Take Volumes (CDCA-I029), 2025 and 2026 open settlement archives",
+      "page": "https://www.elexon.co.uk/bsc/data/open-settlement-data/",
+      "files": [
+        "https://www.elexon.co.uk/open-data/AGV_2025.zip",
+        "https://www.elexon.co.uk/open-data/AGV_2026.zip"
+      ],
+      "sha256": {
+        "AGV_2025.zip": "88a95519d8b30c11e644e170c482de2f60cdb9c3ca0910e71e1c25b93a52a284",
+        "AGV_2026.zip": "96d58288162e61c9eb8a1d6c9d2f4dff53be5161e143af53231e5ea760c669b9"
+      }
+    },
+    "desnz_subnational_electricity": {
+      "description": "Electricity consumption by Local Authority, 2005 to 2024; latest 2024 rows used",
+      "url": "https://assets.publishing.service.gov.uk/media/694295bd9273c48f554cf4ef/elec_LA_stacked_2005-2024.csv",
+      "sha256": "d828802b93b3722a0bcf3a4ba2761d20695a0523cb6c187c3f26e312c11208d7"
+    },
+    "neso_gsp_boundaries": {
+      "description": "GSP Regions 20260209, WGS84 boundaries with Elexon GSPGroup identifiers",
+      "url": "https://api.neso.energy/dataset/2810092e-d4b2-472f-b955-d8bea01f9ec0/resource/5dfab3dd-f192-40ab-b97f-b365a594293c/download/gsp_regions_20260209.zip",
+      "sha256": "f4212403cb2f1a986dd640793217b284693d2a2ffd71f09191a9bb368277ef7d"
+    },
+    "ons_lad_centroids": {
+      "description": "Local Authority Districts December 2024 BGC attributes LONG/LAT",
+      "service": "ONS Open Geography ArcGIS FeatureServer",
+      "sha256": "d2e078f10e8d56bd6124ecd94b2b1b62815cc4562dbb9b0e68111d74cbee9120"
+    },
+    "neso_ndf": {
+      "description": "Elexon Insights archive of NESO National Demand Forecast",
+      "endpoint": "https://data.elexon.co.uk/bmrs/api/v1/forecast/demand/day-ahead/history"
+    }
+  },
+  "semantic_boundary": [
+    "zone underlying-demand proxy is a modelled spatial allocation, not measured city demand",
+    "GSP Group Take is used for within-day shape only because it is net regional grid take, not gross customer consumption",
+    "DESNZ annual local-authority consumption sets spatial level weights",
+    "national underlying demand proxy equals NESO National Demand Forecast plus the V2 embedded wind and solar forecast because embedded generation suppresses National Demand",
+    "subtracting the identical spatial embedded-renewable forecast makes ten-zone net load reconcile to NESO National Demand Forecast",
+    "the spatial underlying-demand and net-load series are system-context proxies and must not be confused with the user-scaled virtual renewable portfolio"
+  ],
+  "outputs": {
+    "zone_weights": "spatial_demand_zone_weights.csv",
+    "zone_gsp_mix": "spatial_demand_zone_gsp_mix.csv",
+    "gsp_profiles": "gsp_group_demand_profiles.csv",
+    "latest_spatial_demand": "latest_spatial_demand_forecast.csv"
+  }
+}

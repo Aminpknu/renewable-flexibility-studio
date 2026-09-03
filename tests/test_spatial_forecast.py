@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from pathlib import Path
 
 import numpy as np
 
@@ -30,7 +30,7 @@ def test_spatial_virtual_portfolio_reconciles_to_national() -> None:
 
 
 def test_spatial_zone_view_labels_proxy_boundary() -> None:
-    note, cards, figure = app._spatial_zone_view(
+    note, cards, figure, system_figure = app._spatial_zone_view(
         "London", "mixed", 100.0, 50.0, 90.0, 90.0,
     )
     text = str(note)
