@@ -237,7 +237,19 @@ solar_pred_cf
 
 A valid GB target day has 46, 48 or 50 settlement periods. Duplicate or incomplete days are rejected.
 
+## Product interface direction
+
+Stage 17 moves the Studio from a generic dashboard aesthetic toward a compact GB power/quant decision workspace. The interface uses a six-step decision path (Forecast → Uncertainty → Reserve → Market → Value → Evidence), tighter information density, restrained square-edged panels, tabular numerics and clearer hierarchy for recommendations and validation state. Libraries.dev was used as a reference for contemporary interaction patterns, but no React-only visual dependency is introduced into the Dash runtime. Decorative effects are deliberately limited so the analytical product remains credible and fast.
+
 ## Roadmap
+
+### Stage 17 - product interface refinement (implemented)
+
+- decision-led navigation and stronger analytical hierarchy;
+- reduced generic gradient/pill/card styling;
+- denser desktop layout and improved two-column mobile KPI presentation;
+- explicit validated-release status and methodology path;
+- no change to validated modelling engines or evidence contracts.
 
 ### Stage 14 - probabilistic uncertainty (implemented)
 

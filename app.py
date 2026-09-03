@@ -2162,9 +2162,9 @@ app.layout = html.Div(
         html.Header(
             [
                 html.Div("RENEWABLE FLEXIBILITY STUDIO", className="eyebrow"),
-                html.H1("Turn renewable forecast deviations into storage decisions"),
+                html.H1("Forecast. Reserve. Dispatch. Value."),
                 html.P(
-                    "Explore a virtual wind, solar or mixed portfolio; configure a battery; and see how power, duration and state of charge affect delivery firming.",
+                    "A GB renewable and storage decision workspace linking forecast uncertainty, battery readiness, market opportunity and investment evidence.",
                     className="subtitle",
                 ),
                 html.A(
@@ -2172,8 +2172,17 @@ app.layout = html.Div(
                     href="#models-data-validation-guide",
                     className="secondary-button guide-jump-link",
                 ),
+                html.Div([
+                    html.Div([html.Strong("01 Forecast"), "Wind / solar schedule"], className="decision-step"),
+                    html.Div([html.Strong("02 Uncertainty"), "P10 / P50 / P90"], className="decision-step"),
+                    html.Div([html.Strong("03 Reserve"), "SOC and headroom"], className="decision-step"),
+                    html.Div([html.Strong("04 Market"), "Dispatch and services"], className="decision-step"),
+                    html.Div([html.Strong("05 Value"), "Risk and finance"], className="decision-step"),
+                    html.Div([html.Strong("06 Evidence"), "Methods and validation"], className="decision-step"),
+                ], className="decision-path"),
                 html.Div(
                     [
+                        html.Span([html.Span(className="live-dot"), "Validated analytical release"], className="status-pill"),
                         html.Span("Historical evidence: 1 Apr 2025 to 30 Jun 2026", className="status-pill"),
                         html.Span("V2 out-of-sample: OOF + locked test", className="status-pill"),
                         html.Span("Reactive strategy", className="status-pill"),
