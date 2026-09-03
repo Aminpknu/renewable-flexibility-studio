@@ -36,3 +36,26 @@ def test_elexon_system_price_archive_integrity() -> None:
     canonical = csv_path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
     assert manifest["sha256_normalisation"] == "UTF-8 text with LF line endings"
     assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == manifest["sha256"]
+
+
+def test_reserve_planning_validation_artifact() -> None:
+    import pandas as pd
+
+    summary = json.loads(
+        (ROOT / "outputs" / "reserve_planning_validation.json").read_text(encoding="utf-8")
+    )
+    daily = pd.read_csv(ROOT / "outputs" / "reserve_planning_daily.csv")
+    assert summary["schema_version"] == "1.0"
+    assert summary["method"] == "minimum_adjustment_to_directional_reserve_safe_soc_band"
+    assert summary["current_soc_baseline_pct"] == 50.0
+    assert set(summary["summaries"]) == {"solar", "mixed", "wind"}
+    assert len(daily) == 1260
+    assert daily.groupby("portfolio_type")["settlement_date"].nunique().to_dict() == {
+        "mixed": 420, "solar": 420, "wind": 420
+    }
+    mixed = summary["summaries"]["mixed"]
+    assert mixed["selected_design"]["energy_mwh"] == 200.0
+    assert mixed["all_eligible"]["adjustment_days"] == 0
+    assert mixed["locked_test"]["mean_directional_interval_coverage_pct"] > 80.0
+    wind = summary["summaries"]["wind"]
+    assert wind["all_eligible"]["infeasible_safe_band_days"] > 0

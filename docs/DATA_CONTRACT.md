@@ -28,13 +28,19 @@ Explicit source exclusions are 6–10 August 2025 and 24 June 2026. They are not
 
 ## Latest forecast bundle
 
-Tomorrow planning reads `data/latest_forecast.csv`, validated separately from the historical archive. The battery shown in Tomorrow planning is resolved from `outputs/design_sizing_grid_100mw.csv` using the currently selected future-design target/reliability gate; the historical battery controls do not determine tomorrow's installed design. Required fields are forecast creation time, one target date, settlement period, valid time, wind/solar predicted capacity factors and embedded capacities. The bundle must contain exactly one complete 46/48/50-period target day. `data/latest_forecast_manifest.json` records target date, creation time, row count and SHA-256 checksum.
+Forecast-day planning reads `data/latest_forecast.csv`, validated separately from the historical archive. The battery shown in forecast-day planning is resolved from `outputs/design_sizing_grid_100mw.csv` using the currently selected future-design target/reliability gate; the historical battery controls do not determine the installed design. Required fields are forecast creation time, one target date, settlement period, valid time, wind/solar predicted capacity factors and embedded capacities. The bundle must contain exactly one complete 46/48/50-period target day. `data/latest_forecast_manifest.json` records target date, creation time, row count and SHA-256 checksum.
 
 The standalone Studio does not run or import the forecasting ML models. The forecasting project remains the producer of the forecast bundle; `scripts/sync_latest_forecast.py` is the local/manual handoff until automated cross-repository publishing is enabled.
 
 ## Live grid context
 
-Tomorrow mode may query the official Elexon Insights day-ahead demand API and then explicitly filter to the target settlement date. The grid adapter validates one complete 46/48/50-period National Demand Forecast series. This grid context is external public data and is not part of the renewable forecast bundle.
+Forecast-day mode may query the official Elexon Insights day-ahead demand API and then explicitly filter to the target settlement date. The grid adapter validates one complete 46/48/50-period National Demand Forecast series. This grid context is external public data and is not part of the renewable forecast bundle.
+
+## Forecast-day reserve-planning evidence
+
+Operational reserve planning derives its directional q10–q90 range at runtime from `data/historical_backtest.csv` plus `data/latest_forecast.csv`; it does not require a separate external forecast service. The operator supplies current SOC in the UI, while battery MW/MWh comes from the selected row in `outputs/design_sizing_grid_100mw.csv` after scaling to portfolio capacity.
+
+`outputs/reserve_planning_validation.json` is the frozen validation summary for the baseline 50% current-SOC policy and Stage A 90%/90% designs. `outputs/reserve_planning_daily.csv` contains the corresponding daily audit rows for solar, 50/50 mixed and wind. These files are **validation evidence**, not runtime inputs to the forecast-day callback. The runtime planner recalculates the reserve band from the current forecast bundle and operator-entered SOC.
 
 ## Future sizing design grid
 

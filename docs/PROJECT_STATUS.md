@@ -18,7 +18,11 @@
 - tracked pre-day grid import/export required to restore 50% SOC;
 - leakage-safe rolling 80% forecast-uncertainty interval with historical/locked coverage validation;
 - out-of-range historical markers and selected-day uncertainty summary in the generation chart;
-- Tomorrow planning from the latest V2 forecast bundle, with no future actual/dispatch assumption;
+- forecast-day planning from the latest V2 forecast bundle, with no future actual/dispatch assumption;
+- directional empirical q10–q90 residual range using prior out-of-sample evidence only;
+- Stage B reserve-readiness planner: operator current SOC, rolling downward/upward energy requirements, safe starting-SOC band, minimum pre-day adjustment and critical risk windows;
+- guardrail that holds current SOC and reports reserve shortfall when no two-sided safe SOC band exists;
+- 420-day-per-portfolio prior-data-only validation of the Stage B policy;
 - live half-hourly GB National Demand Forecast context from Elexon/NESO;
 - frozen 450-day Elexon System Price/Net Imbalance Volume archive aligned to all 21,600 V2 historical periods;
 - selected-day BSC-style imbalance settlement view before/after battery firming;
@@ -35,11 +39,11 @@ Forecasting V2 is packaged separately on branch `feature/v2-spatial-production`,
 
 ## Next analytical stages
 
-1. **Operational planner:** use tomorrow's forecast uncertainty plus the selected design to recommend starting SOC, upward/downward reserve and highest-risk periods.
-2. Add date-range, seasonal and weather-regime comparison and quantify design sensitivity by wind/solar mix.
-3. Upgrade Tomorrow planning to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty.
-4. **Economics:** price pre-day SOC restoration, add contracted/day-ahead reference price, battery CAPEX/OPEX/degradation, NPV, BCR, payback and switching values.
-5. Add Monte Carlo/block-bootstrap downside metrics, P10/P50/P90 value, VaR/CVaR and availability/derating stress cases.
+1. **Economics / Risk & Value:** price pre-day SOC preparation and restoration, add a contracted/day-ahead reference price, battery CAPEX/OPEX/degradation, NPV, BCR, payback and switching values.
+2. Add date-range, seasonal and weather-regime comparison and quantify sizing/reserve sensitivity by wind/solar mix.
+3. Add Monte Carlo/block-bootstrap downside metrics, P10/P50/P90 economic value, VaR/CVaR and availability/derating stress cases.
+4. Upgrade the operational directional residual range to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty and compare both approaches.
+5. Automate the versioned forecast-bundle handoff, freshness/stale-data checks and fallback behavior.
 6. Deploy the public standalone GitHub repository as a separate Render service after the current UI review.
 
 ## Learning fixture
