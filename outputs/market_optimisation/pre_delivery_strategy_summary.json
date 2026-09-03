@@ -1,0 +1,56 @@
+{
+  "schema_version": "1.0",
+  "stage": "9_market_optimisation_packet2_pre_delivery",
+  "price_forecast": {
+    "method": "expanding_ridge_calendar_and_prior_price_lags",
+    "eligible_days": 420,
+    "period_count": 20160,
+    "minimum_history_days": 30,
+    "ridge_alpha": 20.0,
+    "forecast": {
+      "mae_gbp_per_mwh": 20.00626837704873,
+      "rmse_gbp_per_mwh": 28.54462241871141,
+      "bias_gbp_per_mwh": -2.2642142319778813,
+      "r2": 0.2997400664220814
+    },
+    "naive_previous_observed_same_period": {
+      "mae_gbp_per_mwh": 22.528173002881708,
+      "rmse_gbp_per_mwh": 35.39317181945986,
+      "bias_gbp_per_mwh": -0.055761520927815646,
+      "r2": -0.07658826548285314
+    },
+    "mae_improvement_vs_naive_pct": 11.19444806070331,
+    "issue_rule": "strictly earlier settlement dates only"
+  },
+  "eligible_days": 420,
+  "battery": {
+    "power_mw": 25.0,
+    "energy_mwh": 200.0,
+    "duration_hours": 8.0
+  },
+  "throughput_cost_gbp_per_mwh": 2.0,
+  "perfect_foresight_annualised_margin_gbp": 1889058.5233285353,
+  "forecast_strategy_annualised_margin_gbp": 1133382.5169560704,
+  "naive_strategy_annualised_margin_gbp": 767306.1098315994,
+  "reserve_aware_forecast_annualised_margin_gbp": 937061.7705627338,
+  "forecast_capture_rate_pct": 59.99721570081598,
+  "naive_capture_rate_pct": 40.61844036888811,
+  "reserve_aware_capture_rate_pct": 49.604697736501244,
+  "forecast_positive_margin_days_pct": 89.28571428571429,
+  "reserve_aware_positive_margin_days_pct": 90.71428571428571,
+  "reserve_corridor_feasible_days_pct": 100.0,
+  "mean_reserve_opportunity_cost_gbp_per_day": 537.4969100433584,
+  "locked_test": {
+    "days": 90,
+    "forecast_capture_rate_pct": 63.42762414966061,
+    "reserve_aware_capture_rate_pct": 52.858295380394026,
+    "forecast_positive_margin_days_pct": 88.88888888888889,
+    "reserve_aware_positive_margin_days_pct": 90.0
+  },
+  "limitations": [
+    "Market Index Price is a short-term wholesale reference, not a day-ahead auction price",
+    "forecast strategy is issue-time-correct with respect to the Market Index archive but assumes scheduled trades can be evaluated at realised MIP",
+    "reserve-aware arbitrage preserves an uncertainty-derived SOC corridor but does not yet simulate real-time firming execution on top of the wholesale schedule",
+    "no transaction fees, bid-ask spread, site grid limit or ancillary-service commitment is included"
+  ]
+}

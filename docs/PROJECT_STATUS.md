@@ -30,6 +30,7 @@
 - Stage 6A deterministic physical risk and value appraisal: NPV, BCR, payback, switching values, availability, sensitivity and risk-value frontier;
 - Stage 6B block-resampled Monte Carlo: P10/P50/P90 NPV, negative-NPV probability, VaR/CVaR, technical-gate failure probability and stress scenarios;
 - Stage 9 market layer: 450-day Elexon APX Market Index archive, settlement-aware firming, perfect-foresight wholesale arbitrage and shared-battery firming/arbitrage co-optimisation;
+- Stage 9 pre-delivery layer: prior-date-only Market Index price forecasting, forecast-selected arbitrage, perfect-foresight capture-gap measurement and Stage B reserve-aware wholesale scheduling;
 - one-page Dash interface and CSV export;
 - public GitHub repository with GitHub Actions configuration;
 - automated test suite covering physical, uncertainty, tomorrow-planning and settlement logic;
@@ -42,11 +43,12 @@ Forecasting V2 is packaged separately on branch `feature/v2-spatial-production`,
 
 ## Next analytical stages
 
-1. Connect an authorised day-ahead auction feed or build an issue-time-correct price forecast, then convert the current perfect-information market benchmarks into deployable strategies.
-2. Extend market co-optimisation to balancing/ancillary-service revenue only after service-specific eligibility and commitment constraints are encoded.
-3. Add date-range, seasonal and weather-regime comparison and quantify sizing/reserve sensitivity by wind/solar mix.
-4. Upgrade the operational directional residual range to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty and compare both approaches.
-5. Automate the versioned forecast-bundle handoff, freshness/stale-data checks and fallback behavior.
+1. Automate the latest Market Index price-forecast bundle before each target delivery day and add freshness/fallback checks.
+2. Connect an authorised day-ahead auction feed when available and compare it with the public Market Index forecast benchmark.
+3. Extend market co-optimisation to balancing/ancillary-service revenue only after service-specific eligibility and commitment constraints are encoded.
+4. Add date-range, seasonal and weather-regime comparison and quantify sizing/reserve sensitivity by wind/solar mix.
+5. Upgrade the operational directional residual range to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty and compare both approaches.
+6. Automate the versioned forecast-bundle handoff, freshness/stale-data checks and fallback behavior.
 
 ## Learning fixture
 

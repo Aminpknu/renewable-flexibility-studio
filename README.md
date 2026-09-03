@@ -129,6 +129,10 @@ Three ex-post upper-bound strategies are separated: settlement-aware firming usi
 
 A separate adapter validates user-supplied licensed day-ahead prices with publication timestamps and issue-time cutoffs, so an authorised Nord Pool/EPEX feed can be added later without changing the optimisation architecture.
 
+The forecast-based market layer now removes price perfect foresight using an expanding ridge forecast trained only on earlier Market Index settlement dates. Across 420 eligible days, price MAE is **£20.0/MWh**, 11.2% better than the previous-observed-same-period baseline. A 25 MW / 200 MWh forecast-selected arbitrage schedule captures about **60.0%** of the perfect-information upper bound overall and **63.4%** on Apr-Jun 2026. Preserving the Stage B SOC reserve corridor reduces capture to **49.6%**, quantifying the market opportunity cost of maintaining renewable-risk headroom.
+
+The current 3 September forecast-day market bundle is explicitly marked as an **as-if reconstruction generated after delivery began**, while still excluding all target-day Market Index observations. Future automation should generate this bundle before the target day starts.
+
 ## Renewable-only continuous-SOC stress test
 
 For a 100 MW virtual portfolio with a 25 MW / 50 MWh battery, 90% round-trip efficiency, 10–90% SOC limits and no grid charging, continuous operation absorbs about **33.5% of wind**, **50.2% of solar** and **44.4% of 50/50 mixed** absolute forecast-deviation energy. SOC ends at its minimum bound, showing that energy availability and conversion losses matter across long horizons.

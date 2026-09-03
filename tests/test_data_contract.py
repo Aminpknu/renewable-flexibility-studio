@@ -124,3 +124,31 @@ def test_market_optimisation_evidence_artifact() -> None:
     assert summary["mean_daily_error_reduction_pct_reactive"] > (
         summary["mean_daily_error_reduction_pct_market_aware"]
     )
+
+
+def test_pre_delivery_market_strategy_artifacts() -> None:
+    import pandas as pd
+    price = pd.read_csv(ROOT / "outputs" / "market_optimisation" / "price_forecast_backtest.csv")
+    daily = pd.read_csv(ROOT / "outputs" / "market_optimisation" / "pre_delivery_strategy_daily.csv")
+    summary = json.loads(
+        (ROOT / "outputs" / "market_optimisation" / "pre_delivery_strategy_summary.json").read_text(encoding="utf-8")
+    )
+    assert price["settlement_date"].nunique() == 420
+    assert len(price) == 20160
+    assert len(daily) == 420
+    assert summary["price_forecast"]["issue_rule"] == "strictly earlier settlement dates only"
+    assert 50.0 < summary["forecast_capture_rate_pct"] < 70.0
+    assert summary["reserve_corridor_feasible_days_pct"] == 100.0
+    assert summary["locked_test"]["days"] == 90
+
+
+def test_latest_market_price_forecast_is_labelled_by_actual_issue_timing() -> None:
+    import pandas as pd
+    frame = pd.read_csv(ROOT / "data" / "latest_market_price_forecast.csv")
+    manifest = json.loads((ROOT / "data" / "latest_market_price_forecast_manifest.json").read_text(encoding="utf-8"))
+    assert len(frame) in {46, 48, 50}
+    assert frame["settlement_date"].nunique() == 1
+    assert manifest["method"]["uses_target_date_prices"] is False
+    assert manifest["method"]["issue_rule"].endswith("strictly earlier than target date")
+    assert manifest["operational_status"] in {"pre_delivery_issue", "as_if_reconstruction_after_target_start"}
+    assert manifest["semantic_label"].endswith("not day-ahead auction price")

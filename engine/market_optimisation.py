@@ -291,6 +291,18 @@ def optimise_wholesale_arbitrage(
     upper[discharge_offset:discharge_offset + n] = battery.power_mw
     lower[soc_offset:soc_offset + n] = battery.minimum_soc_mwh
     upper[soc_offset:soc_offset + n] = battery.maximum_soc_mwh
+    corridor_columns = {"soc_floor_mwh", "soc_ceiling_mwh"}
+    if corridor_columns.issubset(frame.columns):
+        corridor_floor = pd.to_numeric(frame["soc_floor_mwh"], errors="raise").to_numpy(float)
+        corridor_ceiling = pd.to_numeric(frame["soc_ceiling_mwh"], errors="raise").to_numpy(float)
+        if not np.isfinite(np.column_stack([corridor_floor, corridor_ceiling])).all():
+            raise ValueError("SOC corridor contains non-finite values.")
+        corridor_floor = np.maximum(corridor_floor, battery.minimum_soc_mwh)
+        corridor_ceiling = np.minimum(corridor_ceiling, battery.maximum_soc_mwh)
+        if (corridor_floor > corridor_ceiling + 1e-9).any():
+            raise ValueError("SOC reserve corridor is infeasible for at least one period.")
+        lower[soc_offset:soc_offset + n] = corridor_floor
+        upper[soc_offset:soc_offset + n] = corridor_ceiling
     upper[mode_offset:mode_offset + n] = 1.0
 
     a_eq = np.zeros((n + 1, variable_count), dtype=float)
@@ -549,3 +561,48 @@ def optimise_firming_and_arbitrage(
         "solver_status": str(solution.message),
     }
     return frame, summary
+
+
+def evaluate_arbitrage_schedule(
+    schedule: pd.DataFrame,
+    realised_market_prices: pd.DataFrame,
+    throughput_cost_gbp_per_mwh: float = 0.0,
+) -> dict[str, Any]:
+    """Evaluate a pre-computed arbitrage schedule against realised Market Index prices."""
+    if throughput_cost_gbp_per_mwh < 0 or not np.isfinite(throughput_cost_gbp_per_mwh):
+        raise ValueError("Throughput cost must be finite and non-negative.")
+    required_schedule = {
+        "settlement_period", "arbitrage_charge_mw", "arbitrage_discharge_mw"
+    }
+    missing = sorted(required_schedule.difference(schedule.columns))
+    if missing:
+        raise ValueError(f"Arbitrage schedule is missing columns: {missing}")
+    required_price = {"settlement_period", "market_index_price_gbp_per_mwh"}
+    missing = sorted(required_price.difference(realised_market_prices.columns))
+    if missing:
+        raise ValueError(f"Realised market prices are missing columns: {missing}")
+    prices = realised_market_prices[list(required_price)].copy()
+    if prices["settlement_period"].duplicated().any():
+        raise ValueError("Realised market prices contain duplicate settlement periods.")
+    frame = schedule[[
+        "settlement_period", "arbitrage_charge_mw", "arbitrage_discharge_mw"
+    ]].merge(prices, on="settlement_period", how="left", validate="one_to_one")
+    if frame["market_index_price_gbp_per_mwh"].isna().any():
+        raise ValueError("Realised market-price join produced missing values.")
+    dt = 0.5
+    charge_mwh = frame["arbitrage_charge_mw"].to_numpy(float) * dt
+    discharge_mwh = frame["arbitrage_discharge_mw"].to_numpy(float) * dt
+    price = frame["market_index_price_gbp_per_mwh"].to_numpy(float)
+    purchase_cost = float((charge_mwh * price).sum())
+    sale_revenue = float((discharge_mwh * price).sum())
+    throughput = float(charge_mwh.sum() + discharge_mwh.sum())
+    throughput_cost = throughput * float(throughput_cost_gbp_per_mwh)
+    gross = sale_revenue - purchase_cost
+    return {
+        "realised_purchase_cost_gbp": purchase_cost,
+        "realised_sale_revenue_gbp": sale_revenue,
+        "realised_gross_arbitrage_margin_gbp": float(gross),
+        "throughput_mwh": throughput,
+        "throughput_cost_gbp": float(throughput_cost),
+        "realised_net_arbitrage_margin_gbp": float(gross - throughput_cost),
+    }

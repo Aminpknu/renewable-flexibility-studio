@@ -187,3 +187,36 @@ def test_cooptimisation_shares_single_battery_power_limit() -> None:
     assert (total_discharge <= 1.0 + 1e-8).all()
     assert (total_charge <= 1.0 + 1e-8).all()
     assert not ((total_discharge > 1e-8) & (total_charge > 1e-8)).any()
+
+
+def test_arbitrage_schedule_respects_optional_soc_corridor() -> None:
+    from engine.market_optimisation import WholesaleArbitrageConfig, optimise_wholesale_arbitrage
+    prices = pd.DataFrame({
+        "settlement_period": [1, 2, 3, 4],
+        "market_index_price_gbp_per_mwh": [0.0, 0.0, 200.0, 200.0],
+        "soc_floor_mwh": [0.75, 0.75, 0.75, 0.75],
+        "soc_ceiling_mwh": [1.25, 1.25, 1.25, 1.25],
+    })
+    battery = BatteryConfig(
+        power_mw=1.0, duration_hours=2.0, round_trip_efficiency=1.0,
+        initial_soc_fraction=0.5, minimum_soc_fraction=0.0, maximum_soc_fraction=1.0,
+    )
+    result, _ = optimise_wholesale_arbitrage(prices, battery, WholesaleArbitrageConfig())
+    assert result["arbitrage_soc_end_mwh"].between(0.75 - 1e-8, 1.25 + 1e-8).all()
+
+
+def test_forecast_selected_schedule_is_evaluated_at_realised_prices() -> None:
+    from engine.market_optimisation import evaluate_arbitrage_schedule
+    schedule = pd.DataFrame({
+        "settlement_period": [1, 2],
+        "arbitrage_charge_mw": [1.0, 0.0],
+        "arbitrage_discharge_mw": [0.0, 1.0],
+    })
+    realised = pd.DataFrame({
+        "settlement_period": [1, 2],
+        "market_index_price_gbp_per_mwh": [20.0, 100.0],
+    })
+    result = evaluate_arbitrage_schedule(schedule, realised, throughput_cost_gbp_per_mwh=2.0)
+    assert result["realised_gross_arbitrage_margin_gbp"] == pytest.approx(40.0)
+    assert result["throughput_mwh"] == pytest.approx(1.0)
+    assert result["realised_net_arbitrage_margin_gbp"] == pytest.approx(38.0)

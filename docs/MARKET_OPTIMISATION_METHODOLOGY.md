@@ -136,3 +136,27 @@ The current market layer does **not** claim:
 - taxes, financing, transaction fees or bid/offer execution risk.
 
 The next deployable step requires an issue-time-correct price forecast or an authorised day-ahead auction feed. Perfect-foresight results remain clearly separated as upper-bound evidence.
+
+## E. Issue-time-correct Market Index price forecast
+
+The first forecast-based strategy removes price perfect foresight without introducing licensed auction data. For every target day after 30 prior Market Index days, an expanding ridge model is refit using **settlement dates strictly earlier than the target date**.
+
+Features are deliberately compact and inspectable: local-time harmonics, day-of-week/year harmonics, previous observed daily price level, 7/28-day prior means, previous observed same-settlement-period price and 7/28-observation same-period means. No target-day Market Index price or volume is used as an input.
+
+Across 420 eligible target days the model achieves **£20.01/MWh MAE**, versus **£22.53/MWh** for a previous-observed-same-period baseline, an **11.2% MAE improvement**. The model is a forecast of the public APX Market Index reference, not a forecast of a licensed day-ahead auction clearing price.
+
+## F. Forecast-selected arbitrage and capture gap
+
+For each eligible historical target day, the battery schedule is optimised using only the **forecast Market Index price path**. The schedule is then frozen and valued afterwards at the realised APX Market Index Price. This separates the information used to choose dispatch from the price used to score the result.
+
+On the default 25 MW / 200 MWh battery with £2/MWh throughput cost, the forecast-selected strategy annualises to about **£1.13m/year**, compared with **£1.89m/year** for the same 420-day perfect-foresight arbitrage upper bound. The resulting realised-value capture ratio is **60.0%** overall and **63.4%** on Apr-Jun 2026. About **89.3%** of eligible days have positive realised net margin.
+
+A reserve-aware variant constrains the wholesale schedule inside the Stage B uncertainty-derived SOC corridor. It remains feasible on all 420 mixed-portfolio target days and captures about **49.6%** of the perfect-information arbitrage value while increasing positive-margin days slightly to **90.7%**. The mean market opportunity cost of preserving that reserve corridor is about **£537/day** on this benchmark.
+
+This is closer to a deployable information set but is still a **strategy benchmark**, not realised tradable revenue. Market Index Price is a short-term settlement reference, and the backtest assumes the forecast-selected schedule can be scored at realised MIP. Bid/offer execution, spread, fees and an authorised day-ahead trading product remain outside this packet.
+
+## G. Forecast-day market schedule
+
+The same prior-data-only price model can be applied to the latest renewable forecast target. The public schedule compares a price-only wholesale plan with a reserve-aware plan constrained by the Stage B SOC corridor and the Stage A selected battery. The latter therefore makes the market-versus-resilience trade-off explicit before delivery.
+
+The current 3 September 2026 market-price file was regenerated after the target day had already started. Its manifest therefore records `operational_status = as_if_reconstruction_after_target_start`; it is **not** presented as an actually issued pre-delivery trading forecast. All target-day MIP observations remain excluded from its features. A future automated pipeline should generate this bundle before the target delivery day begins.

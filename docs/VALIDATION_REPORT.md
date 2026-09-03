@@ -121,3 +121,11 @@ The market optimiser is tested against hand-calculated cases for price-priority 
 For the default 100 MW 50/50 portfolio and Stage A 25 MW / 200 MWh design, using a £2/MWh scenario throughput cost, the 450-day ex-post evidence annualises to approximately **-£0.061m reactive firming**, **£0.270m settlement-aware firming**, **£1.904m wholesale arbitrage-only**, and **£2.049m co-optimised firming plus arbitrage**. Mean daily physical error reduction is about **98.3% reactive**, **47.8% settlement-aware**, and **40.1% co-optimised**.
 
 These market values use realised forecast error and/or realised prices and are therefore perfect-information upper-bound evidence. APX Market Index Price is labelled a short-term wholesale reference, not a day-ahead auction price. No public result is described as deployable revenue until an issue-time-correct price forecast or authorised day-ahead price feed is connected.
+
+## Pre-delivery market-price strategy validation
+
+An expanding ridge forecast of APX Market Index Price was backtested on 420 target days after a 30-day warm-up. All target-day features use settlement dates strictly earlier than the target date. MAE is **£20.01/MWh** versus **£22.53/MWh** for a previous-observed-same-period baseline, an **11.2% improvement**; forecast R² is **0.300** versus **-0.077** for that naive baseline.
+
+The forecast-selected 25 MW / 200 MWh arbitrage strategy captures **60.0%** of the matching perfect-information arbitrage upper bound across the 420 days and **63.4%** across Apr-Jun 2026. A Stage B SOC-corridor-constrained version remains feasible on all 420 mixed-portfolio days and captures **49.6%** overall. Positive realised net margin occurs on 89.3% of forecast-strategy days and 90.7% of reserve-aware days.
+
+The current 3 September forecast-day market file is flagged `as_if_reconstruction_after_target_start`. It excludes all target-day Market Index observations but was generated after delivery began, so it is not counted as an operationally issued forecast.
