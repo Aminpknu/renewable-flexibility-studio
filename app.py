@@ -31,6 +31,14 @@ from engine.value import (
 )
 from engine.imbalance import apply_imbalance_settlement, summarise_imbalance_settlement
 from engine.metrics import calculate_firming_metrics
+from engine.market_investment import (
+    MarketInvestmentAssumptions, appraise_market_operating_value,
+    maximum_capex_for_market_zero_npv_gbp, minimum_annual_market_value_for_zero_npv_gbp,
+)
+from engine.market_investment_monte_carlo import (
+    MarketInvestmentDistributions, MarketInvestmentMonteCarloConfig,
+    run_market_investment_monte_carlo,
+)
 from engine.market_optimisation import (
     SettlementOptimisationConfig, WholesaleArbitrageConfig,
     optimise_firming_and_arbitrage, optimise_settlement_aware_firming,
@@ -79,6 +87,8 @@ PREDELIVERY_SUMMARY_PATH = ROOT / "outputs" / "market_optimisation" / "pre_deliv
 LATEST_MARKET_FORECAST_PATH = ROOT / "data" / "latest_market_price_forecast.csv"
 LATEST_MARKET_FORECAST_MANIFEST_PATH = ROOT / "data" / "latest_market_price_forecast_manifest.json"
 MARKET_PIPELINE_STATUS_PATH = ROOT / "data" / "market_forecast_pipeline_status.json"
+MARKET_INVESTMENT_SUMMARY_PATH = ROOT / "outputs" / "market_investment" / "market_investment_summary.json"
+MARKET_INVESTMENT_MC_PATH = ROOT / "outputs" / "market_investment" / "market_investment_monte_carlo_5000.csv"
 HISTORICAL_DATA = load_historical_predictions(DATA_PATH)
 SYSTEM_PRICES = load_system_price_history(SYSTEM_PRICES_PATH)
 MARKET_INDEX_PRICES = load_market_index_history(MARKET_INDEX_PATH)
@@ -97,6 +107,7 @@ QUICK_RESERVE_ACCEPTANCE_DIAGNOSTIC = json.loads(QUICK_RESERVE_ACCEPTANCE_DIAGNO
 PRICE_FORECAST_BACKTEST = pd.read_csv(PRICE_FORECAST_BACKTEST_PATH)
 PREDELIVERY_DAILY = pd.read_csv(PREDELIVERY_DAILY_PATH)
 PREDELIVERY_SUMMARY = json.loads(PREDELIVERY_SUMMARY_PATH.read_text(encoding="utf-8"))
+MARKET_INVESTMENT_SUMMARY = json.loads(MARKET_INVESTMENT_SUMMARY_PATH.read_text(encoding="utf-8"))
 LATEST_MARKET_FORECAST, LATEST_MARKET_FORECAST_MANIFEST = validate_market_forecast_bundle(
     LATEST_MARKET_FORECAST_PATH, LATEST_MARKET_FORECAST_MANIFEST_PATH
 )
@@ -1340,6 +1351,152 @@ def _quick_reserve_predelivery_view(date_value: str):
     return note, cards, figure
 
 
+def _market_investment_reference_supported(
+    portfolio_type: str,
+    capacity_mw: float,
+    wind_share_pct: float,
+    design_target_pct: float,
+    design_reliability_pct: float,
+) -> bool:
+    return (
+        portfolio_type == "mixed"
+        and abs(float(capacity_mw) - 100.0) < 1e-9
+        and abs(float(wind_share_pct) - 50.0) < 1e-9
+        and abs(float(design_target_pct) - 90.0) < 1e-9
+        and abs(float(design_reliability_pct) - 90.0) < 1e-9
+    )
+
+
+def _annualise_daily_value(frame: pd.DataFrame, column: str) -> float:
+    values = pd.to_numeric(frame[column], errors="raise")
+    if frame.empty:
+        raise ValueError("Market investment evidence is empty.")
+    return float(values.sum() * 365.25 / len(frame))
+
+
+def _market_investment_assumptions(
+    capex_million: float,
+    fixed_opex_million: float,
+    asset_life_years: int,
+    discount_rate_pct: float,
+    degradation_pct: float,
+    replacement_year: int | float | None,
+    replacement_cost_million: float,
+) -> MarketInvestmentAssumptions:
+    replacement_value = int(replacement_year or 0)
+    replacement = None if replacement_value <= 0 else replacement_value
+    return MarketInvestmentAssumptions(
+        total_capex_gbp=float(capex_million) * 1e6,
+        fixed_opex_gbp_per_year=float(fixed_opex_million) * 1e6,
+        asset_life_years=int(asset_life_years),
+        discount_rate=float(discount_rate_pct) / 100.0,
+        annual_revenue_degradation_fraction=float(degradation_pct) / 100.0,
+        replacement_year=replacement,
+        replacement_cost_gbp=float(replacement_cost_million) * 1e6,
+    )
+
+
+def _market_investment_scenarios(
+    assumptions: MarketInvestmentAssumptions,
+) -> dict[str, dict[str, Any]]:
+    market = PREDELIVERY_DAILY.copy()
+    locked = market.loc[market["evaluation_segment"].eq("locked_test")].copy()
+    qr = QUICK_RESERVE_PREDELIVERY_DAILY.copy()
+    annual_values = {
+        "Forecast wholesale · 420d": _annualise_daily_value(
+            market, "forecast_strategy_margin_gbp"
+        ),
+        "Reserve-aware wholesale · 420d": _annualise_daily_value(
+            market, "reserve_aware_forecast_margin_gbp"
+        ),
+    }
+    locked_market = _annualise_daily_value(
+        locked, "forecast_strategy_margin_gbp"
+    )
+    locked_reserve = _annualise_daily_value(
+        locked, "reserve_aware_forecast_margin_gbp"
+    )
+    qr_value = _annualise_daily_value(
+        qr, "forecast_selected_qr_availability_gbp"
+    )
+    annual_values["Apr–Jun wholesale + QR upside"] = locked_market + qr_value
+    annual_values["Apr–Jun reserve + QR upside"] = locked_reserve + qr_value
+    results: dict[str, dict[str, Any]] = {}
+    break_even_annual = minimum_annual_market_value_for_zero_npv_gbp(assumptions)
+    for name, annual_value in annual_values.items():
+        appraisal = appraise_market_operating_value(annual_value, assumptions)
+        results[name] = {
+            "annual_operating_value_gbp": float(annual_value),
+            "npv_gbp": float(appraisal["npv_gbp"]),
+            "benefit_cost_ratio": float(appraisal["benefit_cost_ratio"]),
+            "simple_payback_years": appraisal["simple_payback_years"],
+            "maximum_capex_for_zero_npv_gbp": maximum_capex_for_market_zero_npv_gbp(
+                annual_value, assumptions
+            ),
+            "minimum_annual_market_value_for_zero_npv_gbp": break_even_annual,
+        }
+    return results
+
+
+def _market_investment_figure(
+    scenarios: dict[str, dict[str, Any]],
+) -> go.Figure:
+    names = list(scenarios)
+    npv = [scenarios[name]["npv_gbp"] / 1e6 for name in names]
+    custom = [
+        [
+            scenarios[name]["annual_operating_value_gbp"] / 1e6,
+            scenarios[name]["benefit_cost_ratio"],
+        ]
+        for name in names
+    ]
+    figure = go.Figure(go.Bar(
+        x=names,
+        y=npv,
+        customdata=custom,
+        hovertemplate=(
+            "NPV £%{y:.2f}m<br>Annual operating value £%{customdata[0]:.2f}m"
+            "<br>BCR %{customdata[1]:.2f}<extra></extra>"
+        ),
+    ))
+    figure.add_hline(y=0.0, line_dash="dash")
+    figure.update_layout(
+        yaxis_title="NPV (£m)", xaxis_title="Market-backed scenario",
+        margin=dict(l=60, r=20, t=45, b=105), height=430,
+    )
+    return figure
+
+
+def _market_investment_mc(
+    assumptions: MarketInvestmentAssumptions,
+    availability_pct: float,
+    simulations: int,
+    block_days: int,
+    seed: int,
+):
+    evidence = PREDELIVERY_DAILY[[
+        "settlement_date", "forecast_strategy_margin_gbp"
+    ]].rename(columns={"forecast_strategy_margin_gbp": "market_value_gbp"})
+    availability_mode = float(availability_pct) / 100.0
+    distributions = MarketInvestmentDistributions(
+        availability_fraction=TriangularMultiplier(
+            max(0.0, availability_mode - 0.05),
+            availability_mode,
+            min(1.0, availability_mode + 0.05),
+        )
+    )
+    return run_market_investment_monte_carlo(
+        evidence,
+        "market_value_gbp",
+        assumptions,
+        MarketInvestmentMonteCarloConfig(
+            simulations=int(simulations), seed=int(seed), sample_days=365,
+            block_days=int(block_days), confidence=0.95,
+        ),
+        distributions,
+    )
+
+
 def _tomorrow_planning_data(
     portfolio_type: str,
     capacity_mw: float,
@@ -1773,6 +1930,67 @@ app.layout = html.Div(
                         dcc.Graph(id="risk-value-sensitivity", figure=_empty_figure("Sensitivity analysis is loading."), config={"displaylogo": False}),
                         html.Button("Download risk-value scenario JSON", id="risk-value-download-button", n_clicks=0, className="secondary-button"),
                         dcc.Download(id="risk-value-download"),
+                        html.Hr(),
+                        html.H3("Market-backed investment case (Stage 10)"),
+                        html.P(
+                            "This section replaces the abstract consequence-value benefit with the realised value of the prior-date forecast-selected wholesale battery schedule. It reuses CAPEX, fixed OPEX, asset life, discount rate and degradation entered above. The historical market dispatch already includes the frozen £2/MWh throughput-cost assumption.",
+                            className="section-copy",
+                        ),
+                        html.Div(
+                            [
+                                html.Div([
+                                    html.Label("Replacement year (0 = none)"),
+                                    dcc.Input(
+                                        id="market-replacement-year-input", type="number",
+                                        min=0, step=1, value=0,
+                                    ),
+                                ]),
+                                html.Div([
+                                    html.Label("Replacement cost (£m)"),
+                                    dcc.Input(
+                                        id="market-replacement-cost-input", type="number",
+                                        min=0, step=1, value=0,
+                                    ),
+                                ]),
+                            ],
+                            className="design-controls",
+                        ),
+                        html.Div(id="market-investment-note", className="recommendation-box"),
+                        html.Div(id="market-investment-kpi-grid", className="kpi-grid"),
+                        html.Div("Market-backed lifecycle NPV by evidence case", className="chart-title"),
+                        html.Div(
+                            "The 420-day wholesale cases are the core investment evidence. Quick Reserve is shown only as an Apr–Jun aligned price-taker availability upside because asset-specific EAC acceptance is not yet identified.",
+                            className="chart-subtitle",
+                        ),
+                        dcc.Graph(
+                            id="market-investment-chart",
+                            figure=_empty_figure("Market-backed investment evidence is loading."),
+                            config={"displaylogo": False},
+                        ),
+                        html.H4("Market-backed downside risk"),
+                        html.P(
+                            "This Monte Carlo resamples the realised daily value of the forecast-selected wholesale schedule in contiguous blocks, then varies CAPEX, fixed OPEX, availability and degradation. Quick Reserve is excluded from this probabilistic base until auction acceptance is modelled.",
+                            className="section-copy",
+                        ),
+                        html.Button(
+                            "Run market-backed Monte Carlo",
+                            id="market-investment-mc-button", n_clicks=0,
+                            className="primary-button",
+                        ),
+                        html.Div(id="market-investment-mc-note", className="scenario-note"),
+                        html.Div(id="market-investment-mc-kpi-grid", className="kpi-grid"),
+                        dcc.Graph(
+                            id="market-investment-mc-chart",
+                            figure=_empty_figure("Run the market-backed Monte Carlo to generate probabilistic NPV."),
+                            config={"displaylogo": False},
+                        ),
+                        dcc.Store(id="market-investment-mc-store"),
+                        html.Button(
+                            "Download market-backed investment summary JSON",
+                            id="market-investment-download-button", n_clicks=0,
+                            className="secondary-button",
+                        ),
+                        dcc.Download(id="market-investment-download"),
                         html.Hr(),
                         html.H3("Quantitative downside risk (Stage 6B)"),
                         html.P(

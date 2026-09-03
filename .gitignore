@@ -37,3 +37,6 @@ data/*.parquet
 !outputs/quick_reserve/
 !outputs/quick_reserve/*.json
 !outputs/quick_reserve/*.csv
+!outputs/market_investment/
+!outputs/market_investment/*.json
+!outputs/market_investment/*.csv

@@ -1,0 +1,142 @@
+{
+  "schema_version": "1.0",
+  "stage": "10_market_backed_investment",
+  "battery": {
+    "power_mw": 25.0,
+    "energy_mwh": 200.0,
+    "duration_hours": 8.0
+  },
+  "market_evidence": {
+    "base_days": 420,
+    "locked_days": 90,
+    "throughput_cost_already_embedded_gbp_per_mwh": 2.0,
+    "base_source": "realised value of forecast-selected APX Market Index schedule",
+    "reserve_source": "realised value of reserve-aware forecast-selected APX schedule",
+    "qr_source": "forecast-selected QR capacity under system-volume-capped price-taker scoring"
+  },
+  "assumptions": {
+    "total_capex_gbp": 25000000.0,
+    "fixed_opex_gbp_per_year": 500000.0,
+    "asset_life_years": 15,
+    "discount_rate_pct": 8.0,
+    "annual_revenue_degradation_pct": 2.0,
+    "replacement_year": null,
+    "replacement_cost_gbp": 0.0
+  },
+  "scenarios": {
+    "forecast_wholesale_420d": {
+      "scenario": "Forecast-selected wholesale \u00b7 420-day evidence",
+      "annual_operating_value_gbp": 1133382.5169560702,
+      "npv_gbp": -20584743.56327571,
+      "benefit_cost_ratio": 0.29696288203058,
+      "simple_payback_years": null,
+      "pv_market_value_gbp": 8694995.780687472,
+      "pv_total_cost_gbp": 29279739.343963183,
+      "maximum_capex_for_zero_npv_gbp": 4415256.436724287,
+      "minimum_annual_market_value_for_zero_npv_gbp": 3816579.7328144163
+    },
+    "reserve_aware_wholesale_420d": {
+      "scenario": "Reserve-aware wholesale \u00b7 420-day evidence",
+      "annual_operating_value_gbp": 937061.7705627338,
+      "npv_gbp": -22090861.78551192,
+      "benefit_cost_ratio": 0.24552396023748915,
+      "simple_payback_years": null,
+      "pv_market_value_gbp": 7188877.558451263,
+      "pv_total_cost_gbp": 29279739.343963183,
+      "maximum_capex_for_zero_npv_gbp": 2909138.214488079,
+      "minimum_annual_market_value_for_zero_npv_gbp": 3816579.7328144163
+    },
+    "locked_forecast_wholesale_90d": {
+      "scenario": "Forecast-selected wholesale \u00b7 Apr-Jun regime",
+      "annual_operating_value_gbp": 1508570.1471012589,
+      "npv_gbp": -17706408.303755388,
+      "benefit_cost_ratio": 0.39526755700419014,
+      "simple_payback_years": null,
+      "pv_market_value_gbp": 11573331.040207796,
+      "pv_total_cost_gbp": 29279739.343963183,
+      "maximum_capex_for_zero_npv_gbp": 7293591.696244611,
+      "minimum_annual_market_value_for_zero_npv_gbp": 3816579.7328144163
+    },
+    "aligned_wholesale_plus_qr_90d": {
+      "scenario": "Wholesale + QR price-taker upside \u00b7 Apr-Jun aligned",
+      "annual_operating_value_gbp": 2768684.899476259,
+      "npv_gbp": -8039158.023144834,
+      "benefit_cost_ratio": 0.7254361478869407,
+      "simple_payback_years": 13,
+      "pv_market_value_gbp": 21240581.32081835,
+      "pv_total_cost_gbp": 29279739.343963183,
+      "maximum_capex_for_zero_npv_gbp": 16960841.976855166,
+      "minimum_annual_market_value_for_zero_npv_gbp": 3816579.7328144163
+    },
+    "aligned_reserve_plus_qr_90d": {
+      "scenario": "Reserve-aware wholesale + QR price-taker upside \u00b7 Apr-Jun aligned",
+      "annual_operating_value_gbp": 2517302.728537741,
+      "npv_gbp": -9967692.196691815,
+      "benefit_cost_ratio": 0.6595703233694624,
+      "simple_payback_years": 15,
+      "pv_market_value_gbp": 19312047.14727137,
+      "pv_total_cost_gbp": 29279739.343963183,
+      "maximum_capex_for_zero_npv_gbp": 15032307.803308185,
+      "minimum_annual_market_value_for_zero_npv_gbp": 3816579.7328144163
+    }
+  },
+  "monte_carlo_forecast_wholesale": {
+    "simulation_count": 5000,
+    "npv_p10_gbp": -24175636.230684575,
+    "npv_p50_gbp": -21459853.0094088,
+    "npv_p90_gbp": -19002051.205304343,
+    "mean_npv_gbp": -21512073.826898865,
+    "probability_negative_npv_pct": 100.0,
+    "loss_convention": "investment_loss_gbp = -NPV_gbp",
+    "var_confidence_pct": 95.0,
+    "var_loss_gbp": 24807973.643414225,
+    "cvar_expected_shortfall_gbp": 25416298.65411904,
+    "seed": 20260903,
+    "sample_days": 365,
+    "block_days": 7,
+    "resampling": "contiguous circular blocks of realised forecast-selected daily market value",
+    "availability_model": "simulation-level availability rate with independent daily online draws",
+    "annual_market_value_p10_gbp": 962669.7466146767,
+    "annual_market_value_p50_gbp": 1074198.797560547,
+    "annual_market_value_p90_gbp": 1194949.2047421248,
+    "mean_annual_market_value_gbp": 1076454.4025084588,
+    "probability_negative_annual_market_value_pct": 0.0
+  },
+  "monte_carlo_reserve_aware_wholesale": {
+    "simulation_count": 2000,
+    "npv_p10_gbp": -25558147.76306859,
+    "npv_p50_gbp": -22890781.661011454,
+    "npv_p90_gbp": -20485979.62322659,
+    "mean_npv_gbp": -22951450.2240607,
+    "probability_negative_npv_pct": 100.0,
+    "loss_convention": "investment_loss_gbp = -NPV_gbp",
+    "var_confidence_pct": 95.0,
+    "var_loss_gbp": 26166512.045406517,
+    "cvar_expected_shortfall_gbp": 26713554.334815167,
+    "seed": 20260903,
+    "sample_days": 365,
+    "block_days": 7,
+    "resampling": "contiguous circular blocks of realised forecast-selected daily market value",
+    "availability_model": "simulation-level availability rate with independent daily online draws",
+    "annual_market_value_p10_gbp": 794861.4922690382,
+    "annual_market_value_p50_gbp": 887969.1582576792,
+    "annual_market_value_p90_gbp": 989215.5124502569,
+    "mean_annual_market_value_gbp": 890339.3049751077,
+    "probability_negative_annual_market_value_pct": 0.0
+  },
+  "convergence": {
+    "npv_p10_gbp_relative_difference_pct_1000_vs_5000": 0.027682680578460777,
+    "npv_p50_gbp_relative_difference_pct_1000_vs_5000": 0.15905658516623916,
+    "npv_p90_gbp_relative_difference_pct_1000_vs_5000": 0.10137371588863286,
+    "cvar_expected_shortfall_gbp_relative_difference_pct_1000_vs_5000": 0.3198646156336146,
+    "annual_market_value_p50_gbp_relative_difference_pct_1000_vs_5000": 0.19923274878803926
+  },
+  "limitations": [
+    "market operating value is a forecast-selected APX Market Index benchmark, not licensed day-ahead auction revenue",
+    "daily market evidence already includes the frozen \u00a32/MWh throughput-cost assumption",
+    "QR is shown only in deterministic Apr-Jun aligned price-taker upside scenarios and is excluded from the base Monte Carlo",
+    "QR asset-specific auction acceptance remains unidentified",
+    "CAPEX, fixed OPEX, lifetime, discount rate and degradation are transparent screening assumptions",
+    "tax, financing, transaction costs, grid-connection charges and site-specific constraints are excluded"
+  ]
+}
