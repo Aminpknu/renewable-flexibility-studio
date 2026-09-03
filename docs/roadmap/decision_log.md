@@ -56,3 +56,17 @@ Reason: target-day price leakage is excluded, DST days are supported, forecast-s
 Known limitations: APX MIP is not a licensed day-ahead auction price; realised MIP scoring does not prove trade execution; no fees/spread/site grid limit; current 3 Sep latest bundle is an as-if reconstruction generated after target start
 Next allowed stage: automate pre-delivery bundle issuance/freshness; authorised day-ahead feed comparison; ancillary-service eligibility/commitment modelling
 
+
+## Stage 9C — Automated market forecast publication
+
+Stage: 9C operational market forecast pipeline
+Decision: EVIDENCE READY
+Decision date: 2026-09-03
+Branch: feature/stage9-market-optimisation
+Primary evidence: atomic candidate validation, SHA-256 manifest, scheduled workflow, LIVE/RECONSTRUCTED/STALE health states, last-valid fallback
+Acceptance result: PASS
+Production impact: feature branch pending promotion to main
+Reason: failed refreshes cannot corrupt the published market bundle; valid pre-delivery issues are protected from later reconstructions; stale targets are surfaced explicitly
+Validation: 114 offline tests pass; current target correctly classified as RECONSTRUCTED
+Known limitations: scheduler depends on the renewable latest-forecast target being updated upstream; GitHub-hosted publication does not itself generate the V2 renewable forecast
+Next allowed stage: promote Stage 9 to main, then begin first ancillary/reserve-service stacking model

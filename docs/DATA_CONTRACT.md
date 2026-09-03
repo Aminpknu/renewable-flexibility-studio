@@ -75,3 +75,9 @@ A separate licensed day-ahead adapter accepts `settlement_date`, `settlement_per
 `outputs/market_optimisation/price_forecast_backtest.csv` contains 420 expanding-window APX Market Index forecasts generated only from earlier settlement dates. `pre_delivery_strategy_daily.csv` and `pre_delivery_strategy_summary.json` record realised margins for schedules selected from those forecasts, the matching perfect-information upper bound, and the Stage B reserve-aware variant.
 
 `data/latest_market_price_forecast.csv` is the compact forecast-day price-signal bundle. Its manifest records source-history coverage, generation time, target start time, leakage-safe issue rule and whether the bundle was actually created before delivery or later as an as-if reconstruction. It forecasts the public short-term APX Market Index reference and must never be relabelled as a licensed day-ahead auction price.
+
+## Operational market-forecast publication state
+
+`data/latest_market_price_forecast.csv` and its manifest are the current published market-price forecast bundle. Schema 1.1 adds `row_count`, SHA-256 and line-ending normalisation. Publication is atomic and occurs only after the candidate bundle validates.
+
+`data/last_valid_market_price_forecast.csv` plus its manifest preserve the previous validated bundle before replacement. `data/market_forecast_pipeline_status.json` records refresh/publish/fallback state and the current bundle-health classification. A fallback can remain available for audit while being explicitly marked stale if its target does not match the renewable forecast target.

@@ -152,3 +152,26 @@ def test_latest_market_price_forecast_is_labelled_by_actual_issue_timing() -> No
     assert manifest["method"]["issue_rule"].endswith("strictly earlier than target date")
     assert manifest["operational_status"] in {"pre_delivery_issue", "as_if_reconstruction_after_target_start"}
     assert manifest["semantic_label"].endswith("not day-ahead auction price")
+
+
+def test_operational_market_forecast_pipeline_artifacts() -> None:
+    import hashlib
+
+    csv_path = ROOT / "data" / "latest_market_price_forecast.csv"
+    manifest = json.loads(
+        (ROOT / "data" / "latest_market_price_forecast_manifest.json").read_text(encoding="utf-8")
+    )
+    status = json.loads(
+        (ROOT / "data" / "market_forecast_pipeline_status.json").read_text(encoding="utf-8")
+    )
+    assert manifest["schema_version"] == "1.1"
+    assert manifest["row_count"] in {46, 48, 50}
+    canonical = csv_path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == manifest["sha256"]
+    assert status["pipeline_status"] in {
+        "PUBLISHED", "RETAINED_PRE_DELIVERY_BUNDLE", "FALLBACK_RETAINED",
+        "FALLBACK_RESTORED", "RENEWABLE_TARGET_STALE",
+    }
+    assert status["bundle_health"]["status"] in {
+        "LIVE", "RECONSTRUCTED", "STALE_TARGET", "STALE_TIME",
+    }

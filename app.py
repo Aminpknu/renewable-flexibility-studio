@@ -18,6 +18,7 @@ from adapters.grid_context import fetch_day_ahead_demand
 from adapters.imbalance_settlement import load_system_price_history, select_system_prices
 from adapters.latest_forecast import latest_target_date, load_latest_forecast
 from adapters.market_reference import load_market_index_history, select_market_index_prices
+from adapters.market_forecast_bundle import assess_market_forecast_bundle, validate_market_forecast_bundle
 from engine.battery import BatteryConfig, simulate_reactive_firming
 from engine.design_sizing import select_stable_design
 from engine.frontier import build_risk_value_frontier
@@ -65,6 +66,7 @@ PREDELIVERY_DAILY_PATH = ROOT / "outputs" / "market_optimisation" / "pre_deliver
 PREDELIVERY_SUMMARY_PATH = ROOT / "outputs" / "market_optimisation" / "pre_delivery_strategy_summary.json"
 LATEST_MARKET_FORECAST_PATH = ROOT / "data" / "latest_market_price_forecast.csv"
 LATEST_MARKET_FORECAST_MANIFEST_PATH = ROOT / "data" / "latest_market_price_forecast_manifest.json"
+MARKET_PIPELINE_STATUS_PATH = ROOT / "data" / "market_forecast_pipeline_status.json"
 HISTORICAL_DATA = load_historical_predictions(DATA_PATH)
 SYSTEM_PRICES = load_system_price_history(SYSTEM_PRICES_PATH)
 MARKET_INDEX_PRICES = load_market_index_history(MARKET_INDEX_PATH)
@@ -76,8 +78,16 @@ MARKET_BACKTEST = json.loads(MARKET_BACKTEST_PATH.read_text(encoding="utf-8"))
 PRICE_FORECAST_BACKTEST = pd.read_csv(PRICE_FORECAST_BACKTEST_PATH)
 PREDELIVERY_DAILY = pd.read_csv(PREDELIVERY_DAILY_PATH)
 PREDELIVERY_SUMMARY = json.loads(PREDELIVERY_SUMMARY_PATH.read_text(encoding="utf-8"))
-LATEST_MARKET_FORECAST = pd.read_csv(LATEST_MARKET_FORECAST_PATH)
-LATEST_MARKET_FORECAST_MANIFEST = json.loads(LATEST_MARKET_FORECAST_MANIFEST_PATH.read_text(encoding="utf-8"))
+LATEST_MARKET_FORECAST, LATEST_MARKET_FORECAST_MANIFEST = validate_market_forecast_bundle(
+    LATEST_MARKET_FORECAST_PATH, LATEST_MARKET_FORECAST_MANIFEST_PATH
+)
+LATEST_MARKET_FORECAST_HEALTH = assess_market_forecast_bundle(
+    LATEST_MARKET_FORECAST_MANIFEST, expected_target_date=LATEST_TARGET_DATE
+)
+MARKET_PIPELINE_STATUS = (
+    json.loads(MARKET_PIPELINE_STATUS_PATH.read_text(encoding="utf-8"))
+    if MARKET_PIPELINE_STATUS_PATH.exists() else {"pipeline_status": "MANUAL_BUNDLE"}
+)
 EXTENDED_SIZING = pd.read_csv(EXTENDED_SIZING_PATH)
 DESIGN_GRID = load_design_grid(DESIGN_GRID_PATH)
 DATE_OPTIONS = available_dates(HISTORICAL_DATA)
@@ -1069,17 +1079,27 @@ def _forecast_day_market_schedule(
         _kpi_card("Reserve opportunity cost", f"£{signal_value-guarded_value:,.0f}", "Forecast-signal value given up for reserve"),
         _kpi_card("Minimum SOC corridor", f"{corridor_meta['minimum_corridor_width_mwh']:.1f} MWh", "Narrowest reserve-safe energy band"),
         _kpi_card("Price history", f"{LATEST_MARKET_FORECAST_MANIFEST['retrieved_history_days']} days", "Prior APX days used in this reconstruction"),
+        _kpi_card("Market bundle", LATEST_MARKET_FORECAST_HEALTH["status"], str(MARKET_PIPELINE_STATUS.get("pipeline_status", "MANUAL_BUNDLE"))),
     ]
-    status = str(LATEST_MARKET_FORECAST_MANIFEST.get("operational_status", "unknown"))
-    if status == "pre_delivery_issue":
-        timing_text = "The market-price forecast was generated before the target delivery day began."
-    else:
+    status = str(LATEST_MARKET_FORECAST_HEALTH["status"])
+    if status == "LIVE":
+        timing_text = "The market-price forecast was generated before the target delivery day began and matches the current renewable target."
+    elif status == "RECONSTRUCTED":
         timing_text = (
             "This file was regenerated after the target day had already begun, so it is shown as an as-if pre-delivery reconstruction. "
             "The model still excludes every target-day Market Index observation."
         )
+    else:
+        timing_text = (
+            f"Market bundle status is {status}. The site keeps the last validated bundle visible for audit, "
+            "but it must not be used as a current operating schedule until a matching fresh target is published."
+        )
+    pipeline_text = f"Market forecast pipeline: {MARKET_PIPELINE_STATUS.get('pipeline_status', 'MANUAL_BUNDLE')}."
+    if MARKET_PIPELINE_STATUS.get("refresh_error"):
+        pipeline_text += " Refresh failed, so the last validated bundle was retained."
     note = html.Div([
         html.Div(timing_text, className="scenario-note-line uncertainty-warning"),
+        html.Div(pipeline_text, className="scenario-note-line uncertainty-line"),
         html.Div(
             "The price-only schedule maximises value under the forecast APX signal. The reserve-aware schedule uses the same price forecast but keeps SOC inside the Stage B uncertainty corridor so battery energy/headroom remains available for renewable forecast risk.",
             className="scenario-note-line",

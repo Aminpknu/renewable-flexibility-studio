@@ -160,3 +160,18 @@ This is closer to a deployable information set but is still a **strategy benchma
 The same prior-data-only price model can be applied to the latest renewable forecast target. The public schedule compares a price-only wholesale plan with a reserve-aware plan constrained by the Stage B SOC corridor and the Stage A selected battery. The latter therefore makes the market-versus-resilience trade-off explicit before delivery.
 
 The current 3 September 2026 market-price file was regenerated after the target day had already started. Its manifest therefore records `operational_status = as_if_reconstruction_after_target_start`; it is **not** presented as an actually issued pre-delivery trading forecast. All target-day MIP observations remain excluded from its features. A future automated pipeline should generate this bundle before the target delivery day begins.
+
+## G. Automated forecast-bundle publication
+
+The operational market-price bundle is published atomically. A refresh is first written to temporary CSV/manifest files, then checked for one complete 46/48/50-period target day, finite values, target consistency and SHA-256 integrity. The live files are replaced only after all checks pass.
+
+Before replacement, the previous valid bundle is copied to `last_valid_market_price_forecast.*`. A failed API/model refresh therefore cannot corrupt the current public bundle. `market_forecast_pipeline_status.json` records whether a candidate was published, a previous bundle was retained/restored, or the renewable target itself was stale.
+
+Bundle health is shown explicitly in the Studio:
+
+- **LIVE**: target matches the renewable bundle and the price forecast was issued before target start;
+- **RECONSTRUCTED**: target matches, but the file was generated after delivery had begun;
+- **STALE_TARGET**: price and renewable bundle target dates differ;
+- **STALE_TIME**: the target delivery window is already materially past.
+
+A scheduled GitHub Actions workflow runs at 18:15 UTC each day and may also be triggered manually. It refreshes the validated bundle and commits only changed `data/` evidence. A reconstruction is never allowed to overwrite an already-valid pre-delivery issue for the same target.

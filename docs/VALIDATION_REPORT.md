@@ -129,3 +129,11 @@ An expanding ridge forecast of APX Market Index Price was backtested on 420 targ
 The forecast-selected 25 MW / 200 MWh arbitrage strategy captures **60.0%** of the matching perfect-information arbitrage upper bound across the 420 days and **63.4%** across Apr-Jun 2026. A Stage B SOC-corridor-constrained version remains feasible on all 420 mixed-portfolio days and captures **49.6%** overall. Positive realised net margin occurs on 89.3% of forecast-strategy days and 90.7% of reserve-aware days.
 
 The current 3 September forecast-day market file is flagged `as_if_reconstruction_after_target_start`. It excludes all target-day Market Index observations but was generated after delivery began, so it is not counted as an operationally issued forecast.
+
+## Automated market-forecast publication validation
+
+The market forecast publisher now writes to temporary files first and validates target date, 46/48/50-period completeness, duplicate keys, finite prices and SHA-256 before replacing the published bundle. Unit tests verify that a failed refresh retains the existing valid bundle and that a post-start reconstruction cannot overwrite an already-issued LIVE pre-delivery bundle.
+
+The scheduled workflow is configured for 18:15 UTC daily plus manual dispatch. The application reads the validated manifest and reports LIVE, RECONSTRUCTED, STALE_TARGET or STALE_TIME alongside pipeline fallback status. The current 3 September 2026 bundle is correctly classified RECONSTRUCTED because it was generated after target start; no claim of a genuinely issued pre-delivery schedule is made for that file.
+
+After this operational pipeline change, the complete offline suite passes **114 tests** and `git diff --check` is clean.
