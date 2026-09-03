@@ -140,3 +140,32 @@ footer { text-align: center; padding: 24px 20px 40px; color: var(--muted); font-
   .decision-path { grid-template-columns: 1fr 1fr; }
   .decision-step { padding: 8px 9px; }
 }
+
+/* Stage 18 asset workspace */
+.dark-eyebrow { color: var(--accent-dark); opacity: .8; }
+.asset-workspace { border-top: 3px solid var(--ink); }
+.asset-heading { max-width: 900px; margin-bottom: 10px; }
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 10px 14px;
+}
+.asset-grid label { margin-top: 8px; }
+.asset-grid input { width: 100%; }
+.asset-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.asset-summary {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  line-height: 1.5;
+  font-size: .84rem;
+}
+.asset-summary small { display: block; color: var(--muted); margin-top: 5px; }
+@media (max-width: 900px) {
+  .asset-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 520px) {
+  .asset-grid { grid-template-columns: 1fr; }
+  .asset-actions button { width: 100%; }
+}

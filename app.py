@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from dash import Dash, Input, Output, State, dcc, html, no_update
+from dash import Dash, Input, Output, State, ctx, dcc, html, no_update
 from plotly.subplots import make_subplots
 
 from adapters.design_grid import load_design_grid, scaled_design_grid
@@ -25,6 +25,7 @@ from adapters.spatial_forecast import build_spatial_virtual_forecast, load_lates
 from adapters.spatial_demand import load_latest_spatial_demand, select_zone_demand
 from adapters.market_forecast_bundle import assess_market_forecast_bundle, validate_market_forecast_bundle
 from engine.battery import BatteryConfig, simulate_reactive_firming
+from engine.asset_workspace import AssetConfig, delete_asset, get_asset, normalise_asset_store, upsert_asset
 from engine.design_sizing import select_stable_design
 from engine.frontier import build_risk_value_frontier
 from engine.forecast_handoff import assess_forecast_freshness, select_forecast_bundle, validate_national_forecast
@@ -2158,6 +2159,7 @@ def _mix_design_sensitivity_figure(frame: pd.DataFrame) -> go.Figure:
 app.layout = html.Div(
     [
         dcc.Store(id="scenario-store"),
+        dcc.Store(id="asset-store", storage_type="local"),
         dcc.Download(id="scenario-download"),
         html.Header(
             [
@@ -2194,6 +2196,28 @@ app.layout = html.Div(
         ),
         html.Main(
             [
+                html.Section([
+                    html.Div([
+                        html.Div("STAGE 18 · ASSET WORKSPACE", className="eyebrow dark-eyebrow"),
+                        html.H2("My asset / site scenario"),
+                        html.P("Save technical site assumptions in this browser and reuse them across the Studio. National evidence remains a modelling proxy until site-specific forecasts, metering and connection constraints are supplied.", className="section-copy"),
+                    ], className="asset-heading"),
+                    html.Div([
+                        html.Div([html.Label("Saved asset"), dcc.Dropdown(id="asset-select", clearable=True, placeholder="Create a new asset")]),
+                        html.Div([html.Label("Asset name"), dcc.Input(id="asset-name", type="text", value="Reference BESS")]),
+                        html.Div([html.Label("Location / site label"), dcc.Input(id="asset-location", type="text", value="GB virtual site")]),
+                        html.Div([html.Label("Battery power (MW)"), dcc.Input(id="asset-power", type="number", min=1, value=25)]),
+                        html.Div([html.Label("Duration (h)"), dcc.Input(id="asset-duration", type="number", min=.5, step=.5, value=8)]),
+                        html.Div([html.Label("Grid import limit (MW)"), dcc.Input(id="asset-import", type="number", min=1, value=25)]),
+                        html.Div([html.Label("Grid export limit (MW)"), dcc.Input(id="asset-export", type="number", min=1, value=25)]),
+                        html.Div([html.Label("State of health (%)"), dcc.Input(id="asset-soh", type="number", min=1, max=100, value=100)]),
+                    ], className="asset-grid"),
+                    html.Div([
+                        html.Button("Save / update asset", id="asset-save", n_clicks=0, className="primary-button"),
+                        html.Button("Delete selected", id="asset-delete", n_clicks=0, className="secondary-button"),
+                    ], className="asset-actions"),
+                    html.Div(id="asset-summary", className="asset-summary"),
+                ], className="download-section asset-workspace"),
                 html.Section(
                     [
                         html.Div(
@@ -2973,6 +2997,49 @@ app.layout = html.Div(
     className="app-shell",
 )
 
+
+@app.callback(
+    Output("asset-store", "data"), Output("asset-select", "value"),
+    Input("asset-save", "n_clicks"), Input("asset-delete", "n_clicks"),
+    State("asset-store", "data"), State("asset-select", "value"),
+    State("asset-name", "value"), State("asset-location", "value"),
+    State("asset-power", "value"), State("asset-duration", "value"),
+    State("asset-import", "value"), State("asset-export", "value"),
+    State("asset-soh", "value"), prevent_initial_call=True,
+)
+def update_asset_store(_save, _delete, data, selected, name, location, power, duration, imp, exp, soh):
+    trigger = ctx.triggered_id
+    if trigger == "asset-delete":
+        if not selected:
+            return no_update, no_update
+        return delete_asset(data, selected), None
+    asset = AssetConfig(asset_name=str(name or "").strip(), location_label=str(location or "").strip(), power_mw=float(power), duration_hours=float(duration), grid_import_limit_mw=float(imp), grid_export_limit_mw=float(exp), state_of_health_fraction=float(soh) / 100.0)
+    return upsert_asset(data, asset), asset.asset_name
+
+@app.callback(Output("asset-select", "options"), Input("asset-store", "data"))
+def refresh_asset_options(data):
+    try:
+        records = normalise_asset_store(data)
+    except ValueError:
+        records = []
+    return [{"label": r["asset_name"], "value": r["asset_name"]} for r in records]
+
+@app.callback(
+    Output("asset-name", "value"), Output("asset-location", "value"), Output("asset-power", "value"), Output("asset-duration", "value"), Output("asset-import", "value"), Output("asset-export", "value"), Output("asset-soh", "value"),
+    Input("asset-select", "value"), State("asset-store", "data"), prevent_initial_call=True,
+)
+def load_asset_form(selected, data):
+    asset = get_asset(data, selected)
+    if asset is None:
+        return no_update, no_update, no_update, no_update, no_update, no_update, no_update
+    return (asset.asset_name, asset.location_label, asset.power_mw, asset.duration_hours, asset.grid_import_limit_mw, asset.grid_export_limit_mw, 100.0 * asset.state_of_health_fraction)
+
+@app.callback(Output("asset-summary", "children"), Input("asset-select", "value"), Input("asset-store", "data"))
+def render_asset_summary(selected, data):
+    asset = get_asset(data, selected)
+    if asset is None:
+        return "No saved asset selected. Save a scenario above to create a reusable browser-local technical profile."
+    return html.Div([html.Strong(asset.asset_name), html.Span(f" · {asset.location_label or 'location not specified'}"), html.Div(f"{asset.power_mw:.1f} MW / {asset.nameplate_energy_mwh:.1f} MWh nameplate · {asset.available_energy_mwh:.1f} MWh at {100*asset.state_of_health_fraction:.0f}% SOH"), html.Div(f"Effective grid limits: charge {asset.effective_charge_power_mw:.1f} MW · discharge {asset.effective_discharge_power_mw:.1f} MW"), html.Small("Scenario metadata only. Site-specific metering, connection studies and local forecast-error evidence are not inferred from this profile.")])
 
 @app.callback(
     Output("regime-note", "children"),
