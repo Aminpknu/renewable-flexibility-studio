@@ -174,6 +174,14 @@ The frozen Apr-Jun 2026 default 25 MW / 200 MWh screen annualises to about **£3
 
 These are **perfect-information, price-taker availability screening values**, not earned revenue forecasts. Utilisation instructions/payments, performance penalties and asset-specific bid acceptance are excluded. The current generic release also uses a conservative rule that one physical MW cannot be sold into multiple simultaneous ancillary products.
 
+## Project-finance screening (Stage 12)
+
+Stage 12 converts the market-backed operating evidence into a transparent debt/equity screening model. The finance base remains the Stage 10 prior-date forecast-selected wholesale strategy. Stage 11 multi-service values are displayed only as perfect-information upside cases and are not treated as bankable debt-service revenue.
+
+Under the illustrative default assumptions of £25m CAPEX, £0.5m/year fixed OPEX, 60% debt, 6% debt interest, 10-year debt tenor, 25% corporation-tax scenario, 12% equity hurdle, 15-year asset life and 2% annual revenue degradation, the wholesale base gives project NPV about **-£20.9m**, equity IRR about **-31%**, minimum DSCR about **0.22x** and LLCR about **0.27x**. The Stage 11 non-BM perfect-information upside gives project NPV about **+£3.3m**, equity IRR about **15.7%**, minimum DSCR about **1.61x** and LLCR about **1.79x**.
+
+The finance Monte Carlo resamples the Stage 10 daily wholesale evidence only and varies CAPEX, fixed OPEX, availability, degradation and debt rate. The tax layer is deliberately simplified: user-defined corporation tax and capital-allowance assumptions, interest deductibility and no tax-loss carry-forward. It is a project-finance screening tool, not tax, accounting, lending or investment advice.
+
 ## Renewable-only continuous-SOC stress test
 
 For a 100 MW virtual portfolio with a 25 MW / 50 MWh battery, 90% round-trip efficiency, 10–90% SOC limits and no grid charging, continuous operation absorbs about **33.5% of wind**, **50.2% of solar** and **44.4% of 50/50 mixed** absolute forecast-deviation energy. SOC ends at its minimum bound, showing that energy availability and conversion losses matter across long horizons.

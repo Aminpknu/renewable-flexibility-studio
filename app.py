@@ -42,6 +42,11 @@ from engine.market_investment_monte_carlo import (
     MarketInvestmentDistributions, MarketInvestmentMonteCarloConfig,
     run_market_investment_monte_carlo,
 )
+from engine.project_finance import ProjectFinanceAssumptions, appraise_project_finance
+from engine.project_finance_monte_carlo import (
+    ProjectFinanceDistributions, ProjectFinanceMonteCarloConfig,
+    run_project_finance_monte_carlo,
+)
 from engine.market_optimisation import (
     SettlementOptimisationConfig, WholesaleArbitrageConfig,
     optimise_firming_and_arbitrage, optimise_settlement_aware_firming,
@@ -97,6 +102,7 @@ LATEST_MARKET_FORECAST_PATH = ROOT / "data" / "latest_market_price_forecast.csv"
 LATEST_MARKET_FORECAST_MANIFEST_PATH = ROOT / "data" / "latest_market_price_forecast_manifest.json"
 MARKET_PIPELINE_STATUS_PATH = ROOT / "data" / "market_forecast_pipeline_status.json"
 MARKET_INVESTMENT_SUMMARY_PATH = ROOT / "outputs" / "market_investment" / "market_investment_summary.json"
+PROJECT_FINANCE_SUMMARY_PATH = ROOT / "outputs" / "project_finance" / "project_finance_summary.json"
 MARKET_INVESTMENT_MC_PATH = ROOT / "outputs" / "market_investment" / "market_investment_monte_carlo_5000.csv"
 HISTORICAL_DATA = load_historical_predictions(DATA_PATH)
 SYSTEM_PRICES = load_system_price_history(SYSTEM_PRICES_PATH)
@@ -122,6 +128,7 @@ PRICE_FORECAST_BACKTEST = pd.read_csv(PRICE_FORECAST_BACKTEST_PATH)
 PREDELIVERY_DAILY = pd.read_csv(PREDELIVERY_DAILY_PATH)
 PREDELIVERY_SUMMARY = json.loads(PREDELIVERY_SUMMARY_PATH.read_text(encoding="utf-8"))
 MARKET_INVESTMENT_SUMMARY = json.loads(MARKET_INVESTMENT_SUMMARY_PATH.read_text(encoding="utf-8"))
+PROJECT_FINANCE_REFERENCE = json.loads(PROJECT_FINANCE_SUMMARY_PATH.read_text(encoding="utf-8"))
 LATEST_MARKET_FORECAST, LATEST_MARKET_FORECAST_MANIFEST = validate_market_forecast_bundle(
     LATEST_MARKET_FORECAST_PATH, LATEST_MARKET_FORECAST_MANIFEST_PATH
 )
@@ -1568,6 +1575,86 @@ def _market_investment_mc(
     )
 
 
+def _project_finance_assumptions(
+    capex_million: float, fixed_opex_million: float, asset_life_years: int,
+    project_discount_pct: float, degradation_pct: float, debt_share_pct: float,
+    debt_interest_pct: float, debt_tenor_years: int, corporation_tax_pct: float,
+    allowance_year1_pct: float, allowance_remaining_years: int, equity_hurdle_pct: float,
+    dscr_threshold: float, replacement_year: int | float | None, replacement_cost_million: float,
+) -> ProjectFinanceAssumptions:
+    replacement_value = int(replacement_year or 0)
+    return ProjectFinanceAssumptions(
+        total_capex_gbp=float(capex_million) * 1e6,
+        fixed_opex_gbp_per_year=float(fixed_opex_million) * 1e6,
+        asset_life_years=int(asset_life_years),
+        project_discount_rate=float(project_discount_pct) / 100.0,
+        annual_revenue_degradation_fraction=float(degradation_pct) / 100.0,
+        debt_fraction=float(debt_share_pct) / 100.0,
+        debt_interest_rate=float(debt_interest_pct) / 100.0,
+        debt_tenor_years=int(debt_tenor_years),
+        corporation_tax_rate=float(corporation_tax_pct) / 100.0,
+        capital_allowance_year1_fraction=float(allowance_year1_pct) / 100.0,
+        capital_allowance_remaining_years=int(allowance_remaining_years),
+        equity_hurdle_rate=float(equity_hurdle_pct) / 100.0,
+        dscr_threshold=float(dscr_threshold),
+        replacement_year=None if replacement_value <= 0 else replacement_value,
+        replacement_cost_gbp=float(replacement_cost_million) * 1e6,
+    )
+
+
+def _project_finance_scenarios(assumptions: ProjectFinanceAssumptions) -> dict[str, dict[str, Any]]:
+    annual_values = {
+        "Forecast wholesale base": float(MARKET_INVESTMENT_SUMMARY["scenarios"]["forecast_wholesale_420d"]["annual_operating_value_gbp"]),
+        "Reserve-aware wholesale": float(MARKET_INVESTMENT_SUMMARY["scenarios"]["reserve_aware_wholesale_420d"]["annual_operating_value_gbp"]),
+        "Stage 11 non-BM upside": float(MULTISERVICE_SUMMARY["scenarios"]["non_bm_multiservice"]["annualised_net_value_gbp"]),
+        "Stage 11 BM upside": float(MULTISERVICE_SUMMARY["scenarios"]["bm_multiservice"]["annualised_net_value_gbp"]),
+    }
+    return {name: appraise_project_finance(value, assumptions) for name, value in annual_values.items()}
+
+
+def _project_finance_figure(scenarios: dict[str, dict[str, Any]], assumptions: ProjectFinanceAssumptions) -> go.Figure:
+    names = list(scenarios)
+    figure = make_subplots(rows=3, cols=1, shared_xaxes=False, vertical_spacing=0.11, row_heights=[0.34, 0.36, 0.30])
+    figure.add_trace(go.Bar(x=names, y=[scenarios[name]["project_npv_gbp"] / 1e6 for name in names], name="Project NPV"), row=1, col=1)
+    figure.add_trace(go.Bar(x=names, y=[scenarios[name]["equity_npv_gbp"] / 1e6 for name in names], name="Equity NPV"), row=1, col=1)
+    base = scenarios["Forecast wholesale base"]
+    schedule = pd.DataFrame(base["yearly_schedule"])
+    figure.add_trace(go.Bar(x=schedule["year"], y=schedule["cfads_gbp"] / 1e6, name="CFADS"), row=2, col=1)
+    figure.add_trace(go.Bar(x=schedule["year"], y=schedule["debt_service_gbp"] / 1e6, name="Debt service"), row=2, col=1)
+    figure.add_trace(go.Scatter(x=schedule["year"], y=schedule["dscr"], mode="lines+markers", name="DSCR"), row=3, col=1)
+    figure.add_hline(y=assumptions.dscr_threshold, line_dash="dash", row=3, col=1)
+    figure.update_yaxes(title_text="NPV (£m)", row=1, col=1)
+    figure.update_yaxes(title_text="£m/year", row=2, col=1)
+    figure.update_yaxes(title_text="DSCR (x)", row=3, col=1)
+    figure.update_layout(height=800, barmode="group", margin=dict(l=60, r=20, t=55, b=70), legend={"orientation":"h", "y":1.02, "yanchor":"bottom", "x":0})
+    return figure
+
+
+def _project_finance_mc(assumptions: ProjectFinanceAssumptions, availability_pct: float, simulations: int, block_days: int, seed: int):
+    evidence = PREDELIVERY_DAILY[["settlement_date", "forecast_strategy_margin_gbp"]].rename(columns={"forecast_strategy_margin_gbp": "market_value_gbp"})
+    mode = float(availability_pct) / 100.0
+    distributions = ProjectFinanceDistributions(
+        availability_fraction=TriangularMultiplier(max(0.0, mode - 0.05), mode, min(1.0, mode + 0.05))
+    )
+    return run_project_finance_monte_carlo(
+        evidence, "market_value_gbp", assumptions,
+        ProjectFinanceMonteCarloConfig(simulations=int(simulations), seed=int(seed), sample_days=365, block_days=int(block_days)),
+        distributions,
+    )
+
+
+def _project_finance_mc_figure(draws: pd.DataFrame, summary: dict[str, Any]) -> go.Figure:
+    figure = make_subplots(rows=2, cols=1, vertical_spacing=0.13)
+    figure.add_trace(go.Histogram(x=draws["project_npv_gbp"] / 1e6, nbinsx=40, name="Project NPV"), row=1, col=1)
+    figure.add_vline(x=summary["npv_p50_gbp"] / 1e6, line_dash="dash", row=1, col=1)
+    figure.add_trace(go.Histogram(x=draws["minimum_dscr"], nbinsx=40, name="Minimum DSCR"), row=2, col=1)
+    figure.add_vline(x=summary["dscr_threshold"], line_dash="dash", row=2, col=1)
+    figure.update_xaxes(title_text="Project NPV (£m)", row=1, col=1)
+    figure.update_xaxes(title_text="Minimum DSCR (x)", row=2, col=1)
+    figure.update_layout(height=650, margin=dict(l=60, r=20, t=45, b=55), showlegend=False)
+    return figure
+
+
 def _tomorrow_planning_data(
     portfolio_type: str,
     capacity_mw: float,
@@ -2193,6 +2280,49 @@ app.layout = html.Div(
                             className="secondary-button",
                         ),
                         dcc.Download(id="market-investment-download"),
+                        html.Hr(),
+                        html.H3("Project-finance screening (Stage 12)"),
+                        html.P(
+                            "This layer converts the market-backed operating evidence into a simplified debt/equity financing screen. The Stage 10 forecast-selected wholesale case is the finance base; Stage 11 multi-service values are displayed only as perfect-information upside cases.",
+                            className="section-copy",
+                        ),
+                        html.Div([
+                            html.Div([html.Label("Debt share (%)"), dcc.Input(id="finance-debt-share-input", type="number", min=0, max=100, step=5, value=60)]),
+                            html.Div([html.Label("Debt interest rate (%)"), dcc.Input(id="finance-debt-rate-input", type="number", min=0, step=0.5, value=6)]),
+                            html.Div([html.Label("Debt tenor (years)"), dcc.Input(id="finance-debt-tenor-input", type="number", min=1, step=1, value=10)]),
+                            html.Div([html.Label("Corporation tax scenario (%)"), dcc.Input(id="finance-tax-input", type="number", min=0, max=100, step=1, value=25)]),
+                        ], className="design-controls"),
+                        html.Div([
+                            html.Div([html.Label("Year-1 capital allowance (%)"), dcc.Input(id="finance-allowance-year1-input", type="number", min=0, max=100, step=5, value=0)]),
+                            html.Div([html.Label("Remaining allowance period (years)"), dcc.Input(id="finance-allowance-years-input", type="number", min=0, step=1, value=10)]),
+                            html.Div([html.Label("Equity hurdle rate (%)"), dcc.Input(id="finance-equity-hurdle-input", type="number", min=-99, step=1, value=12)]),
+                            html.Div([html.Label("DSCR covenant threshold (x)"), dcc.Input(id="finance-dscr-threshold-input", type="number", min=0.1, step=0.05, value=1.2)]),
+                        ], className="design-controls"),
+                        html.Div(
+                            "Tax and capital-allowance inputs are transparent screening assumptions only. The model does not assert that a particular BESS qualifies for a UK allowance, and it excludes loss carry-forward, VAT, group relief, refinancing, hedging and debt sculpting.",
+                            className="control-help",
+                        ),
+                        html.Div(id="project-finance-note", className="recommendation-box"),
+                        html.Div(id="project-finance-kpi-grid", className="kpi-grid"),
+                        html.Div("Project/equity value and base-case debt service", className="chart-title"),
+                        dcc.Graph(id="project-finance-chart", figure=_empty_figure("Project-finance screening is loading."), config={"displaylogo": False}),
+                        html.H4("Project-finance downside simulation"),
+                        html.P(
+                            "The probabilistic finance case resamples the realised daily Stage 10 forecast-selected wholesale value in contiguous blocks and varies CAPEX, OPEX, availability, degradation and debt rate. Stage 11 ancillary-service upside is deliberately excluded from this base simulation.",
+                            className="section-copy",
+                        ),
+                        html.Div([
+                            html.Div([html.Label("Finance Monte Carlo simulations"), dcc.Dropdown(id="finance-mc-simulations-input", options=[{"label":f"{v:,}","value":v} for v in (500,1000,2000)], value=1000, clearable=False)]),
+                            html.Div([html.Label("Finance block length (days)"), dcc.Dropdown(id="finance-mc-block-input", options=[{"label":f"{v} days","value":v} for v in (1,3,7,14)], value=7, clearable=False)]),
+                            html.Div([html.Label("Finance Monte Carlo seed"), dcc.Input(id="finance-mc-seed-input", type="number", step=1, value=20260903)]),
+                        ], className="design-controls"),
+                        html.Button("Run project-finance Monte Carlo", id="project-finance-mc-button", n_clicks=0, className="primary-button"),
+                        html.Div(id="project-finance-mc-note", className="scenario-note"),
+                        html.Div(id="project-finance-mc-kpi-grid", className="kpi-grid"),
+                        dcc.Graph(id="project-finance-mc-chart", figure=_empty_figure("Run the project-finance Monte Carlo to generate lender/equity risk metrics."), config={"displaylogo": False}),
+                        dcc.Store(id="project-finance-mc-store"),
+                        html.Button("Download project-finance screening JSON", id="project-finance-download-button", n_clicks=0, className="secondary-button"),
+                        dcc.Download(id="project-finance-download"),
                         html.Hr(),
                         html.H3("Quantitative downside risk (Stage 6B)"),
                         html.P(
@@ -3019,6 +3149,227 @@ def download_market_backed_investment(
     return dcc.send_string(
         json.dumps(payload, indent=2), "market_backed_investment_summary.json"
     )
+
+
+@app.callback(
+    Output("project-finance-note", "children"),
+    Output("project-finance-kpi-grid", "children"),
+    Output("project-finance-chart", "figure"),
+    Input("portfolio-input", "value"), Input("capacity-input", "value"), Input("wind-share-input", "value"),
+    Input("design-target-input", "value"), Input("design-reliability-input", "value"),
+    Input("risk-capex-input", "value"), Input("risk-fixed-opex-input", "value"), Input("risk-life-input", "value"),
+    Input("risk-discount-input", "value"), Input("risk-degradation-input", "value"),
+    Input("market-replacement-year-input", "value"), Input("market-replacement-cost-input", "value"),
+    Input("finance-debt-share-input", "value"), Input("finance-debt-rate-input", "value"), Input("finance-debt-tenor-input", "value"),
+    Input("finance-tax-input", "value"), Input("finance-allowance-year1-input", "value"), Input("finance-allowance-years-input", "value"),
+    Input("finance-equity-hurdle-input", "value"), Input("finance-dscr-threshold-input", "value"),
+)
+def update_project_finance(
+    portfolio_type, capacity_mw, wind_share_pct, design_target_pct, design_reliability_pct,
+    capex_million, fixed_opex_million, asset_life_years, discount_rate_pct, degradation_pct,
+    replacement_year, replacement_cost_million, debt_share_pct, debt_interest_pct, debt_tenor_years,
+    corporation_tax_pct, allowance_year1_pct, allowance_remaining_years, equity_hurdle_pct, dscr_threshold,
+):
+    if not _market_investment_reference_supported(portfolio_type, capacity_mw, wind_share_pct, design_target_pct, design_reliability_pct):
+        message = "Stage 12 finance evidence is currently frozen to the default 100 MW 50/50 portfolio and 90%/90% Stage A design gate; change controls back to that reference to view finance metrics."
+        return message, [], _empty_figure(message)
+    try:
+        assumptions = _project_finance_assumptions(
+            capex_million, fixed_opex_million, asset_life_years, discount_rate_pct, degradation_pct,
+            debt_share_pct, debt_interest_pct, debt_tenor_years, corporation_tax_pct,
+            allowance_year1_pct, allowance_remaining_years, equity_hurdle_pct, dscr_threshold,
+            replacement_year, replacement_cost_million,
+        )
+        scenarios = _project_finance_scenarios(assumptions)
+    except (TypeError, ValueError, KeyError) as error:
+        message = f"Project-finance screening could not be calculated: {error}"
+        return message, [], _empty_figure(message)
+    base = scenarios["Forecast wholesale base"]
+    upside = scenarios["Stage 11 non-BM upside"]
+    def irr_text(value):
+        return "No finite IRR" if value is None else f"{100.0*value:.1f}%"
+    cards = [
+        _kpi_card("Base project NPV", f"£{base['project_npv_gbp']/1e6:.2f}m", "Stage 10 forecast-selected wholesale base"),
+        _kpi_card("Base project IRR", irr_text(base["project_irr_fraction"]), f"Project discount rate {float(discount_rate_pct):.1f}%"),
+        _kpi_card("Base equity IRR", irr_text(base["equity_irr_fraction"]), f"Equity hurdle {float(equity_hurdle_pct):.1f}%"),
+        _kpi_card("Debt amount", f"£{base['debt_amount_gbp']/1e6:.2f}m", f"{float(debt_share_pct):.0f}% debt share"),
+        _kpi_card("Annual debt service", f"£{base['annual_debt_service_gbp']/1e6:.2f}m/yr", "Constant-annuity debt screening"),
+        _kpi_card("Minimum DSCR", f"{base['minimum_dscr']:.2f}x", f"Threshold {float(dscr_threshold):.2f}x"),
+        _kpi_card("LLCR", f"{base['llcr']:.2f}x", "PV of loan-life CFADS / initial debt"),
+        _kpi_card("DSCR breach years", f"{base['dscr_breach_years']}", f"Of {int(debt_tenor_years)} debt years"),
+        _kpi_card("Stage 11 upside project NPV", f"£{upside['project_npv_gbp']/1e6:.2f}m", "Perfect-information non-BM multi-service screen only"),
+        _kpi_card("Stage 11 upside equity IRR", irr_text(upside["equity_irr_fraction"]), "Not the finance-base revenue case"),
+    ]
+    note = html.Div([
+        html.Div("The finance base uses the realised value of schedules selected from prior-date Stage 10 wholesale price forecasts. This is the only operating-value case used as the core financing evidence.", className="scenario-note-line"),
+        html.Div("Stage 11 multi-service values are shown as upside sensitivity only because they still use realised EAC clearing prices and price-taker acceptance. They are not treated as bankable debt-service revenue.", className="scenario-note-line uncertainty-warning"),
+        html.Div("Tax is a simplified scenario: interest reduces taxable income, capital allowance follows the entered screening schedule, and tax losses are not carried forward. This is not tax, accounting or lending advice.", className="scenario-note-line uncertainty-line"),
+    ])
+    return note, cards, _project_finance_figure(scenarios, assumptions)
+
+
+@app.callback(
+    Output("project-finance-mc-note", "children"),
+    Output("project-finance-mc-kpi-grid", "children"),
+    Output("project-finance-mc-chart", "figure"),
+    Output("project-finance-mc-store", "data"),
+    Input("project-finance-mc-button", "n_clicks"),
+    State("portfolio-input", "value"), State("capacity-input", "value"),
+    State("wind-share-input", "value"), State("design-target-input", "value"),
+    State("design-reliability-input", "value"), State("risk-capex-input", "value"),
+    State("risk-fixed-opex-input", "value"), State("risk-life-input", "value"),
+    State("risk-discount-input", "value"), State("risk-degradation-input", "value"),
+    State("risk-availability-input", "value"), State("market-replacement-year-input", "value"),
+    State("market-replacement-cost-input", "value"), State("finance-debt-share-input", "value"),
+    State("finance-debt-rate-input", "value"), State("finance-debt-tenor-input", "value"),
+    State("finance-tax-input", "value"), State("finance-allowance-year1-input", "value"),
+    State("finance-allowance-years-input", "value"), State("finance-equity-hurdle-input", "value"),
+    State("finance-dscr-threshold-input", "value"), State("finance-mc-simulations-input", "value"),
+    State("finance-mc-block-input", "value"), State("finance-mc-seed-input", "value"),
+    prevent_initial_call=True,
+)
+def run_project_finance_mc_callback(
+    _clicks, portfolio_type, capacity_mw, wind_share_pct, design_target_pct,
+    design_reliability_pct, capex_million, fixed_opex_million, asset_life_years,
+    discount_rate_pct, degradation_pct, availability_pct, replacement_year,
+    replacement_cost_million, debt_share_pct, debt_interest_pct, debt_tenor_years,
+    corporation_tax_pct, allowance_year1_pct, allowance_remaining_years,
+    equity_hurdle_pct, dscr_threshold, simulations, block_days, seed,
+):
+    if not _market_investment_reference_supported(
+        portfolio_type, capacity_mw, wind_share_pct, design_target_pct, design_reliability_pct,
+    ):
+        message = "Stage 12 Monte Carlo is available only for the frozen 100 MW 50/50, 90%/90% reference case."
+        return message, [], _empty_figure(message), None
+    try:
+        assumptions = _project_finance_assumptions(
+            capex_million, fixed_opex_million, asset_life_years, discount_rate_pct,
+            degradation_pct, debt_share_pct, debt_interest_pct, debt_tenor_years,
+            corporation_tax_pct, allowance_year1_pct, allowance_remaining_years,
+            equity_hurdle_pct, dscr_threshold, replacement_year, replacement_cost_million,
+        )
+        draws, summary = _project_finance_mc(
+            assumptions, availability_pct, simulations, block_days, seed,
+        )
+    except (TypeError, ValueError, KeyError) as error:
+        message = f"Project-finance Monte Carlo could not be calculated: {error}"
+        return message, [], _empty_figure(message), None
+
+    equity_irr_p50 = summary.get("equity_irr_p50_fraction")
+    equity_irr_text = "No finite IRR" if equity_irr_p50 is None else f"{100.0*equity_irr_p50:.1f}%"
+    cards = [
+        _kpi_card("P10 project NPV", f"£{summary['npv_p10_gbp']/1e6:.2f}m", "Lower project-NPV quantile"),
+        _kpi_card("P50 project NPV", f"£{summary['npv_p50_gbp']/1e6:.2f}m", "Median project NPV"),
+        _kpi_card("P90 project NPV", f"£{summary['npv_p90_gbp']/1e6:.2f}m", "Upper project-NPV quantile"),
+        _kpi_card("P50 equity IRR", equity_irr_text, f"Hurdle {summary['equity_hurdle_rate_pct']:.1f}%"),
+        _kpi_card("Equity IRR below hurdle", f"{summary['probability_equity_irr_below_hurdle_pct']:.1f}%", "Share of simulations"),
+        _kpi_card("DSCR breach probability", f"{summary['probability_dscr_breach_pct']:.1f}%", f"Threshold {summary['dscr_threshold']:.2f}x"),
+        _kpi_card("P50 minimum DSCR", f"{summary['minimum_dscr_p50']:.2f}x", "Median minimum debt-service coverage"),
+        _kpi_card("P50 LLCR", f"{summary['llcr_p50']:.2f}x", "Median loan-life coverage ratio"),
+    ]
+    note = html.Div([
+        html.Div(
+            f"{int(summary['simulations'])} simulations; {int(summary['sample_days'])}-day years; "
+            f"{int(summary['block_days'])}-day contiguous blocks; seed {int(summary['seed'])}.",
+            className="scenario-note-line",
+        ),
+        html.Div(
+            "The probabilistic finance base uses only realised value from the Stage 10 prior-date forecast-selected wholesale strategy. Stage 11 ancillary-service upside is excluded.",
+            className="scenario-note-line uncertainty-warning",
+        ),
+        html.Div(
+            "CAPEX, fixed OPEX, availability, degradation and debt rate use transparent triangular screening distributions. Tax treatment remains simplified and no tax-loss carry-forward is modelled.",
+            className="scenario-note-line uncertainty-line",
+        ),
+    ])
+    payload = {
+        "schema_version": "1.0",
+        "stage": "12_project_finance_monte_carlo",
+        "summary": summary,
+        "simulation_settings": {
+            "simulations": int(simulations), "block_days": int(block_days), "seed": int(seed),
+        },
+        "base_case": "Stage 10 forecast-selected wholesale operating value only",
+        "excluded_from_base": "Stage 11 multi-service availability upside",
+    }
+    return note, cards, _project_finance_mc_figure(draws, summary), payload
+
+
+@app.callback(
+    Output("project-finance-download", "data"),
+    Input("project-finance-download-button", "n_clicks"),
+    State("portfolio-input", "value"), State("capacity-input", "value"), State("wind-share-input", "value"),
+    State("design-target-input", "value"), State("design-reliability-input", "value"),
+    State("risk-capex-input", "value"), State("risk-fixed-opex-input", "value"), State("risk-life-input", "value"),
+    State("risk-discount-input", "value"), State("risk-degradation-input", "value"),
+    State("market-replacement-year-input", "value"), State("market-replacement-cost-input", "value"),
+    State("finance-debt-share-input", "value"), State("finance-debt-rate-input", "value"),
+    State("finance-debt-tenor-input", "value"), State("finance-tax-input", "value"),
+    State("finance-allowance-year1-input", "value"), State("finance-allowance-years-input", "value"),
+    State("finance-equity-hurdle-input", "value"), State("finance-dscr-threshold-input", "value"),
+    State("project-finance-mc-store", "data"),
+    prevent_initial_call=True,
+)
+def download_project_finance(
+    _clicks, portfolio_type, capacity_mw, wind_share_pct, design_target_pct,
+    design_reliability_pct, capex_million, fixed_opex_million, asset_life_years,
+    discount_rate_pct, degradation_pct, replacement_year, replacement_cost_million,
+    debt_share_pct, debt_interest_pct, debt_tenor_years, corporation_tax_pct,
+    allowance_year1_pct, allowance_remaining_years, equity_hurdle_pct, dscr_threshold,
+    mc_payload,
+):
+    if not _market_investment_reference_supported(
+        portfolio_type, capacity_mw, wind_share_pct, design_target_pct, design_reliability_pct,
+    ):
+        return no_update
+    assumptions = _project_finance_assumptions(
+        capex_million, fixed_opex_million, asset_life_years, discount_rate_pct,
+        degradation_pct, debt_share_pct, debt_interest_pct, debt_tenor_years,
+        corporation_tax_pct, allowance_year1_pct, allowance_remaining_years,
+        equity_hurdle_pct, dscr_threshold, replacement_year, replacement_cost_million,
+    )
+    scenarios = _project_finance_scenarios(assumptions)
+    summary_keys = [
+        "annual_operating_value_gbp_year1", "project_npv_gbp", "project_irr_fraction",
+        "equity_npv_gbp", "equity_irr_fraction", "debt_amount_gbp",
+        "annual_debt_service_gbp", "minimum_dscr", "llcr", "dscr_breach_years",
+        "total_cash_tax_gbp", "total_interest_gbp",
+    ]
+    deterministic = {
+        name: {key: result[key] for key in summary_keys}
+        for name, result in scenarios.items()
+    }
+    payload = {
+        "schema_version": "1.0",
+        "stage": "12_project_finance_screening",
+        "reference_case": "100 MW mixed 50/50; 90%/90% Stage A gate; 25 MW / 200 MWh",
+        "assumptions": {
+            "total_capex_gbp": assumptions.total_capex_gbp,
+            "fixed_opex_gbp_per_year": assumptions.fixed_opex_gbp_per_year,
+            "asset_life_years": assumptions.asset_life_years,
+            "project_discount_rate_pct": 100.0 * assumptions.project_discount_rate,
+            "annual_revenue_degradation_pct": 100.0 * assumptions.annual_revenue_degradation_fraction,
+            "debt_fraction_pct": 100.0 * assumptions.debt_fraction,
+            "debt_interest_rate_pct": 100.0 * assumptions.debt_interest_rate,
+            "debt_tenor_years": assumptions.debt_tenor_years,
+            "corporation_tax_rate_pct": 100.0 * assumptions.corporation_tax_rate,
+            "capital_allowance_year1_pct": 100.0 * assumptions.capital_allowance_year1_fraction,
+            "capital_allowance_remaining_years": assumptions.capital_allowance_remaining_years,
+            "equity_hurdle_rate_pct": 100.0 * assumptions.equity_hurdle_rate,
+            "dscr_threshold": assumptions.dscr_threshold,
+            "replacement_year": assumptions.replacement_year,
+            "replacement_cost_gbp": assumptions.replacement_cost_gbp,
+        },
+        "deterministic_scenarios": deterministic,
+        "monte_carlo": mc_payload,
+        "boundaries": [
+            "Stage 10 forecast-selected wholesale is the finance-base revenue case",
+            "Stage 11 multi-service cases are perfect-information price-taker upside screens",
+            "screening tax only; no loss carry-forward, VAT, group relief or legal eligibility opinion",
+            "no refinancing, hedging, sculpted debt, working-capital or reserve-account model",
+        ],
+    }
+    return dcc.send_string(json.dumps(payload, indent=2), "project_finance_screening.json")
 
 
 @app.callback(

@@ -39,6 +39,7 @@
 - prior-date Quick Reserve price forecast and pre-delivery PQR/NQR capacity-allocation signal, with 90-day value-capture benchmark and EAC Sell Orders acceptance diagnostic;
 - Stage 10 market-backed investment appraisal: 420-day forecast-selected/reserve-aware wholesale lifecycle NPV/BCR/payback/switching values, aligned QR upside sensitivity and block-resampled market-backed P10/P50/P90/CVaR;
 - Stage 11 reusable NESO multi-service framework: QR/SR/Dynamic Response plus optional BM-only Balancing Reserve sharing one BESS MW/SOC budget, with actual EAC delivery blocks, PSR linked-window constraints and a 90-day availability-value benchmark;
+- Stage 12 project-finance screening: project/equity NPV and IRR, constant-annuity debt schedule, CFADS, DSCR/LLCR, simplified tax/capital-allowance scenarios and block-resampled finance downside simulation;
 - one-page Dash interface and CSV export;
 - public GitHub repository with GitHub Actions configuration;
 - automated test suite covering physical, uncertainty, tomorrow-planning and settlement logic;
@@ -51,11 +52,11 @@ Forecasting V2 is packaged separately on branch `feature/v2-spatial-production`,
 
 ## Next analytical stages
 
-1. Add a project-finance screening layer: project/equity IRR, debt schedule, DSCR/LLCR, transparent tax/capital-allowance assumptions and downside simulation.
-2. Build issue-time multi-service price/capacity signals and explicit bid/acceptance models; Stage 11 currently remains perfect-information/price-taker availability screening.
-3. Add date-range, seasonal and weather-regime comparison and quantify sizing/reserve sensitivity by wind/solar mix and spatial zone.
-4. Upgrade the operational directional residual range to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty.
-5. Automate renewable/spatial-bundle handoff and cross-bundle freshness/fallback behaviour.
+1. Build issue-time multi-service price/capacity signals and explicit bid/acceptance models; Stage 11 currently remains perfect-information/price-taker availability screening.
+2. Add date-range, seasonal and weather-regime comparison and quantify sizing/reserve sensitivity by wind/solar mix and spatial zone.
+3. Upgrade the operational directional residual range to dedicated probabilistic P10/P50/P90 or weather-ensemble uncertainty.
+4. Automate renewable/spatial-bundle handoff and cross-bundle freshness/fallback behaviour.
+5. Final product simplification, public deployment verification and portfolio release review.
 
 ## Learning fixture
 
