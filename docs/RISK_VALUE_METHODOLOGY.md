@@ -73,3 +73,12 @@ These are calculated from the same discounted cash-flow assumptions, not by a se
 A reusable sensitivity table varies consequence value and CAPEX while holding the remaining assumptions constant. NPV must rise monotonically with consequence value and fall with CAPEX; this behaviour is unit tested.
 
 Detailed tax, debt/equity financing, ancillary-service revenue stacking, site-specific grid connection costs and market trading P&L remain out of scope. Monte Carlo, P10/P50/P90 NPV and CVaR remain Stage 6B.
+## Stage 6A Packet 3: interactive decision layer
+
+The Studio reuses the precomputed 450-day design grid so risk/value controls recalculate quickly without rerunning every historical battery simulation. Each tested configuration inherits its observed full-period firming percentage and equivalent-full-cycle evidence.
+
+Candidate CAPEX and fixed OPEX are scaled in proportion to MWh relative to the Stage A selected technical design. This is deliberately labelled as a screening assumption, not a supplier cost curve. The risk-value frontier may display configurations that fail the selected technical firming/reliability gate; economic efficiency does not make such a configuration technically acceptable.
+
+Expected availability is a Stage 6A scalar assumption: annual avoided exposure and throughput are multiplied by the entered availability fraction, while upfront CAPEX and fixed OPEX remain. This approximates randomly distributed expected unavailability only. Explicit outage timing, correlated derating and outage blocks belong to Stage 6B stress/Monte Carlo analysis.
+
+The interface also shows a CAPEX/consequence sensitivity heatmap and downloads all portfolio, design-gate, cost, lifetime, degradation and availability assumptions with the selected results and frontier. Default monetary values are illustrative starting inputs only and are not sourced market prices or bankable project estimates.
