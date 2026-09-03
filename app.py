@@ -27,6 +27,7 @@ from adapters.market_forecast_bundle import assess_market_forecast_bundle, valid
 from engine.battery import BatteryConfig, simulate_reactive_firming
 from engine.asset_workspace import AssetConfig, delete_asset, get_asset, normalise_asset_store, upsert_asset
 from engine.degradation import DegradationConfig, annual_degradation_screen
+from engine.stochastic_bidding import StochasticBiddingConfig, build_stochastic_market_scenarios, optimise_stochastic_wholesale_bm
 from engine.design_sizing import select_stable_design
 from engine.frontier import build_risk_value_frontier
 from engine.forecast_handoff import assess_forecast_freshness, select_forecast_bundle, validate_national_forecast
@@ -2162,6 +2163,7 @@ app.layout = html.Div(
         dcc.Store(id="scenario-store"),
         dcc.Store(id="asset-store", storage_type="local"),
         dcc.Store(id="degradation-store"),
+        dcc.Store(id="stochastic-store"),
         dcc.Download(id="scenario-download"),
         html.Header(
             [
@@ -2234,6 +2236,24 @@ app.layout = html.Div(
                     html.Div(id="degradation-summary", className="health-summary"),
                     html.P("Screening model only: no cell-temperature, C-rate, chemistry-specific rainflow or warranty curve is inferred unless supplied explicitly.", className="control-help"),
                 ], className="download-section degradation-section"),
+                html.Section([
+                    html.Div("STAGE 20 · STOCHASTIC MARKET BIDDING", className="eyebrow dark-eyebrow"),
+                    html.H2("Pre-delivery wholesale + BM decision screen"),
+                    html.P("Choose one wholesale schedule and Balancing Mechanism reserve offer before the realised scenario is known. Finite scenarios vary wholesale price and BM activation; every scenario shares the same physical battery limits.", className="section-copy"),
+                    html.Div([
+                        html.Div([html.Label("Wholesale uncertainty σ (£/MWh)"), dcc.Input(id="stoch-sigma", type="number", min=0, step=5, value=20)]),
+                        html.Div([html.Label("BM upward activation probability (%)"), dcc.Input(id="stoch-up-prob", type="number", min=0, max=100, value=15)]),
+                        html.Div([html.Label("BM downward activation probability (%)"), dcc.Input(id="stoch-down-prob", type="number", min=0, max=100, value=15)]),
+                        html.Div([html.Label("BM upward activation value (£/MWh)"), dcc.Input(id="stoch-up-value", type="number", value=140)]),
+                        html.Div([html.Label("BM downward activation value (£/MWh)"), dcc.Input(id="stoch-down-value", type="number", value=80)]),
+                        html.Div([html.Label("Risk aversion"), dcc.Input(id="stoch-risk", type="number", min=0, max=2, step=.1, value=.2)]),
+                        html.Div([html.Label("Other throughput cost (£/MWh)"), dcc.Input(id="stoch-throughput", type="number", min=0, step=1, value=2)]),
+                    ], className="stoch-grid"),
+                    html.Button("Run stochastic bid screen", id="stoch-run", n_clicks=0, className="primary-button stoch-run"),
+                    html.Div(id="stoch-summary", className="stoch-summary"),
+                    dcc.Graph(id="stoch-chart", config={"displayModeBar": False}),
+                    html.P("BM boundary: activation probabilities and activation values are explicit user scenarios in this generic release. They are not a forecast of actual BOA acceptance, utilisation settlement or National Grid ESO dispatch instructions.", className="control-help"),
+                ], className="download-section stochastic-section"),
                 html.Section(
                     [
                         html.Div(
@@ -3013,6 +3033,55 @@ app.layout = html.Div(
     className="app-shell",
 )
 
+
+@app.callback(
+    Output("stoch-summary", "children"), Output("stoch-chart", "figure"), Output("stochastic-store", "data"),
+    Input("stoch-run", "n_clicks"),
+    State("asset-select", "value"), State("asset-store", "data"), State("degradation-store", "data"),
+    State("stoch-sigma", "value"), State("stoch-up-prob", "value"), State("stoch-down-prob", "value"),
+    State("stoch-up-value", "value"), State("stoch-down-value", "value"), State("stoch-risk", "value"), State("stoch-throughput", "value"),
+    prevent_initial_call=True,
+)
+def run_stochastic_bid_screen(_clicks, selected, asset_data, degradation, sigma, up_prob, down_prob, up_value, down_value, risk, other_throughput):
+    try:
+        asset = get_asset(asset_data, selected)
+        battery = asset.to_battery_config() if asset else BatteryConfig(power_mw=25, duration_hours=8, initial_soc_fraction=.5)
+        wear = float((degradation or {}).get("marginal_wear_cost_gbp_per_mwh_throughput", 0.0))
+        scenarios = build_stochastic_market_scenarios(
+            LATEST_MARKET_FORECAST, scenario_count=7,
+            wholesale_sigma_gbp_per_mwh=float(sigma),
+            bm_up_probability=float(up_prob)/100.0, bm_down_probability=float(down_prob)/100.0,
+            bm_up_value_gbp_per_mwh=float(up_value), bm_down_value_gbp_per_mwh=float(down_value), seed=42,
+        )
+        schedule, summary = optimise_stochastic_wholesale_bm(
+            scenarios, battery,
+            StochasticBiddingConfig(
+                throughput_cost_gbp_per_mwh=float(other_throughput) + wear,
+                terminal_restoration_price_gbp_per_mwh=float(LATEST_MARKET_FORECAST["forecast_market_index_price_gbp_per_mwh"].median()),
+                cvar_alpha=.90, risk_aversion=float(risk),
+            ),
+        )
+    except (ValueError, RuntimeError) as exc:
+        fig = go.Figure().update_layout(height=260, annotations=[dict(text=str(exc), showarrow=False)])
+        return html.Div(str(exc), className="uncertainty-warning"), fig, no_update
+    cards = [
+        ("Expected net value", f"£{summary['expected_net_value_gbp']:,.0f}", "Across seven finite scenarios"),
+        ("P10 / P50 / P90", f"£{summary['p10_net_value_gbp']:,.0f} / £{summary['p50_net_value_gbp']:,.0f} / £{summary['p90_net_value_gbp']:,.0f}", "Scenario-value distribution"),
+        ("90% CVaR loss", f"£{summary['cvar_loss_gbp']:,.0f}", "Tail cost used in risk penalty"),
+        ("Avg BM up / down offer", f"{summary['average_bm_up_offer_mw']:.1f} / {summary['average_bm_down_offer_mw']:.1f} MW", "Shared with wholesale schedule"),
+        ("Wear + other throughput", f"£{summary['throughput_cost_gbp_per_mwh']:,.2f}/MWh", "Stage 19 wear carried into dispatch"),
+    ]
+    summary_ui = html.Div([html.Div([html.Div(a, className="kpi-label"), html.Div(b, className="kpi-value"), html.Div(c, className="kpi-help")], className="kpi-card") for a,b,c in cards], className="stoch-kpi-grid")
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=schedule["settlement_period"], y=schedule["wholesale_discharge_mw"], name="Wholesale discharge"))
+    fig.add_trace(go.Bar(x=schedule["settlement_period"], y=-schedule["wholesale_charge_mw"], name="Wholesale charge"))
+    fig.add_trace(go.Scatter(x=schedule["settlement_period"], y=schedule["bm_up_offer_mw"], name="BM up offer", mode="lines"))
+    fig.add_trace(go.Scatter(x=schedule["settlement_period"], y=-schedule["bm_down_offer_mw"], name="BM down offer", mode="lines"))
+    fig.update_layout(height=340, barmode="relative", margin=dict(l=45,r=20,t=35,b=45), xaxis_title="Settlement period", yaxis_title="MW (charge/down shown negative)", legend=dict(orientation="h", y=1.03))
+    payload = dict(summary)
+    payload["asset_name"] = asset.asset_name if asset else "Default 25 MW / 200 MWh reference"
+    payload["market_forecast_target_date"] = str(LATEST_TARGET_DATE)
+    return summary_ui, fig, payload
 
 @app.callback(
     Output("degradation-summary", "children"), Output("degradation-store", "data"),

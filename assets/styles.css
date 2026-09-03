@@ -192,3 +192,28 @@ footer { text-align: center; padding: 24px 20px 40px; color: var(--muted); font-
 @media (max-width: 560px) {
   .health-grid, .health-kpi-grid { grid-template-columns: 1fr; }
 }
+
+/* Stage 20 stochastic wholesale + BM */
+.stochastic-section { border-top: 3px solid #355c7d; }
+.stoch-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px 12px;
+  margin-top: 8px;
+}
+.stoch-grid label { margin-top: 7px; }
+.stoch-run { margin-top: 15px; }
+.stoch-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.stoch-summary .kpi-card { background: #f8fbfd; }
+@media (max-width: 1000px) {
+  .stoch-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stoch-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .stoch-grid, .stoch-kpi-grid { grid-template-columns: 1fr; }
+}
