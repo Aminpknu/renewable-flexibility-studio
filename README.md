@@ -17,6 +17,7 @@ A user can:
 - inspect a leakage-safe rolling **80% prediction interval** and see which historical periods fell outside the expected range;
 - size a battery for **future operation** using a 2,541-cell stability grid across 450 out-of-sample days, with 80/90/95% firming and reliability targets;
 - inspect the latest V2 **forecast-day** renewable schedule with a directional empirical uncertainty range;
+- inspect a 10-zone weather-informed spatial allocation of the GB wind/solar forecast, reconciled exactly to the national V2 totals;
 - carry the selected future battery into an operational reserve planner that checks current SOC, calculates a safe starting-SOC band, recommends only the minimum necessary pre-day adjustment, and identifies critical downside/upside reserve windows;
 - place that schedule in real GB grid context using the official half-hourly NESO National Demand Forecast served by Elexon Insights;
 - translate each historical forecast deviation into a BSC-style imbalance volume and official Elexon System-Price cashflow, before and after battery firming;
@@ -114,6 +115,15 @@ Reserve energy is evaluated over a rolling horizon equal to the installed batter
 For the default 100 MW 50/50 portfolio and 25 MW / 200 MWh (8 h) design, the current 3 September forecast gives a safe starting-SOC band around **33.6–76.6%**; therefore a current 50% SOC requires no adjustment. The largest rolling downside requirement is about **44.8 MWh** and the largest upward headroom requirement about **28.3 MWh**. This is a reserve-readiness calculation, not a simulated future dispatch trajectory.
 
 A formal prior-data-only backtest covers 420 eligible dates. At a 50% baseline SOC, the solar and mixed designs remain inside their calculated safe bands on all eligible dates, so the conservative policy makes no unnecessary adjustments. The directional interval achieves about **88.7% solar, 83.3% mixed and 81.9% wind coverage** on Apr–Jun 2026. Wind is explicitly flagged when its 24 h two-sided energy envelope cannot fit inside the installed usable SOC range.
+
+
+## Spatial renewable allocation zones
+
+The forecast-day view now exposes ten indicative spatial zones aligned with the V2 weather sampling locations: Inverness, Edinburgh, Newcastle, Manchester, Leeds, Birmingham, Norwich, Cardiff, Bristol and London. The national V2 wind/solar forecast remains authoritative. Each half-hour is allocated across the ten zones using **DESNZ REPD operational wind/solar capacity as a fixed spatial proxy** multiplied by the corresponding issue-time V2 weather signal, then normalised so the ten zones sum exactly back to the national wind and solar MW totals.
+
+REPD is used only as a spatial weighting proxy: it tracks projects above 150 kW and had a 1 MW threshold before 2021, so it is not treated as a complete embedded-capacity census. The Studio therefore labels these outputs as **spatial allocation / flexibility zones**, not independently trained or observed city-generation forecasts. The city-level BESS card is a proportional allocation of the national Stage A design, not independent local sizing; local forecast-error histories, network constraints, demand and prices are not available at this resolution.
+
+The GB demand panel also accepts a contiguous **remaining-day** NESO forecast after delivery has started. A partial series is shown with an explicit warning instead of being rejected as an incomplete day.
 
 ## Risk & Value decision layer
 

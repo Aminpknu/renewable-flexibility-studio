@@ -1,0 +1,16 @@
+{
+  "description": "Ten representative GB spatial allocation zones aligned with V2 weather sampling locations.",
+  "source_alignment": "gb-renewable-forecast feature/v2-spatial-production config/weather_locations.json",
+  "zones": [
+    {"name": "Inverness", "latitude": 57.4778, "longitude": -4.2247},
+    {"name": "Edinburgh", "latitude": 55.9533, "longitude": -3.1883},
+    {"name": "Newcastle", "latitude": 54.9783, "longitude": -1.6178},
+    {"name": "Manchester", "latitude": 53.4808, "longitude": -2.2426},
+    {"name": "Leeds", "latitude": 53.8008, "longitude": -1.5491},
+    {"name": "Birmingham", "latitude": 52.4862, "longitude": -1.8904},
+    {"name": "Norwich", "latitude": 52.6309, "longitude": 1.2974},
+    {"name": "Cardiff", "latitude": 51.4816, "longitude": -3.1791},
+    {"name": "Bristol", "latitude": 51.4545, "longitude": -2.5879},
+    {"name": "London", "latitude": 51.5074, "longitude": -0.1278}
+  ]
+}

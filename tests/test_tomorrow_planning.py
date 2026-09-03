@@ -59,6 +59,27 @@ def test_grid_adapter_filters_target_date(monkeypatch) -> None:
     assert frame["national_demand_mw"].iloc[0] == 20001
 
 
+
+def test_grid_adapter_accepts_contiguous_remaining_day(monkeypatch) -> None:
+    rows = []
+    for period in range(26, 49):
+        rows.append({
+            "settlementDate": "2026-09-03", "settlementPeriod": period,
+            "startTime": f"2026-09-03T{(period-1)//2:02d}:{'30' if period % 2 == 0 else '00'}:00Z",
+            "publishTime": "2026-09-03T11:17:00Z",
+            "nationalDemand": 24000 + period,
+            "transmissionSystemDemand": 27000 + period,
+        })
+    payload = json.dumps({"data": rows}).encode()
+    class FakeResponse:
+        def __enter__(self): return BytesIO(payload)
+        def __exit__(self, *_args): return False
+    monkeypatch.setattr("adapters.grid_context.urlopen", lambda *_args, **_kwargs: FakeResponse())
+    frame = fetch_day_ahead_demand("2026-09-03")
+    assert frame["settlement_period"].tolist() == list(range(26, 49))
+    assert frame["grid_context_status"].unique().tolist() == ["partial_remaining_day"]
+    assert frame["grid_context_period_count"].iloc[0] == 23
+
 def test_tomorrow_planning_does_not_simulate_future_dispatch(monkeypatch) -> None:
     grid = pd.DataFrame({
         "settlement_period": range(1, 49),

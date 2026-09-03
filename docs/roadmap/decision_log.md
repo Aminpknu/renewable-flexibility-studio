@@ -114,3 +114,16 @@ Reason: QR price features use earlier dates only and improve MAE by ~14%; foreca
 Acceptance boundary: a simple bid<=clearing rule has only 28.9% precision across 2.06m Apr–Jun QR Sell Orders, so no unsupported acceptance probability is applied
 Known limitations: not an acceptance-adjusted revenue forecast; utilisation excluded; current-rule value validation is the 90 Apr–Jun V2 locked dates
 Next allowed stage: structured EAC bid/acceptance modelling or market-backed lifecycle NPV using market value as base and QR as separately labelled upside until acceptance is identified
+
+## Grid context + ten-zone spatial allocation
+
+Stage: Grid-context correction and V2 spatial allocation handoff
+Decision: EVIDENCE READY WITH SPATIAL-PROXY BOUNDARY
+Decision date: 2026-09-03
+Branch: feature/grid-spatial-city
+Primary evidence: current Elexon remaining-day demand response; V2 ten-location issue-time weather; DESNZ REPD July 2026 operational wind/solar capacity proxy; reconciled latest spatial forecast bundle
+Acceptance result: PASS for public spatial-allocation screening
+Reason: partial current-day demand is no longer rejected; ten zone shares reconcile exactly to national V2 wind/solar MW; spatial weights and source limitations are versioned; proportional BESS allocation is explicitly separated from independent local sizing
+Validation: 135 Flexibility Studio tests pass; forecasting producer spatial tests pass and 104 branch tests pass excluding one stale ignored local-artifact parity check
+Known limitations: no observed city generation/error targets; REPD is an incomplete embedded-capacity census; no local demand/network constraints or local prices; city BESS MW/MWh is proportional allocation only
+Next allowed stage: complete Stage 10 market-backed investment integration, while preserving the spatial-proxy boundary

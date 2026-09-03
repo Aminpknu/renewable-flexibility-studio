@@ -32,9 +32,13 @@ Forecast-day planning reads `data/latest_forecast.csv`, validated separately fro
 
 The standalone Studio does not run or import the forecasting ML models. The forecasting project remains the producer of the forecast bundle; `scripts/sync_latest_forecast.py` is the local/manual handoff until automated cross-repository publishing is enabled.
 
+`data/latest_spatial_forecast.csv` is the companion ten-zone allocation bundle produced from the same target-day weather run. It contains one row per `(settlement_period, zone)` and therefore 10?46/48/50 rows. Wind and solar allocation shares must each sum to one within every settlement period. The bundle is reconciled to the national V2 forecast; it is not an independently observed city-generation target.
+
+`data/spatial_capacity_weights.csv` contains fixed DESNZ REPD operational wind/solar proxy shares assigned to the nearest of the ten V2 weather locations. Its manifest records the July 2026 REPD source URL, checksum, OGL status and limitations. NESO national embedded capacity remains authoritative for total MW.
+
 ## Live grid context
 
-Forecast-day mode may query the official Elexon Insights day-ahead demand API and then explicitly filter to the target settlement date. The grid adapter validates one complete 46/48/50-period National Demand Forecast series. This grid context is external public data and is not part of the renewable forecast bundle.
+Forecast-day mode may query the official Elexon Insights day-ahead demand API and then explicitly filter to the target settlement date. A complete pre-delivery series must contain 46/48/50 contiguous periods. After the target day has started, Elexon may return only the remaining contiguous periods; the adapter accepts such a suffix only when it ends at SP46/48/50 and labels it `partial_remaining_day`. This grid context is external public data and is not part of the renewable forecast bundle.
 
 ## Forecast-day reserve-planning evidence
 

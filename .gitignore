@@ -40,3 +40,6 @@ data/*.parquet
 !outputs/market_investment/
 !outputs/market_investment/*.json
 !outputs/market_investment/*.csv
+
+# Build-only raw government source; derived spatial weights are versioned.
+data/repd_*.csv
