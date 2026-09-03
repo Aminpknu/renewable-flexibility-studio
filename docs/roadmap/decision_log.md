@@ -100,3 +100,17 @@ Default two-window evidence: £2.51m/yr firming+arbitrage; £3.27m/yr full tripl
 Validation: 124 offline tests pass; `git diff --check` clean
 Known limitations: realised forecast error/prices and observed EAC clearing prices; price-taker acceptance; QR utilisation excluded; no site/telemetry/bid-execution model
 Next allowed stage: issue-time-correct Quick Reserve bid/acceptance modelling, then market-backed lifecycle NPV/Monte Carlo
+
+## Stage 9F — Pre-delivery Quick Reserve capacity signal
+
+Stage: 9F prior-date QR price forecasting and capacity allocation
+Decision: EVIDENCE READY WITH ACCEPTANCE BOUNDARY
+Decision date: 2026-09-03
+Branch: feature/stage9-qr-predelivery
+Primary evidence: stitched FY2025/current QR price history; 242-day price forecast backtest; 90 locked-date PQR/NQR allocation backtest; Apr–Jun Sell Orders execution diagnostic
+Acceptance result: PASS for issue-time clearing-price/capacity allocation; asset-specific auction acceptance remains unresolved
+Production impact: none; feature branch pending promotion
+Reason: QR price features use earlier dates only and improve MAE by ~14%; forecast-selected capacity retains 93.1% of perfect-information QR availability value under system-volume-capped price-taker scoring
+Acceptance boundary: a simple bid<=clearing rule has only 28.9% precision across 2.06m Apr–Jun QR Sell Orders, so no unsupported acceptance probability is applied
+Known limitations: not an acceptance-adjusted revenue forecast; utilisation excluded; current-rule value validation is the 90 Apr–Jun V2 locked dates
+Next allowed stage: structured EAC bid/acceptance modelling or market-backed lifecycle NPV using market value as base and QR as separately labelled upside until acceptance is identified

@@ -1,0 +1,102 @@
+{
+  "schema_version": "1.0",
+  "stage": "9_quick_reserve_predelivery_capacity_signal",
+  "method": "prior-date QR clearing-price forecast -> whole-MW PQR/NQR allocation",
+  "guard_windows": 2,
+  "locked_days": 90,
+  "price_forecast": {
+    "method": "prior-date-only Quick Reserve clearing-price ridge forecast",
+    "eligible_days": 242,
+    "period_product_rows": 23228,
+    "minimum_history_days": 60,
+    "lookback_days": 180,
+    "ridge_alpha": 20.0,
+    "forecast": {
+      "mae_gbp_per_mw_per_hour": 2.092367443348312,
+      "rmse_gbp_per_mw_per_hour": 3.2377282555758677,
+      "bias_gbp_per_mw_per_hour": -0.01151665467795698,
+      "r2": 0.4246156019872379
+    },
+    "naive_previous_same_product_period": {
+      "mae_gbp_per_mw_per_hour": 2.4380002583089375,
+      "rmse_gbp_per_mw_per_hour": 4.207516388311858,
+      "bias_gbp_per_mw_per_hour": -0.009941880489064935,
+      "r2": 0.028307337582569425
+    },
+    "issue_rule": "strictly earlier settlement dates only",
+    "mae_improvement_vs_naive_pct": 14.176898209205502,
+    "by_product": {
+      "NQR": {
+        "rows": 11614,
+        "forecast": {
+          "mae_gbp_per_mw_per_hour": 2.1480920404924873,
+          "rmse_gbp_per_mw_per_hour": 3.2926318562791304,
+          "bias_gbp_per_mw_per_hour": 0.008920906621554167,
+          "r2": 0.34324618472471413
+        },
+        "naive": {
+          "mae_gbp_per_mw_per_hour": 2.525291889099363,
+          "rmse_gbp_per_mw_per_hour": 4.390562502772571,
+          "bias_gbp_per_mw_per_hour": -0.007812984329257798,
+          "r2": -0.16776802921079015
+        }
+      },
+      "PQR": {
+        "rows": 11614,
+        "forecast": {
+          "mae_gbp_per_mw_per_hour": 2.0366428462041366,
+          "rmse_gbp_per_mw_per_hour": 3.181877428959914,
+          "bias_gbp_per_mw_per_hour": -0.03195421597746815,
+          "r2": 0.48548896782147644
+        },
+        "naive": {
+          "mae_gbp_per_mw_per_hour": 2.3507086275185123,
+          "rmse_gbp_per_mw_per_hour": 4.016136106392958,
+          "bias_gbp_per_mw_per_hour": -0.012070776648872066,
+          "r2": 0.1803194221419685
+        }
+      }
+    },
+    "apr_jun_2026": {
+      "days": 91,
+      "forecast": {
+        "mae_gbp_per_mw_per_hour": 2.1796239945783125,
+        "rmse_gbp_per_mw_per_hour": 3.287651821621148,
+        "bias_gbp_per_mw_per_hour": -0.01896380183974454,
+        "r2": 0.4565937474553682
+      },
+      "naive": {
+        "mae_gbp_per_mw_per_hour": 2.559157509157509,
+        "rmse_gbp_per_mw_per_hour": 4.239995186365538,
+        "bias_gbp_per_mw_per_hour": -0.009487179487179486,
+        "r2": 0.09617630354145068
+      }
+    }
+  },
+  "locked_price_mae_gbp_per_mw_per_hour": 2.167267242342675,
+  "locked_naive_price_mae_gbp_per_mw_per_hour": 2.5490567129629627,
+  "perfect_qr_availability_annualised_gbp": 1353640.3427083334,
+  "forecast_selected_availability_annualised_gbp": 1260114.7523750002,
+  "naive_selected_availability_annualised_gbp": 1191145.1833333333,
+  "forecast_value_capture_pct": 93.09080947261003,
+  "naive_value_capture_pct": 87.99569174704979,
+  "forecast_uplift_vs_naive_annualised_gbp": 68969.56904166665,
+  "forecast_beats_naive_days_pct": 78.88888888888889,
+  "mean_forecast_commitment_error_mw": 9.450231481481481,
+  "mean_naive_commitment_error_mw": 11.846064814814817,
+  "mean_forecast_pqr_mw": 14.201388888888886,
+  "mean_forecast_nqr_mw": 10.758101851851851,
+  "mean_perfect_pqr_mw": 14.589120370370372,
+  "mean_perfect_nqr_mw": 10.052083333333334,
+  "daily_forecast_value_p10_gbp": 2088.8875,
+  "daily_forecast_value_p50_gbp": 3442.5,
+  "daily_forecast_value_p90_gbp": 4803.0875,
+  "acceptance_assumption": "forecast-selected capacity is accepted up to realised system-cleared volume; asset bid merit-order position is not identified",
+  "limitations": [
+    "capacity allocation is selected before the target date using prior-date clearing-price evidence only",
+    "realised clearing price and system-cleared volume are used only for ex-post scoring",
+    "individual asset bid price and merit-order acceptance are not yet simulated",
+    "Quick Reserve utilisation payment and activation energy are excluded",
+    "current-rule economic validation uses the 90 V2 locked Apr-Jun 2026 dates"
+  ]
+}

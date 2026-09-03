@@ -17,10 +17,11 @@ def fetch_quick_reserve_results(
     start_utc: str,
     end_utc: str,
     timeout_seconds: int = 45,
+    resource_id: str = EAC_RESULTS_RESOURCE_ID,
 ) -> pd.DataFrame:
     """Fetch PQR/NQR clearing results from the NESO EAC open-data resource."""
     sql = (
-        f'SELECT * FROM "{EAC_RESULTS_RESOURCE_ID}" '
+        f'SELECT * FROM "{resource_id}" '
         f'WHERE "serviceType"=\'Quick Reserve\' '
         f'AND "deliveryStart">=\'{start_utc}\' '
         f'AND "deliveryStart"<\'{end_utc}\' LIMIT 20000'

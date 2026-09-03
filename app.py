@@ -68,6 +68,11 @@ MARKET_INDEX_PATH = ROOT / "data" / "elexon_market_index_prices.csv"
 MARKET_BACKTEST_PATH = ROOT / "outputs" / "market_optimisation" / "default_mixed_summary.json"
 QUICK_RESERVE_PATH = ROOT / "data" / "neso_quick_reserve_prices.csv"
 QUICK_RESERVE_SUMMARY_PATH = ROOT / "outputs" / "quick_reserve" / "quick_reserve_summary.json"
+QUICK_RESERVE_PREDELIVERY_SUMMARY_PATH = ROOT / "outputs" / "quick_reserve" / "quick_reserve_predelivery_summary.json"
+QUICK_RESERVE_PREDELIVERY_DAILY_PATH = ROOT / "outputs" / "quick_reserve" / "quick_reserve_predelivery_daily.csv"
+QUICK_RESERVE_PRICE_FORECAST_PATH = ROOT / "outputs" / "quick_reserve" / "quick_reserve_price_forecast_backtest.csv"
+QUICK_RESERVE_PREDELIVERY_ALLOCATIONS_PATH = ROOT / "outputs" / "quick_reserve" / "quick_reserve_predelivery_allocations.csv"
+QUICK_RESERVE_ACCEPTANCE_DIAGNOSTIC_PATH = ROOT / "outputs" / "quick_reserve" / "quick_reserve_acceptance_diagnostic.json"
 PRICE_FORECAST_BACKTEST_PATH = ROOT / "outputs" / "market_optimisation" / "price_forecast_backtest.csv"
 PREDELIVERY_DAILY_PATH = ROOT / "outputs" / "market_optimisation" / "pre_delivery_strategy_daily.csv"
 PREDELIVERY_SUMMARY_PATH = ROOT / "outputs" / "market_optimisation" / "pre_delivery_strategy_summary.json"
@@ -84,6 +89,11 @@ FULL_BACKTEST = json.loads(FULL_BACKTEST_PATH.read_text(encoding="utf-8"))
 IMBALANCE_BACKTEST = json.loads(IMBALANCE_SUMMARY_PATH.read_text(encoding="utf-8"))
 MARKET_BACKTEST = json.loads(MARKET_BACKTEST_PATH.read_text(encoding="utf-8"))
 QUICK_RESERVE_SUMMARY = json.loads(QUICK_RESERVE_SUMMARY_PATH.read_text(encoding="utf-8"))
+QUICK_RESERVE_PREDELIVERY_SUMMARY = json.loads(QUICK_RESERVE_PREDELIVERY_SUMMARY_PATH.read_text(encoding="utf-8"))
+QUICK_RESERVE_PREDELIVERY_DAILY = pd.read_csv(QUICK_RESERVE_PREDELIVERY_DAILY_PATH)
+QUICK_RESERVE_PRICE_FORECAST = pd.read_csv(QUICK_RESERVE_PRICE_FORECAST_PATH)
+QUICK_RESERVE_PREDELIVERY_ALLOCATIONS = pd.read_csv(QUICK_RESERVE_PREDELIVERY_ALLOCATIONS_PATH)
+QUICK_RESERVE_ACCEPTANCE_DIAGNOSTIC = json.loads(QUICK_RESERVE_ACCEPTANCE_DIAGNOSTIC_PATH.read_text(encoding="utf-8"))
 PRICE_FORECAST_BACKTEST = pd.read_csv(PRICE_FORECAST_BACKTEST_PATH)
 PREDELIVERY_DAILY = pd.read_csv(PREDELIVERY_DAILY_PATH)
 PREDELIVERY_SUMMARY = json.loads(PREDELIVERY_SUMMARY_PATH.read_text(encoding="utf-8"))
@@ -1246,6 +1256,90 @@ def _quick_reserve_figure(analysis: dict[str, Any]) -> go.Figure:
     )
     return figure
 
+def _quick_reserve_predelivery_view(date_value: str):
+    target = pd.Timestamp(date_value).normalize()
+    daily = QUICK_RESERVE_PREDELIVERY_DAILY.copy()
+    daily["settlement_date"] = pd.to_datetime(daily["settlement_date"]).dt.normalize()
+    selected_daily = daily.loc[daily["settlement_date"].eq(target)]
+    summary = QUICK_RESERVE_PREDELIVERY_SUMMARY
+    diagnostic = QUICK_RESERVE_ACCEPTANCE_DIAGNOSTIC["combined"]
+    cards = [
+        _kpi_card("QR price forecast MAE", f"£{summary['locked_price_mae_gbp_per_mw_per_hour']:.2f}/MW/h", "90 locked Apr–Jun dates"),
+        _kpi_card("Forecast allocation capture", f"{summary['forecast_value_capture_pct']:.1f}%", "Price-taker/system-volume scoring"),
+        _kpi_card("Naive allocation capture", f"{summary['naive_value_capture_pct']:.1f}%", "Previous-same-product/period signal"),
+        _kpi_card("Forecast QR value", f"£{summary['forecast_selected_availability_annualised_gbp']/1e6:.2f}m/yr", "90-day regime annualisation"),
+        _kpi_card("Forecast uplift vs naive", f"£{summary['forecast_uplift_vs_naive_annualised_gbp']/1e3:.0f}k/yr", "Same price-taker scoring assumption"),
+        _kpi_card("Simple bid-threshold precision", f"{diagnostic['precision_pct']:.1f}%", "Why clearing price alone cannot model acceptance"),
+    ]
+    note = html.Div([
+        html.Div(
+            "The QR clearing-price model uses earlier EAC delivery dates only. Forecast-selected PQR/NQR capacity is frozen before the target day, then scored against subsequent clearing results.",
+            className="scenario-note-line",
+        ),
+        html.Div(
+            "The 93% capture figure is not acceptance-adjusted asset revenue. It assumes offered capacity is accepted up to realised system-cleared volume. Historical Sell Orders show that bid price alone is a poor execution classifier, so no unsupported asset-specific acceptance probability is applied.",
+            className="scenario-note-line uncertainty-warning",
+        ),
+        html.Div(
+            f"Across Apr–Jun 2026 Sell Orders, the simple rule bid price ≤ clearing price has only {diagnostic['precision_pct']:.1f}% precision for actual execution across {diagnostic['orders']:,} Quick Reserve orders.",
+            className="scenario-note-line uncertainty-line",
+        ),
+    ])
+    if selected_daily.empty:
+        return note, cards, _empty_figure(
+            "Pre-delivery QR allocation evidence is available on the 90 Apr–Jun 2026 V2 locked dates."
+        )
+    row = selected_daily.iloc[0]
+    cards = cards + [
+        _kpi_card("Selected-day perfect QR", f"£{row['perfect_qr_availability_gbp']:,.0f}", "Realised clearing-price upper bound"),
+        _kpi_card("Selected-day forecast QR", f"£{row['forecast_selected_qr_availability_gbp']:,.0f}", "Forecast-selected capacity, ex-post scored"),
+        _kpi_card("Selected-day capture", f"{row['forecast_capture_pct']:.1f}%", "Relative to perfect-information QR-only"),
+    ]
+    price = QUICK_RESERVE_PRICE_FORECAST.copy()
+    price["settlement_date"] = pd.to_datetime(price["settlement_date"]).dt.normalize()
+    price = price.loc[price["settlement_date"].eq(target)].copy()
+    allocation = QUICK_RESERVE_PREDELIVERY_ALLOCATIONS.copy()
+    allocation["settlement_date"] = pd.to_datetime(allocation["settlement_date"]).dt.normalize()
+    allocation = allocation.loc[allocation["settlement_date"].eq(target)].copy()
+    if price.empty or allocation.empty:
+        return note, cards, _empty_figure("Selected-day QR price/allocation detail is unavailable.")
+    price["delivery_start_utc"] = pd.to_datetime(price["delivery_start_utc"], utc=True)
+    allocation["delivery_start_utc"] = pd.to_datetime(allocation["delivery_start_utc"], utc=True)
+    pqr = price.loc[price["product"].eq("PQR")]
+    nqr = price.loc[price["product"].eq("NQR")]
+    figure = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.10)
+    for subset, product in ((pqr, "PQR"), (nqr, "NQR")):
+        figure.add_trace(go.Scatter(
+            x=subset["delivery_start_utc"],
+            y=subset["clearing_price_gbp_per_mw_per_hour"],
+            mode="lines", name=f"{product} realised clearing",
+        ), row=1, col=1)
+        figure.add_trace(go.Scatter(
+            x=subset["delivery_start_utc"],
+            y=subset["forecast_qr_clearing_price_gbp_per_mw_per_hour"],
+            mode="lines", name=f"{product} prior-date forecast", line={"dash": "dash"},
+        ), row=1, col=1)
+    figure.add_trace(go.Scatter(
+        x=allocation["delivery_start_utc"],
+        y=allocation["pqr_contracted_mw"],
+        mode="lines", name="Forecast-selected PQR MW",
+    ), row=2, col=1)
+    figure.add_trace(go.Scatter(
+        x=allocation["delivery_start_utc"],
+        y=-allocation["nqr_contracted_mw"],
+        mode="lines", name="Forecast-selected NQR MW (shown negative)",
+    ), row=2, col=1)
+    figure.add_hline(y=0.0, line_dash="dash", row=2, col=1)
+    figure.update_yaxes(title_text="£/MW/h", row=1, col=1)
+    figure.update_yaxes(title_text="MW", row=2, col=1)
+    figure.update_xaxes(title_text="Delivery time (UTC)", row=2, col=1)
+    figure.update_layout(
+        height=560, hovermode="x unified", margin=dict(l=60, r=20, t=55, b=50),
+        legend={"orientation": "h", "y": 1.02, "yanchor": "bottom", "x": 0},
+    )
+    return note, cards, figure
+
+
 def _tomorrow_planning_data(
     portfolio_type: str,
     capacity_mw: float,
@@ -1881,6 +1975,18 @@ app.layout = html.Div(
                         dcc.Graph(
                             id="quick-reserve-chart",
                             figure=_empty_figure("Quick Reserve evidence is available for Apr–Jun 2026 historical dates."),
+                            config={"displaylogo": False},
+                        ),
+                        html.H4("Pre-delivery Quick Reserve capacity signal"),
+                        html.P(
+                            "This layer forecasts PQR/NQR clearing prices using earlier EAC delivery dates only, freezes the capacity split before the target date, and measures how much of the perfect-information availability value that allocation would retain. It is intentionally separate from asset-specific bid acceptance.",
+                            className="section-copy",
+                        ),
+                        html.Div(id="quick-reserve-predelivery-note", className="scenario-note"),
+                        html.Div(id="quick-reserve-predelivery-kpi-grid", className="kpi-grid"),
+                        dcc.Graph(
+                            id="quick-reserve-predelivery-chart",
+                            figure=_empty_figure("Pre-delivery QR capacity evidence is available on the locked Apr?Jun 2026 dates."),
                             config={"displaylogo": False},
                         ),
                         html.Hr(),
@@ -2549,6 +2655,20 @@ def run_quick_reserve_stacking(
             className="scenario-note-line",
         ))
     return html.Div(note_lines), cards, _quick_reserve_figure(analysis)
+
+
+@app.callback(
+    Output("quick-reserve-predelivery-note", "children"),
+    Output("quick-reserve-predelivery-kpi-grid", "children"),
+    Output("quick-reserve-predelivery-chart", "figure"),
+    Input("date-input", "value"),
+)
+def update_quick_reserve_predelivery(date_value: str):
+    try:
+        return _quick_reserve_predelivery_view(date_value)
+    except (TypeError, ValueError, KeyError) as error:
+        message = f"Pre-delivery Quick Reserve evidence could not be calculated: {error}"
+        return message, [], _empty_figure(message)
 
 
 @app.callback(
