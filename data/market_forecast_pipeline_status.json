@@ -4,10 +4,10 @@
     "status": "RECONSTRUCTED",
     "target_date": "2026-09-03",
     "expected_target_date": "2026-09-03",
-    "forecast_created_utc": "2026-09-03T10:02:17.180499+00:00",
+    "forecast_created_utc": "2026-09-03T20:59:22.467856+00:00",
     "target_start_utc": "2026-09-02T23:00:00+00:00",
     "issued_before_target_start": false,
-    "age_hours_at_target_start": -11.038105694166667
+    "age_hours_at_target_start": -21.989574404444447
   },
   "expected_target_date": "2026-09-03"
 }
