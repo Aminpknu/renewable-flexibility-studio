@@ -85,7 +85,7 @@ Backtesting over eligible dates gives about **80.6% wind**, **77.0% solar** and 
 
 For historical dates, the point forecast is treated as an illustrative contracted/scheduled renewable export. The portfolio imbalance is actual minus scheduled energy for each 30-minute settlement period. The Studio joins the matching official Elexon System Price and Net Imbalance Volume and calculates the corresponding BSC-style signed settlement cashflow. Positive cashflow means a payment by the virtual portfolio; negative means a receipt to it.
 
-The UI also reports **gross cash-out exposure**, defined as the absolute size of those settlement cashflows. This is a risk/volatility measure, not profit or avoided cost. A proper economic value calculation still needs a contracted/day-ahead reference price and should account for battery operating costs and degradation.
+The UI also reports **gross cash-out exposure**, defined as the absolute size of those settlement cashflows. This is a risk/volatility measure, not profit or avoided cost. The separate Risk & Value layer monetises physical exposure only through visible user/scenario assumptions; it does not relabel System Price exposure as battery revenue.
 
 The frozen Elexon archive covers the same 450 target days and all 21,600 half-hours as the V2 forecast-error bundle.
 
@@ -114,6 +114,12 @@ Reserve energy is evaluated over a rolling horizon equal to the installed batter
 For the default 100 MW 50/50 portfolio and 25 MW / 200 MWh (8 h) design, the current 3 September forecast gives a safe starting-SOC band around **33.6–76.6%**; therefore a current 50% SOC requires no adjustment. The largest rolling downside requirement is about **44.8 MWh** and the largest upward headroom requirement about **28.3 MWh**. This is a reserve-readiness calculation, not a simulated future dispatch trajectory.
 
 A formal prior-data-only backtest covers 420 eligible dates. At a 50% baseline SOC, the solar and mixed designs remain inside their calculated safe bands on all eligible dates, so the conservative policy makes no unnecessary adjustments. The directional interval achieves about **88.7% solar, 83.3% mixed and 81.9% wind coverage** on Apr–Jun 2026. Wind is explicitly flagged when its 24 h two-sided energy envelope cannot fit inside the installed usable SOC range.
+
+## Risk & Value decision layer
+
+Stage 6 converts the 450-day BESS firming evidence into a transparent pre-feasibility intervention decision. It reports baseline/residual physical exposure, monetised risk reduction, NPV, BCR, simple payback, break-even consequence value, maximum CAPEX, CAPEX/consequence sensitivity and a risk-value frontier. Monetary inputs are explicit scenario assumptions, not observed market revenues or bankable project costs.
+
+Stage 6B adds complete-day block-resampled Monte Carlo with uncertainty in consequence value, CAPEX, OPEX, battery availability and degradation. It reports P10/P50/P90 NPV, probability of negative NPV, 95% VaR/CVaR using `investment loss = -NPV`, probability of failing the selected firming/reliability gate, and named downside stress cases. The default 100 MW 50/50, 25 MW / 200 MWh case is economically negative under the illustrative default assumptions, while smaller batteries can have better NPV but fail the technical 90/90 gate.
 
 ## Renewable-only continuous-SOC stress test
 
@@ -175,7 +181,7 @@ A valid GB target day has 46, 48 or 50 settlement periods. Duplicate or incomple
 
 - dedicated P10/P50/P90 forecast bundles or weather-ensemble probabilistic forecasts;
 - compare the current residual-based directional reserve envelope with true probabilistic forecast tails;
-- refine forecast-day reserve planning with price-aware preparation timing after the economics layer is defined.
+- compare the current residual-based reserve envelope with dedicated probabilistic forecasts and then test price-aware preparation timing using a correctly defined market/contracting model.
 
 ### Release 4
 
