@@ -22,9 +22,11 @@ from engine.design_sizing import select_stable_design
 from engine.imbalance import apply_imbalance_settlement, summarise_imbalance_settlement
 from engine.metrics import calculate_firming_metrics
 from engine.portfolio import build_virtual_forecast, build_virtual_portfolio
+from engine.reserve_planning import ReservePlanningConfig, build_reserve_plan
 from engine.sizing import find_minimum_battery
 from engine.uncertainty import (
     PredictionIntervalConfig,
+    build_forecast_only_directional_interval,
     build_forecast_only_prediction_interval,
     build_rolling_prediction_interval,
 )
@@ -407,7 +409,7 @@ def _tomorrow_planning_data(
     wind_share_pct: float,
     battery_power_mw: float,
     duration_hours: float,
-    initial_soc_pct: float,
+    current_soc_pct: float,
     efficiency_pct: float,
 ) -> tuple[pd.DataFrame, BatteryConfig, dict[str, Any]]:
     history = build_virtual_portfolio(
@@ -418,35 +420,37 @@ def _tomorrow_planning_data(
         LATEST_FORECAST, portfolio_type=portfolio_type, capacity_mw=float(capacity_mw),
         wind_share=float(wind_share_pct) / 100,
     )
-    interval, uncertainty = build_forecast_only_prediction_interval(
+    interval, uncertainty = build_forecast_only_directional_interval(
         history, forecast, LATEST_TARGET_DATE,
         PredictionIntervalConfig(lookback_days=180, minimum_history_days=30, neighbour_count=600),
     )
     config = BatteryConfig(
         power_mw=float(battery_power_mw), duration_hours=float(duration_hours),
         round_trip_efficiency=float(efficiency_pct) / 100,
-        initial_soc_fraction=float(initial_soc_pct) / 100,
+        initial_soc_fraction=float(current_soc_pct) / 100,
     )
     planning: dict[str, Any] = {"uncertainty": uncertainty}
+    reserve_series = interval
     if uncertainty.get("available"):
-        down = interval["forecast_mw"] - interval["prediction_interval_lower_mw"]
-        up = interval["prediction_interval_upper_mw"] - interval["forecast_mw"]
-        peak_deviation = float(max(down.max(), up.max()))
+        reserve_series, reserve = build_reserve_plan(
+            interval,
+            config,
+            ReservePlanningConfig(current_soc_fraction=float(current_soc_pct) / 100),
+        )
+        planning["reserve"] = reserve
         planning.update({
-            "peak_downward_reserve_mw": float(down.max()),
-            "peak_upward_headroom_mw": float(up.max()),
-            "peak_interval_deviation_mw": peak_deviation,
-            "battery_power_coverage_pct": min(100.0, 100.0 * config.power_mw / peak_deviation) if peak_deviation > 0 else 100.0,
+            "peak_downward_reserve_mw": reserve["peak_downward_reserve_mw"],
+            "peak_upward_headroom_mw": reserve["peak_upward_headroom_mw"],
+            "peak_interval_deviation_mw": max(
+                reserve["peak_downward_reserve_mw"], reserve["peak_upward_headroom_mw"]
+            ),
+            "battery_power_coverage_pct": min(
+                reserve["downward_power_coverage_pct"], reserve["upward_power_coverage_pct"]
+            ),
         })
-    planning["forecast_energy_mwh"] = float(interval["forecast_mw"].sum() * 0.5)
-    planning["peak_forecast_mw"] = float(interval["forecast_mw"].max())
-    planning["discharge_reserve_mwh"] = float(
-        max(config.initial_soc_mwh - config.minimum_soc_mwh, 0.0) * config.discharge_efficiency
-    )
-    planning["charge_headroom_mwh"] = float(
-        max(config.maximum_soc_mwh - config.initial_soc_mwh, 0.0) / config.charge_efficiency
-    )
-    return interval, config, planning
+    planning["forecast_energy_mwh"] = float(reserve_series["forecast_mw"].sum() * 0.5)
+    planning["peak_forecast_mw"] = float(reserve_series["forecast_mw"].max())
+    return reserve_series, config, planning
 
 
 def _tomorrow_forecast_figure(frame: pd.DataFrame) -> go.Figure:
@@ -459,7 +463,7 @@ def _tomorrow_forecast_figure(frame: pd.DataFrame) -> go.Figure:
         figure.add_trace(go.Scatter(
             x=frame["valid_time_utc"], y=frame["prediction_interval_upper_mw"],
             mode="lines", line={"width": 0}, fill="tonexty",
-            fillcolor="rgba(99,110,250,0.16)", name="Nominal 80% expected range",
+            fillcolor="rgba(99,110,250,0.16)", name="Directional empirical 80% range",
         ))
     figure.add_trace(go.Scatter(
         x=frame["valid_time_utc"], y=frame["forecast_mw"],
@@ -469,6 +473,50 @@ def _tomorrow_forecast_figure(frame: pd.DataFrame) -> go.Figure:
         xaxis_title="Settlement time (UTC)", yaxis_title="Virtual portfolio power (MW)",
         hovermode="x unified", margin=dict(l=45, r=20, t=65, b=45),
         legend={"orientation": "h", "y": 1.03, "yanchor": "bottom", "x": 0}, height=390,
+    )
+    return figure
+
+
+def _reserve_plan_figure(frame: pd.DataFrame, reserve: dict[str, Any]) -> go.Figure:
+    """Show rolling downward reserve and upward headroom needs for the forecast day."""
+    figure = go.Figure()
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"],
+        y=frame["downward_reserve_requirement_mwh"],
+        mode="lines",
+        name="Downward reserve need",
+        hovertemplate="Downward reserve %{y:.1f} MWh<extra></extra>",
+    ))
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"],
+        y=frame["upward_headroom_requirement_mwh"],
+        mode="lines",
+        name="Upward charge headroom need",
+        hovertemplate="Upward headroom %{y:.1f} MWh<extra></extra>",
+    ))
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"],
+        y=[reserve["available_discharge_reserve_mwh"]] * len(frame),
+        mode="lines",
+        name="Available discharge reserve",
+        line={"dash": "dash"},
+        hovertemplate="Available discharge reserve %{y:.1f} MWh<extra></extra>",
+    ))
+    figure.add_trace(go.Scatter(
+        x=frame["valid_time_utc"],
+        y=[reserve["available_charge_headroom_mwh"]] * len(frame),
+        mode="lines",
+        name="Available charge headroom",
+        line={"dash": "dot"},
+        hovertemplate="Available charge headroom %{y:.1f} MWh<extra></extra>",
+    ))
+    figure.update_layout(
+        xaxis_title="Reserve-window start (UTC)",
+        yaxis_title="Energy (MWh)",
+        hovermode="x unified",
+        margin=dict(l=55, r=20, t=65, b=45),
+        legend={"orientation": "h", "y": 1.03, "yanchor": "bottom", "x": 0},
+        height=390,
     )
     return figure
 
@@ -763,17 +811,35 @@ app.layout = html.Div(
                 ),
                 html.Section(
                     [
-                        html.H2(f"Tomorrow planning & GB grid context · {LATEST_TARGET_DATE}"),
+                        html.H2(f"Forecast-day operational planning & GB grid context · {LATEST_TARGET_DATE}"),
                         html.P(
-                            "Tomorrow mode uses the latest V2 wind/solar point forecast as an illustrative scheduled export and automatically carries forward the battery selected by the Future battery sizing benchmark above. Actual generation is not known yet, so the Studio does not simulate a future charge/discharge path. It shows the expected range plus the installed-design reserve/headroom at the current 50% starting-SOC baseline.",
+                            "This section carries forward the battery selected by the Future battery sizing benchmark and combines it with the latest V2 renewable forecast. It does not simulate a future dispatch path. Instead, it calculates a directional uncertainty range, the rolling reserve/headroom needed over the installed battery duration, and the minimum SOC adjustment required before the forecast day.",
                             className="section-copy",
                         ),
-                        html.Button("Refresh tomorrow planning", id="tomorrow-button", n_clicks=0, className="primary-button"),
+                        html.Div(
+                            [
+                                html.Label("Current battery SOC before forecast day (%)"),
+                                dcc.Slider(
+                                    id="tomorrow-soc-input", min=10, max=90, step=5, value=50,
+                                    marks={10: "10", 50: "50", 90: "90"},
+                                    tooltip={"placement": "bottom", "always_visible": False},
+                                ),
+                                html.Div(
+                                    "If current SOC is already inside the uncertainty-derived safe band, the recommendation is to hold it. Otherwise the planner moves only to the nearest safe boundary.",
+                                    className="control-help",
+                                ),
+                            ],
+                            className="tomorrow-soc-control",
+                        ),
+                        html.Button("Refresh forecast-day planning", id="tomorrow-button", n_clicks=0, className="primary-button"),
                         html.Div(id="tomorrow-note", className="scenario-note"),
                         html.Div(id="tomorrow-kpi-grid", className="kpi-grid"),
-                        html.Div("Tomorrow renewable schedule and expected range", className="chart-title"),
-                        html.Div("The dashed line is the planned renewable export from the V2 forecast. The shaded range comes from prior out-of-sample forecast errors; tomorrow's actual output is unknown.", className="chart-subtitle"),
-                        dcc.Graph(id="tomorrow-forecast-chart", figure=_empty_figure("Tomorrow planning will load automatically."), config={"displaylogo": False}),
+                        html.Div("Forecast-day renewable schedule and directional expected range", className="chart-title"),
+                        html.Div("The dashed line is the V2 scheduled renewable export. The shaded band is an empirical directional q10–q90 residual range calibrated only from earlier out-of-sample errors; it is not yet an ECMWF ensemble P10/P90 forecast.", className="chart-subtitle"),
+                        dcc.Graph(id="tomorrow-forecast-chart", figure=_empty_figure("Forecast-day planning will load automatically."), config={"displaylogo": False}),
+                        html.Div("Rolling battery reserve and headroom requirements", className="chart-title"),
+                        html.Div("Each point asks how much downward discharge reserve or upward charging headroom may be needed over the following window equal to the installed battery duration. Dashed reference lines show what is available at the recommended starting SOC.", className="chart-subtitle"),
+                        dcc.Graph(id="tomorrow-reserve-chart", figure=_empty_figure("Reserve planning will load automatically."), config={"displaylogo": False}),
                         html.Div("Official GB day-ahead demand context", className="chart-title"),
                         html.Div("National Demand Forecast is official NESO data served through Elexon Insights. It provides system-scale context; the virtual portfolio is not claimed to be a physical national battery.", className="chart-subtitle"),
                         dcc.Graph(id="grid-demand-chart", figure=_empty_figure("GB demand context will load automatically."), config={"displaylogo": False}),
@@ -1062,6 +1128,7 @@ def update_imbalance_settlement(stored: str | None, date_value: str):
     Output("tomorrow-note", "children"),
     Output("tomorrow-kpi-grid", "children"),
     Output("tomorrow-forecast-chart", "figure"),
+    Output("tomorrow-reserve-chart", "figure"),
     Output("grid-demand-chart", "figure"),
     Input("tomorrow-button", "n_clicks"),
     State("portfolio-input", "value"),
@@ -1069,6 +1136,7 @@ def update_imbalance_settlement(stored: str | None, date_value: str):
     State("wind-share-input", "value"),
     State("design-target-input", "value"),
     State("design-reliability-input", "value"),
+    State("tomorrow-soc-input", "value"),
 )
 def run_tomorrow_planning(
     _clicks: int,
@@ -1077,6 +1145,7 @@ def run_tomorrow_planning(
     wind_share_pct: float,
     design_target_pct: float,
     design_reliability_pct: float,
+    current_soc_pct: float,
 ):
     try:
         design_grid = scaled_design_grid(
@@ -1090,41 +1159,55 @@ def run_tomorrow_planning(
         forecast, config, planning = _tomorrow_planning_data(
             portfolio_type, capacity_mw, wind_share_pct,
             selected_design["power_mw"], selected_design["duration_hours"],
-            50.0, 90.0,
+            current_soc_pct, 90.0,
         )
     except (TypeError, ValueError, KeyError) as error:
-        message = f"Tomorrow planning could not be calculated: {error}"
+        message = f"Forecast-day planning could not be calculated: {error}"
         empty = _empty_figure(message)
-        return message, [], empty, empty
+        return message, [], empty, empty, empty
 
     uncertainty = planning["uncertainty"]
+    reserve = planning.get("reserve")
     cards = [
         _kpi_card(
             "Installed design",
             f"{selected_design['power_mw']:.0f} MW / {selected_design['energy_mwh']:.0f} MWh",
-            f"Selected by the {design_target_pct:.0f}% firming / {design_reliability_pct:.0f}% days future-sizing gate",
+            f"Selected by the {design_target_pct:.0f}% firming / {design_reliability_pct:.0f}% days design gate",
         ),
-        _kpi_card("Planned starting SOC", "50%", "Current baseline reserve position; Stage B will optimise this from tomorrow uncertainty"),
-        _kpi_card("Forecast energy", f"{planning['forecast_energy_mwh']:.1f} MWh", "Tomorrow's virtual portfolio schedule"),
+        _kpi_card("Current SOC", f"{float(current_soc_pct):.0f}%", "Operator-entered SOC before the forecast day"),
+        _kpi_card("Forecast energy", f"{planning['forecast_energy_mwh']:.1f} MWh", "V2 scheduled renewable export"),
         _kpi_card("Peak forecast", f"{planning['peak_forecast_mw']:.1f} MW", "Highest scheduled renewable export"),
-        _kpi_card("Discharge reserve", f"{planning['discharge_reserve_mwh']:.1f} MWh", "Deliverable energy above the 10% SOC reserve"),
-        _kpi_card("Charge headroom", f"{planning['charge_headroom_mwh']:.1f} MWh", "Renewable surplus energy absorbable before 90% SOC"),
     ]
-    if uncertainty.get("available"):
-        cards.extend([
-            _kpi_card(
-                "Peak expected deviation",
-                f"{planning['peak_interval_deviation_mw']:.1f} MW",
-                "Largest one-sided distance from schedule to the expected range",
-            ),
-            _kpi_card(
-                "Single-period MW coverage",
-                f"{planning['battery_power_coverage_pct']:.0f}%",
-                "Installed design MW divided by the peak expected one-period deviation; this does not prove sufficient MWh for the whole day",
-            ),
-        ])
-    forecast_figure = _tomorrow_forecast_figure(forecast)
 
+    if reserve:
+        recommended = float(reserve["recommended_start_soc_pct"])
+        if reserve["energy_band_feasible"]:
+            safe_band = f"{reserve['safe_soc_lower_pct']:.1f}–{reserve['safe_soc_upper_pct']:.1f}%"
+        else:
+            safe_band = "No full safe band"
+        if reserve["preparation_action"] == "hold current SOC":
+            prep_value = f"Hold {recommended:.0f}%"
+            prep_help = "Current SOC already lies inside the safe reserve band"
+        elif reserve["preparation_action"] == "charge before target day":
+            prep_value = f"Charge +{reserve['grid_import_to_recommendation_mwh']:.1f} MWh"
+            prep_help = f"Move to {recommended:.1f}% SOC before the forecast day"
+        else:
+            prep_value = f"Export {reserve['grid_export_to_recommendation_mwh']:.1f} MWh"
+            prep_help = f"Reduce to {recommended:.1f}% SOC before the forecast day"
+        cards.extend([
+            _kpi_card("Recommended start SOC", f"{recommended:.1f}%", "Minimum adjustment needed for reserve sufficiency"),
+            _kpi_card("Safe SOC band", safe_band, f"Based on a {reserve['reserve_horizon_hours']:.0f} h rolling reserve window"),
+            _kpi_card("Preparation", prep_value, prep_help),
+            _kpi_card("Reserve coverage", f"{reserve['overall_reserve_coverage_pct']:.0f}%", "Minimum of energy and MW coverage for both directions"),
+            _kpi_card("Downward reserve need", f"{reserve['downward_reserve_required_mwh']:.1f} MWh", "Largest rolling discharge-energy requirement"),
+            _kpi_card("Upward headroom need", f"{reserve['upward_headroom_required_mwh']:.1f} MWh", "Largest rolling renewable-surplus absorption requirement"),
+        ])
+
+    forecast_figure = _tomorrow_forecast_figure(forecast)
+    reserve_figure = (
+        _reserve_plan_figure(forecast, reserve)
+        if reserve else _empty_figure("Directional reserve evidence is unavailable.")
+    )
     issue = pd.Timestamp(LATEST_FORECAST["forecast_created_utc"].iloc[0]).strftime(
         "%Y-%m-%d %H:%M UTC"
     )
@@ -1132,24 +1215,52 @@ def run_tomorrow_planning(
         html.Div(
             f"Future design in use: {selected_design['power_mw']:.0f} MW / {selected_design['energy_mwh']:.0f} MWh "
             f"({selected_design['duration_hours']:.0f} h), selected by the {design_target_pct:.0f}% firming / "
-            f"{design_reliability_pct:.0f}% days stability gate. Planned starting SOC is 50%.",
-            className="scenario-note-line",
-        ),
-        html.Div(
-            f"Renewable forecast target {LATEST_TARGET_DATE}; V2 bundle created {issue}. Planning only: no actual generation or future battery dispatch is assumed.",
+            f"{design_reliability_pct:.0f}% days stability gate.",
             className="scenario-note-line",
         ),
     ]
+    if reserve:
+        if reserve["energy_band_feasible"]:
+            action_text = (
+                f"Operational recommendation: {reserve['preparation_action']}. Current SOC {reserve['current_soc_pct']:.0f}% → "
+                f"recommended {reserve['recommended_start_soc_pct']:.1f}%. The safe starting-SOC band is "
+                f"{reserve['safe_soc_lower_pct']:.1f}–{reserve['safe_soc_upper_pct']:.1f}% for a "
+                f"{reserve['reserve_horizon_hours']:.0f} h rolling reserve horizon."
+            )
+        else:
+            action_text = (
+                f"No starting SOC can fully cover both directional energy requirements over the "
+                f"{reserve['reserve_horizon_hours']:.0f} h horizon. The planner gives a risk-balanced "
+                f"{reserve['recommended_start_soc_pct']:.1f}% compromise with {reserve['overall_reserve_coverage_pct']:.0f}% reserve coverage."
+            )
+        note_parts.append(html.Div(action_text, className="scenario-note-line uncertainty-line"))
+
+        down_start = pd.Timestamp(reserve["critical_down_start_utc"]).strftime("%d %b %H:%M")
+        down_end = pd.Timestamp(reserve["critical_down_end_utc"]).strftime("%d %b %H:%M")
+        up_start = pd.Timestamp(reserve["critical_up_start_utc"]).strftime("%d %b %H:%M")
+        up_end = pd.Timestamp(reserve["critical_up_end_utc"]).strftime("%d %b %H:%M")
+        note_parts.append(html.Div(
+            f"Critical downside window: {down_start}–{down_end} UTC, requiring {reserve['downward_reserve_required_mwh']:.1f} MWh discharge reserve. "
+            f"Critical upside window: {up_start}–{up_end} UTC, requiring {reserve['upward_headroom_required_mwh']:.1f} MWh charging headroom. "
+            f"Peak directional MW needs are {reserve['peak_downward_reserve_mw']:.1f} MW down and {reserve['peak_upward_headroom_mw']:.1f} MW up.",
+            className="scenario-note-line",
+        ))
+
+    note_parts.append(html.Div(
+        f"Renewable forecast target {LATEST_TARGET_DATE}; V2 bundle created {issue}. This is reserve planning only: no actual future generation or dispatch path is assumed.",
+        className="scenario-note-line",
+    ))
     if uncertainty.get("available"):
         note_parts.append(html.Div(
-            f"Uncertainty band: nominal {uncertainty['nominal_coverage_pct']:.0f}% range calibrated from "
-            f"{uncertainty['history_days']} earlier out-of-sample days ({uncertainty['calibration_start']} to "
-            f"{uncertainty['calibration_end']}); mean width {uncertainty['mean_interval_width_mw']:.2f} MW.",
+            f"Directional uncertainty range: empirical q{uncertainty['lower_quantile_pct']:.0f}–q{uncertainty['upper_quantile_pct']:.0f} residual bounds "
+            f"calibrated from {uncertainty['history_days']} earlier out-of-sample days "
+            f"({uncertainty['calibration_start']} to {uncertainty['calibration_end']}); mean width "
+            f"{uncertainty['mean_interval_width_mw']:.2f} MW. This is not yet a weather-ensemble probabilistic forecast.",
             className="scenario-note-line uncertainty-line",
         ))
     else:
         note_parts.append(html.Div(
-            "Uncertainty band is unavailable because the verified historical archive does not contain enough prior calibration days.",
+            "Directional uncertainty is unavailable because the verified historical archive does not contain enough prior calibration days.",
             className="scenario-note-line uncertainty-warning",
         ))
 
@@ -1174,15 +1285,11 @@ def run_tomorrow_planning(
     except Exception as error:
         grid_figure = _empty_figure(f"Official grid context unavailable: {error}")
         note_parts.append(html.Div(
-            "Official grid-demand context could not be loaded; the renewable planning result remains available.",
+            "Official grid-demand context could not be loaded; the renewable reserve plan remains available.",
             className="scenario-note-line uncertainty-warning",
         ))
-    note_parts.append(html.Div(
-        "Stage B will replace the fixed 50% starting-SOC assumption with an uncertainty-aware reserve recommendation for tomorrow.",
-        className="scenario-note-line",
-    ))
-    return html.Div(note_parts), cards, forecast_figure, grid_figure
 
+    return html.Div(note_parts), cards, forecast_figure, reserve_figure, grid_figure
 
 @app.callback(
     Output("sizing-recommendation", "children"),

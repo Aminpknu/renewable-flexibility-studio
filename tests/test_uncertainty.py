@@ -30,3 +30,28 @@ def test_interval_refuses_to_use_future_data_when_history_is_short() -> None:
     assert meta["reason"] == "insufficient_prior_history"
     assert meta["history_days"] == 0
     assert "prediction_interval_lower_mw" not in interval.columns
+
+
+def test_directional_future_interval_uses_signed_residual_quantiles() -> None:
+    from adapters.latest_forecast import load_latest_forecast
+    from engine.portfolio import build_virtual_forecast
+    from engine.uncertainty import (
+        PredictionIntervalConfig,
+        build_forecast_only_directional_interval,
+    )
+
+    latest = load_latest_forecast(ROOT / "data" / "latest_forecast.csv")
+    history = build_virtual_portfolio(DATA, "mixed", 100.0, wind_share=0.5)
+    future = build_virtual_forecast(latest, "mixed", 100.0, wind_share=0.5)
+    interval, meta = build_forecast_only_directional_interval(
+        history, future, "2026-09-03",
+        PredictionIntervalConfig(lookback_days=180, minimum_history_days=30),
+    )
+    assert meta["available"] is True
+    assert meta["calibration_end"] == "2026-06-30"
+    assert meta["lower_quantile_pct"] == 10.0
+    assert meta["upper_quantile_pct"] == 90.0
+    assert len(interval) == 48
+    assert interval["prediction_interval_lower_mw"].le(
+        interval["prediction_interval_upper_mw"]
+    ).all()

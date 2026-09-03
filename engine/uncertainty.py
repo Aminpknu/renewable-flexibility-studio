@@ -207,3 +207,97 @@ def build_forecast_only_prediction_interval(
         "period_count": int(len(future)),
     }
     return future, metadata
+
+
+def build_forecast_only_directional_interval(
+    history_portfolio: pd.DataFrame,
+    forecast_portfolio: pd.DataFrame,
+    target_date: str | pd.Timestamp,
+    config: PredictionIntervalConfig | None = None,
+) -> tuple[pd.DataFrame, dict[str, float | int | str | bool]]:
+    """Build an asymmetric future range from local signed residual quantiles.
+
+    The lower/upper tails are empirical residual quantiles calibrated only from
+    earlier out-of-sample target dates. This is directional reserve evidence,
+    not a weather-ensemble probabilistic forecast.
+    """
+    cfg = config or PredictionIntervalConfig()
+    hist_required = {"settlement_date", "actual_cf", "forecast_cf"}
+    future_required = {
+        "settlement_date", "settlement_period", "valid_time_utc",
+        "forecast_cf", "portfolio_capacity_mw", "forecast_mw",
+    }
+    missing_hist = sorted(hist_required.difference(history_portfolio.columns))
+    missing_future = sorted(future_required.difference(forecast_portfolio.columns))
+    if missing_hist or missing_future:
+        raise ValueError(
+            f"Directional interval columns missing: history={missing_hist}, forecast={missing_future}"
+        )
+    history = history_portfolio.copy()
+    future = forecast_portfolio.copy().sort_values("settlement_period").reset_index(drop=True)
+    history["settlement_date"] = pd.to_datetime(history["settlement_date"]).dt.normalize()
+    target = pd.Timestamp(target_date).normalize()
+    window_start = target - pd.Timedelta(days=cfg.lookback_days)
+    calibration = history.loc[
+        history["settlement_date"].lt(target)
+        & history["settlement_date"].ge(window_start)
+    ].copy()
+    history_days = int(calibration["settlement_date"].nunique())
+    tail_probability = (1.0 - cfg.nominal_coverage) / 2.0
+    if history_days < cfg.minimum_history_days:
+        return future, {
+            "available": False,
+            "reason": "insufficient_prior_history",
+            "history_days": history_days,
+            "minimum_history_days": cfg.minimum_history_days,
+            "nominal_coverage_pct": cfg.nominal_coverage * 100,
+            "lower_quantile_pct": round(tail_probability * 100, 6),
+            "upper_quantile_pct": round((1.0 - tail_probability) * 100, 6),
+        }
+
+    calibration["signed_residual_cf"] = (
+        calibration["actual_cf"].to_numpy(float)
+        - calibration["forecast_cf"].to_numpy(float)
+    )
+    cal_forecast = calibration["forecast_cf"].to_numpy(float)
+    cal_residual = calibration["signed_residual_cf"].to_numpy(float)
+    neighbours = min(cfg.neighbour_count, len(calibration))
+    lower_cf: list[float] = []
+    upper_cf: list[float] = []
+    for prediction in future["forecast_cf"].to_numpy(float):
+        distance = np.abs(cal_forecast - prediction)
+        if neighbours == len(calibration):
+            local_residual = cal_residual
+        else:
+            indexes = np.argpartition(distance, neighbours - 1)[:neighbours]
+            local_residual = cal_residual[indexes]
+        lower_residual = float(np.quantile(
+            local_residual, tail_probability, method="lower"
+        ))
+        upper_residual = float(np.quantile(
+            local_residual, 1.0 - tail_probability, method="higher"
+        ))
+        lower_cf.append(max(0.0, prediction + lower_residual))
+        upper_cf.append(min(1.0, prediction + upper_residual))
+
+    future["prediction_interval_lower_cf"] = lower_cf
+    future["prediction_interval_upper_cf"] = upper_cf
+    capacity = future["portfolio_capacity_mw"].to_numpy(float)
+    future["prediction_interval_lower_mw"] = np.asarray(lower_cf) * capacity
+    future["prediction_interval_upper_mw"] = np.asarray(upper_cf) * capacity
+    width = future["prediction_interval_upper_mw"] - future["prediction_interval_lower_mw"]
+    metadata = {
+        "available": True,
+        "method": "rolling_local_signed_residual_quantile_interval_future",
+        "nominal_coverage_pct": cfg.nominal_coverage * 100,
+        "lower_quantile_pct": round(tail_probability * 100, 6),
+        "upper_quantile_pct": round((1.0 - tail_probability) * 100, 6),
+        "lookback_days": cfg.lookback_days,
+        "history_days": history_days,
+        "calibration_start": calibration["settlement_date"].min().date().isoformat(),
+        "calibration_end": calibration["settlement_date"].max().date().isoformat(),
+        "neighbour_count": neighbours,
+        "mean_interval_width_mw": float(width.mean()),
+        "period_count": int(len(future)),
+    }
+    return future, metadata
