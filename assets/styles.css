@@ -102,3 +102,24 @@ footer { text-align: center; padding: 28px 20px 44px; color: var(--muted); font-
   background: #f7fafb;
 }
 .tomorrow-soc-control label { margin-top: 0; }
+
+/* Models, Data & Validation guide */
+.guide-link-pill { color: white; text-decoration: none; }
+.guide-link-pill:hover { background: rgba(255,255,255,.17); }
+.methodology-guide { border-top: 4px solid var(--accent); scroll-margin-top: 16px; }
+.guide-heading { max-width: 900px; margin-bottom: 18px; }
+.guide-workflow-wrap { padding: 16px 18px; border-radius: 12px; background: var(--soft); margin-bottom: 16px; }
+.guide-workflow { margin: 0; padding-left: 22px; line-height: 1.6; }
+.guide-details { border: 1px solid var(--line); border-radius: 12px; margin: 12px 0; overflow: hidden; }
+.guide-details summary { cursor: pointer; padding: 15px 17px; font-weight: 800; background: #f7fafb; }
+.guide-detail-body { padding: 5px 17px 18px; }
+.guide-equation { margin: 12px 0; padding: 14px 16px; border-left: 4px solid var(--accent); background: #f7fafb; border-radius: 8px; overflow-x: auto; }
+.guide-equation h4 { margin: 0 0 6px; }
+.guide-table-wrap { overflow-x: auto; }
+.guide-table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.guide-table th, .guide-table td { padding: 10px 11px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+.guide-table th { background: #f7fafb; font-weight: 800; }
+.guide-limit-list { line-height: 1.6; }
+
+.guide-jump-link { display: inline-block; margin-top: 18px; text-decoration: none; }
+.technical-guide a { color: var(--accent-dark); }

@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "stage": "14_probabilistic_renewable_quantiles",
+  "selected_candidate": {
+    "name": "qD",
+    "max_iter": 220,
+    "learning_rate": 0.04,
+    "max_leaf_nodes": 15,
+    "min_samples_leaf": 120,
+    "l2_regularization": 2.0,
+    "mean_pinball_loss": 0.0091238544723802,
+    "mean_q10_pinball": 0.007737989476243014,
+    "mean_q50_pinball": 0.013738171497254564,
+    "mean_q90_pinball": 0.005895402443643017
+  },
+  "locked_reference": {
+    "solar": {
+      "wind_share": 0.0,
+      "periods": 4320.0,
+      "days": 90.0,
+      "observed_p10_p90_coverage_pct": 83.35648148148148,
+      "mean_p10_p90_width_cf": 0.049167981703137305,
+      "p10_pinball": 0.004236727928833832,
+      "p50_pinball": 0.008465317292495457,
+      "p90_pinball": 0.003938857832039097,
+      "p50_mae_cf": 0.016930634584990913,
+      "v2_point_mae_cf": 0.016551305854637637,
+      "median_rolling_correction_cf": 0.0
+    },
+    "mixed_50_50": {
+      "wind_share": 0.5,
+      "periods": 4320.0,
+      "days": 90.0,
+      "observed_p10_p90_coverage_pct": 82.68518518518519,
+      "mean_p10_p90_width_cf": 0.07641547668678512,
+      "p10_pinball": 0.005043021165313998,
+      "p50_pinball": 0.011088370067357207,
+      "p90_pinball": 0.005400282416551352,
+      "p50_mae_cf": 0.022176740134714414,
+      "v2_point_mae_cf": 0.02186725301867496,
+      "median_rolling_correction_cf": 0.006858390997516065
+    },
+    "wind": {
+      "wind_share": 1.0,
+      "periods": 4320.0,
+      "days": 90.0,
+      "observed_p10_p90_coverage_pct": 83.33333333333334,
+      "mean_p10_p90_width_cf": 0.12322616950554356,
+      "p10_pinball": 0.007633915080475399,
+      "p50_pinball": 0.018432153692012038,
+      "p90_pinball": 0.009087440303863109,
+      "p50_mae_cf": 0.036864307384024075,
+      "v2_point_mae_cf": 0.037265447759530765,
+      "median_rolling_correction_cf": 0.009721566516299955
+    }
+  },
+  "mix_grid_rows": 21,
+  "locked_prediction_rows": 90720,
+  "model_sha256": "1cf9efe1d77908a28ccb09c455d44f0f5ab4b488be791997c2220d2fcba6b408",
+  "metadata_sha256": "e9a7e9af8eb73a3abbab46863fa5067cec13ca315a1011f46eea5be0855c58b0",
+  "source_sha256": "845b03d8b3d8e99738af73cd67407b3d6d569c35627418ba0d7ebe9f93f85e59",
+  "claim_boundary": "conditional quantile/conformal uncertainty around V2; not weather-ensemble probabilities"
+}

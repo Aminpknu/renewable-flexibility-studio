@@ -239,18 +239,19 @@ A valid GB target day has 46, 48 or 50 settlement periods. Duplicate or incomple
 
 ## Roadmap
 
-### Release 2
+### Stage 14 - probabilistic uncertainty (implemented)
 
-- interactive date-range and seasonal/regime comparison using the installed V2 archive;
-- scenario comparison;
-- richer storage-sizing evidence by season and weather regime;
-- shareable URL state.
+- mix-aware conditional P10/P50/P90 renewable forecast intervals around the frozen V2 schedule;
+- conformal calibration using development-only evidence, with locked Apr-Jun 2026 validation;
+- direct comparison against the prior rolling residual envelope;
+- forecast-day reserve/headroom and safe-SOC planning driven by P10/P90 tails.
 
-### Release 3
+### Stage 15 - seasonal and forecast-defined regimes (implemented)
 
-- dedicated P10/P50/P90 forecast bundles or weather-ensemble probabilistic forecasts;
-- compare the current residual-based directional reserve envelope with true probabilistic forecast tails;
-- compare the current residual-based reserve envelope with dedicated probabilistic forecasts and then test price-aware preparation timing using a correctly defined market/contracting model.
+- interactive date-range comparison across calendar seasons and forecast-defined wind, solar and ramp-stress regimes;
+- frozen regime thresholds derived from development-OOF forecast quantities only;
+- regime-level firming, Stage 14 interval and market-value diagnostics;
+- explicit warning that these are operational forecast regimes, not formal meteorological weather-regime classifications.
 
 ### Release 4
 
@@ -259,7 +260,7 @@ A valid GB target day has 46, 48 or 50 settlement periods. Duplicate or incomple
 - last-valid-bundle fallback;
 - data/model version display.
 
-The remaining roadmap focuses on probabilistic renewable forecasts, seasonal/regime analysis, automated cross-repository bundle handoff and final product/deployment verification rather than adding another broad commercial module.
+The remaining roadmap focuses on automated cross-repository bundle handoff, optional weather-ensemble comparison, shareable URL state and final product/deployment verification rather than adding another broad commercial module.
 
 ## Learning checkpoints
 

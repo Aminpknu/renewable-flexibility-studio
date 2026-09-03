@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from dash import Dash, Input, Output, State, dcc, html, no_update
@@ -57,8 +58,10 @@ from engine.monte_carlo import (
     build_daily_value_evidence, run_value_monte_carlo,
 )
 from engine.portfolio import build_virtual_forecast, build_virtual_portfolio
+from engine.probabilistic import load_probabilistic_bundle, predict_portfolio_quantiles
 from engine.pre_delivery_strategy import build_reserve_soc_corridor
 from engine.reserve_planning import ReservePlanningConfig, build_reserve_plan
+from engine.regimes import summarise_regime_range
 from engine.quick_reserve import (
     QuickReserveStackingConfig, optimise_arbitrage_and_quick_reserve,
     optimise_firming_arbitrage_and_quick_reserve,
@@ -66,6 +69,7 @@ from engine.quick_reserve import (
 from engine.multiservice import MultiServiceConfig, optimise_firming_arbitrage_and_services
 from engine.sizing import find_minimum_battery
 from engine.stress import run_value_stress_scenarios
+from manual import build_models_data_validation_guide
 from engine.uncertainty import (
     PredictionIntervalConfig,
     build_forecast_only_directional_interval,
@@ -107,6 +111,14 @@ MARKET_PIPELINE_STATUS_PATH = ROOT / "data" / "market_forecast_pipeline_status.j
 MARKET_INVESTMENT_SUMMARY_PATH = ROOT / "outputs" / "market_investment" / "market_investment_summary.json"
 PROJECT_FINANCE_SUMMARY_PATH = ROOT / "outputs" / "project_finance" / "project_finance_summary.json"
 MARKET_INVESTMENT_MC_PATH = ROOT / "outputs" / "market_investment" / "market_investment_monte_carlo_5000.csv"
+PROBABILISTIC_MODEL_PATH = ROOT / "models" / "probabilistic_quantiles.joblib"
+PROBABILISTIC_METADATA_PATH = ROOT / "models" / "probabilistic_quantiles_metadata.json"
+PROBABILISTIC_SUMMARY_PATH = ROOT / "outputs" / "probabilistic" / "stage14_summary.json"
+PROBABILISTIC_COMPARISON_PATH = ROOT / "outputs" / "probabilistic" / "stage14_uncertainty_comparison_summary.json"
+PROBABILISTIC_MIX_SUMMARY_PATH = ROOT / "outputs" / "probabilistic" / "stage14_locked_summary_by_mix.csv"
+REGIME_DAILY_PATH = ROOT / "outputs" / "regimes" / "stage15_daily_regime_evidence.csv"
+REGIME_MANIFEST_PATH = ROOT / "outputs" / "regimes" / "stage15_regime_manifest.json"
+REGIME_MIX_PATH = ROOT / "outputs" / "regimes" / "stage15_mix_design_sensitivity.csv"
 HISTORICAL_DATA = load_historical_predictions(DATA_PATH)
 SYSTEM_PRICES = load_system_price_history(SYSTEM_PRICES_PATH)
 MARKET_INDEX_PRICES = load_market_index_history(MARKET_INDEX_PATH)
@@ -117,6 +129,16 @@ STAGE13_SUMMARY = json.loads(STAGE13_SUMMARY_PATH.read_text(encoding="utf-8"))
 STAGE13_ACCEPTANCE_SUMMARY = json.loads(STAGE13_ACCEPTANCE_SUMMARY_PATH.read_text(encoding="utf-8"))
 STAGE13_PRICE_SUMMARY = json.loads(STAGE13_PRICE_SUMMARY_PATH.read_text(encoding="utf-8"))
 LATEST_FORECAST = load_latest_forecast(LATEST_FORECAST_PATH)
+PROBABILISTIC_MODELS, PROBABILISTIC_METADATA = load_probabilistic_bundle(
+    PROBABILISTIC_MODEL_PATH, PROBABILISTIC_METADATA_PATH
+)
+PROBABILISTIC_SUMMARY = json.loads(PROBABILISTIC_SUMMARY_PATH.read_text(encoding="utf-8"))
+PROBABILISTIC_COMPARISON = json.loads(PROBABILISTIC_COMPARISON_PATH.read_text(encoding="utf-8"))
+PROBABILISTIC_MIX_SUMMARY = pd.read_csv(PROBABILISTIC_MIX_SUMMARY_PATH)
+REGIME_DAILY = pd.read_csv(REGIME_DAILY_PATH)
+REGIME_DAILY["settlement_date"] = pd.to_datetime(REGIME_DAILY["settlement_date"]).dt.normalize()
+REGIME_MANIFEST = json.loads(REGIME_MANIFEST_PATH.read_text(encoding="utf-8"))
+REGIME_MIX = pd.read_csv(REGIME_MIX_PATH)
 LATEST_SPATIAL_FORECAST = load_latest_spatial_forecast(LATEST_SPATIAL_FORECAST_PATH)
 LATEST_SPATIAL_DEMAND = load_latest_spatial_demand(LATEST_SPATIAL_DEMAND_PATH)
 SPATIAL_DEMAND_MANIFEST = json.loads(SPATIAL_DEMAND_MANIFEST_PATH.read_text(encoding="utf-8"))
@@ -1730,10 +1752,17 @@ def _tomorrow_planning_data(
         LATEST_FORECAST, portfolio_type=portfolio_type, capacity_mw=float(capacity_mw),
         wind_share=float(wind_share_pct) / 100,
     )
-    interval, uncertainty = build_forecast_only_directional_interval(
-        history, forecast, LATEST_TARGET_DATE,
-        PredictionIntervalConfig(lookback_days=180, minimum_history_days=30, neighbour_count=600),
+    if portfolio_type == "wind":
+        effective_wind_share = 1.0
+    elif portfolio_type == "solar":
+        effective_wind_share = 0.0
+    else:
+        effective_wind_share = float(wind_share_pct) / 100.0
+    interval, uncertainty = predict_portfolio_quantiles(
+        LATEST_FORECAST, PROBABILISTIC_MODELS, PROBABILISTIC_METADATA,
+        wind_share=effective_wind_share, capacity_mw=float(capacity_mw),
     )
+    interval["portfolio_type"] = portfolio_type
     config = BatteryConfig(
         power_mw=float(battery_power_mw), duration_hours=float(duration_hours),
         round_trip_efficiency=float(efficiency_pct) / 100,
@@ -1765,7 +1794,19 @@ def _tomorrow_planning_data(
 
 def _tomorrow_forecast_figure(frame: pd.DataFrame) -> go.Figure:
     figure = go.Figure()
-    if {"prediction_interval_lower_mw", "prediction_interval_upper_mw"}.issubset(frame.columns):
+    if {"p10_mw", "p90_mw"}.issubset(frame.columns):
+        figure.add_trace(go.Scatter(
+            x=frame["valid_time_utc"], y=frame["p10_mw"],
+            mode="lines", line={"width": 0}, hovertemplate="P10 %{y:.1f} MW<extra></extra>",
+            showlegend=False,
+        ))
+        figure.add_trace(go.Scatter(
+            x=frame["valid_time_utc"], y=frame["p90_mw"],
+            mode="lines", line={"width": 0}, fill="tonexty",
+            fillcolor="rgba(99,110,250,0.16)", name="P10–P90 central range",
+            hovertemplate="P90 %{y:.1f} MW<extra></extra>",
+        ))
+    elif {"prediction_interval_lower_mw", "prediction_interval_upper_mw"}.issubset(frame.columns):
         figure.add_trace(go.Scatter(
             x=frame["valid_time_utc"], y=frame["prediction_interval_lower_mw"],
             mode="lines", line={"width": 0}, hoverinfo="skip", showlegend=False,
@@ -1773,16 +1814,21 @@ def _tomorrow_forecast_figure(frame: pd.DataFrame) -> go.Figure:
         figure.add_trace(go.Scatter(
             x=frame["valid_time_utc"], y=frame["prediction_interval_upper_mw"],
             mode="lines", line={"width": 0}, fill="tonexty",
-            fillcolor="rgba(99,110,250,0.16)", name="Directional empirical 80% range",
+            fillcolor="rgba(99,110,250,0.16)", name="Uncertainty range",
+        ))
+    if "p50_mw" in frame.columns:
+        figure.add_trace(go.Scatter(
+            x=frame["valid_time_utc"], y=frame["p50_mw"],
+            mode="lines", name="P50 statistical median", line={"width": 1.8},
         ))
     figure.add_trace(go.Scatter(
         x=frame["valid_time_utc"], y=frame["forecast_mw"],
-        mode="lines", name="Scheduled renewable export", line={"dash": "dash", "width": 2.6},
+        mode="lines", name="Scheduled renewable export", line={"dash": "dash", "width": 2.8},
     ))
     figure.update_layout(
         xaxis_title="Settlement time (UTC)", yaxis_title="Virtual portfolio power (MW)",
         hovermode="x unified", margin=dict(l=45, r=20, t=65, b=45),
-        legend={"orientation": "h", "y": 1.03, "yanchor": "bottom", "x": 0}, height=390,
+        legend={"orientation": "h", "y": 1.03, "yanchor": "bottom", "x": 0}, height=410,
     )
     return figure
 
@@ -2022,6 +2068,83 @@ def _scenario(
     return simulation, config, metrics, uncertainty
 
 
+def _regime_group_label(group_column: str) -> str:
+    return {
+        "season": "Season",
+        "wind_outlook": "Wind outlook",
+        "solar_outlook": "Solar outlook",
+        "ramp_stress": "Ramp stress",
+    }.get(group_column, group_column)
+
+
+def _regime_summary_view(start_date: str, end_date: str, group_column: str):
+    summary = summarise_regime_range(REGIME_DAILY, group_column, start_date, end_date)
+    order_map = {
+        "season": ["Winter", "Spring", "Summer", "Autumn"],
+        "wind_outlook": ["Low", "Medium", "High"],
+        "solar_outlook": ["Low", "Medium", "High"],
+        "ramp_stress": ["Normal", "High-ramp"],
+    }
+    order = {value: index for index, value in enumerate(order_map[group_column])}
+    summary["_order"] = summary["group"].map(order).fillna(99)
+    summary = summary.sort_values("_order").drop(columns="_order").reset_index(drop=True)
+    selected = REGIME_DAILY.loc[
+        REGIME_DAILY["settlement_date"].between(
+            pd.Timestamp(start_date).normalize(), pd.Timestamp(end_date).normalize()
+        )
+    ]
+    cards = [
+        _kpi_card("Evidence days", f"{selected['settlement_date'].nunique():,}", f"{start_date} to {end_date}"),
+        _kpi_card("Mean forecast error", f"{selected['absolute_forecast_error_mwh'].mean():.1f} MWh/day", "100 MW 50/50 reference"),
+        _kpi_card("Mean firming", f"{selected['firming_absorbed_pct'].mean():.1f}%", "25 MW / 200 MWh reference BESS"),
+        _kpi_card("Days meeting 90%", f"{100*selected['meets_90pct_firming'].mean():.1f}%", "Daily firming target"),
+    ]
+    return summary, cards
+
+
+def _regime_summary_figure(summary: pd.DataFrame, group_column: str) -> go.Figure:
+    labels = summary["group"].astype(str).tolist()
+    figure = make_subplots(rows=3, cols=1, vertical_spacing=0.11, row_heights=[0.34, 0.34, 0.32])
+    figure.add_trace(go.Bar(x=labels, y=summary["mean_abs_error_mwh"], name="Forecast error MWh/day"), row=1, col=1)
+    figure.add_trace(go.Scatter(x=labels, y=summary["days_meeting_90_pct"], mode="lines+markers", name="Days meeting 90% firming (%)", yaxis="y2"), row=1, col=1)
+    figure.add_trace(go.Bar(x=labels, y=summary["mean_forecast_market_value_gbp"], name="Forecast-selected wholesale"), row=2, col=1)
+    figure.add_trace(go.Bar(x=labels, y=summary["mean_reserve_market_value_gbp"], name="Reserve-aware wholesale"), row=2, col=1)
+    stage14 = summary.loc[summary["stage14_days"].gt(0)].copy()
+    if not stage14.empty:
+        figure.add_trace(go.Bar(x=stage14["group"], y=stage14["mean_stage14_coverage_pct"], name="Stage 14 coverage (%)"), row=3, col=1)
+        figure.add_trace(go.Scatter(x=stage14["group"], y=stage14["mean_stage14_width_mw"], mode="lines+markers", name="Stage 14 width (MW)"), row=3, col=1)
+    figure.update_yaxes(title_text="MWh/day", row=1, col=1)
+    figure.update_yaxes(title_text="£/day", row=2, col=1)
+    figure.update_yaxes(title_text="Coverage (%)", row=3, col=1)
+    figure.update_layout(
+        height=780, barmode="group", margin=dict(l=60, r=30, t=55, b=55),
+        legend={"orientation": "h", "y": 1.03, "yanchor": "bottom", "x": 0},
+        title=f"Seasonal / forecast-defined regime comparison · {_regime_group_label(group_column)}",
+    )
+    return figure
+
+
+def _mix_design_sensitivity_figure(frame: pd.DataFrame) -> go.Figure:
+    data = frame.loc[frame["stable_design_found"].astype(bool)].copy()
+    figure = make_subplots(specs=[[{"secondary_y": True}]])
+    custom = np.column_stack([data["power_mw"], data["duration_hours"]])
+    figure.add_trace(go.Bar(
+        x=data["wind_share_pct"], y=data["energy_mwh"], name="Stable design energy",
+        customdata=custom,
+        hovertemplate="Wind %{x:.0f}%<br>Energy %{y:.0f} MWh<br>Power %{customdata[0]:.0f} MW<br>Duration %{customdata[1]:.0f} h<extra></extra>",
+    ), secondary_y=False)
+    figure.add_trace(go.Scatter(
+        x=data["wind_share_pct"], y=data["power_mw"], mode="lines+markers",
+        name="Stable design power", hovertemplate="Wind %{x:.0f}%<br>Power %{y:.0f} MW<extra></extra>",
+    ), secondary_y=True)
+    figure.update_xaxes(title_text="Wind share in 100 MW virtual portfolio (%)")
+    figure.update_yaxes(title_text="Selected energy (MWh)", secondary_y=False)
+    figure.update_yaxes(title_text="Selected power (MW)", secondary_y=True)
+    figure.update_layout(height=390, margin=dict(l=55, r=55, t=55, b=50),
+        legend={"orientation": "h", "y": 1.04, "yanchor": "bottom", "x": 0})
+    return figure
+
+
 app.layout = html.Div(
     [
         dcc.Store(id="scenario-store"),
@@ -2033,6 +2156,11 @@ app.layout = html.Div(
                 html.P(
                     "Explore a virtual wind, solar or mixed portfolio; configure a battery; and see how power, duration and state of charge affect delivery firming.",
                     className="subtitle",
+                ),
+                html.A(
+                    "Models, Data & Validation Guide",
+                    href="#models-data-validation-guide",
+                    className="secondary-button guide-jump-link",
                 ),
                 html.Div(
                     [
@@ -2153,7 +2281,7 @@ app.layout = html.Div(
                                 html.Div(id="kpi-grid", className="kpi-grid"),
                                 html.Div("Forecast uncertainty and battery firming", className="chart-title"),
                                 html.Div(
-                                    "Shaded band = nominal 80% rolling prediction interval calibrated only from earlier out-of-sample forecast errors. It is not yet a weather-ensemble P10/P50/P90 forecast.",
+                                    "Historical selected-day uncertainty uses the leakage-safe rolling residual benchmark. Forecast-day operations below use the Stage 14 conditional P10/P50/P90 layer; neither is a weather-ensemble forecast.",
                                     className="chart-subtitle",
                                 ),
                                 dcc.Graph(id="generation-chart", config={"displaylogo": False}),
@@ -2206,6 +2334,51 @@ app.layout = html.Div(
                         ),
                     ],
                     className="download-section design-section",
+                ),
+                html.Section(
+                    [
+                        html.H2("Seasonal & forecast-defined regime comparison (Stage 15)"),
+                        html.P(
+                            "Compare the frozen 100 MW 50/50 reference across calendar seasons and forecast-defined renewable operating regimes. Regime labels use only V2 forecast quantities; they are not formal meteorological weather-regime classifications.",
+                            className="section-copy",
+                        ),
+                        html.Div([
+                            html.Div([
+                                html.Label("Evidence date range"),
+                                dcc.DatePickerRange(
+                                    id="regime-date-range",
+                                    min_date_allowed=REGIME_MANIFEST["date_start"],
+                                    max_date_allowed=REGIME_MANIFEST["date_end"],
+                                    start_date=REGIME_MANIFEST["date_start"],
+                                    end_date=REGIME_MANIFEST["date_end"],
+                                    display_format="YYYY-MM-DD",
+                                ),
+                            ]),
+                            html.Div([
+                                html.Label("Group evidence by"),
+                                dcc.Dropdown(
+                                    id="regime-group-input",
+                                    options=[
+                                        {"label": "Season", "value": "season"},
+                                        {"label": "Wind outlook", "value": "wind_outlook"},
+                                        {"label": "Solar outlook", "value": "solar_outlook"},
+                                        {"label": "Ramp stress", "value": "ramp_stress"},
+                                    ],
+                                    value="season", clearable=False,
+                                ),
+                            ]),
+                        ], className="design-controls"),
+                        html.Div(id="regime-note", className="scenario-note"),
+                        html.Div(id="regime-kpi-grid", className="kpi-grid"),
+                        dcc.Graph(id="regime-chart", figure=_empty_figure("Regime evidence is loading."), config={"displaylogo": False}),
+                        html.Div("Stable BESS design across wind/solar mix", className="chart-title"),
+                        html.Div(
+                            "The bars show the minimum-energy design that passes the 90% firming / 90%-of-days gates on both development and locked evidence for every 5% wind-share step. This is mix sensitivity for the national virtual portfolio, not local-zone sizing.",
+                            className="chart-subtitle",
+                        ),
+                        dcc.Graph(id="regime-mix-design-chart", figure=_mix_design_sensitivity_figure(REGIME_MIX), config={"displaylogo": False}),
+                    ],
+                    className="download-section",
                 ),
                 html.Section(
                     [
@@ -2659,7 +2832,7 @@ app.layout = html.Div(
                     [
                         html.H2(f"Forecast-day operational planning & GB grid context · {LATEST_TARGET_DATE}"),
                         html.P(
-                            "This section carries forward the battery selected by the Future battery sizing benchmark and combines it with the latest V2 renewable forecast. It does not simulate a future dispatch path. Instead, it calculates a directional uncertainty range, the rolling reserve/headroom needed over the installed battery duration, and the minimum SOC adjustment required before the forecast day.",
+                            "This section carries forward the battery selected by the Future battery sizing benchmark and combines it with the latest V2 renewable forecast. Stage 14 adds a mix-aware conditional P10/P50/P90 uncertainty layer around the V2 schedule; P10/P90 drive the rolling reserve/headroom calculation while the V2 point forecast remains the scheduled export.",
                             className="section-copy",
                         ),
                         html.Div(
@@ -2680,8 +2853,8 @@ app.layout = html.Div(
                         html.Button("Refresh forecast-day planning", id="tomorrow-button", n_clicks=0, className="primary-button"),
                         html.Div(id="tomorrow-note", className="scenario-note"),
                         html.Div(id="tomorrow-kpi-grid", className="kpi-grid"),
-                        html.Div("Forecast-day renewable schedule and directional expected range", className="chart-title"),
-                        html.Div("The dashed line is the V2 scheduled renewable export. The shaded band is an empirical directional q10–q90 residual range calibrated only from earlier out-of-sample errors; it is not yet an ECMWF ensemble P10/P90 forecast.", className="chart-subtitle"),
+                        html.Div("Forecast-day renewable schedule with Stage 14 P10/P50/P90", className="chart-title"),
+                        html.Div("The dashed line remains the deterministic V2 scheduled export. P10/P50/P90 come from a mix-aware conditional residual quantile model with conformal calibration. They are statistical forecast quantiles, not ECMWF ensemble members.", className="chart-subtitle"),
                         dcc.Graph(id="tomorrow-forecast-chart", figure=_empty_figure("Forecast-day planning will load automatically."), config={"displaylogo": False}),
                         html.Div("Rolling battery reserve and headroom requirements", className="chart-title"),
                         html.Div("Each point asks how much downward discharge reserve or upward charging headroom may be needed over the following window equal to the installed battery duration. Dashed reference lines show what is available at the recommended starting SOC.", className="chart-subtitle"),
@@ -2757,6 +2930,9 @@ app.layout = html.Div(
                     ],
                     className="download-section",
                 ),
+                build_models_data_validation_guide(
+                    PROBABILISTIC_SUMMARY, PROBABILISTIC_COMPARISON, STAGE13_SUMMARY
+                ),
                 html.Section(
                     [
                         html.H2("Interpretation and limits"),
@@ -2765,7 +2941,7 @@ app.layout = html.Div(
                             className="section-copy",
                         ),
                         html.P(
-                            "The full 450-day out-of-sample archive supports historical analysis, while Tomorrow planning consumes the latest V2 forecast bundle and official grid-demand context. A later upgrade will replace the residual-based future range with dedicated P10/P50/P90 or weather-ensemble probabilistic forecasts.",
+                            "The full 450-day out-of-sample archive supports historical analysis. Forecast-day planning now uses the Stage 14 conditional P10/P50/P90 post-processor around the latest V2 schedule, while official NESO demand provides GB system context. A future weather-ensemble layer could be compared with, not silently substituted for, this statistical uncertainty evidence.",
                             className="section-copy",
                         ),
                     ],
@@ -2777,6 +2953,35 @@ app.layout = html.Div(
     ],
     className="app-shell",
 )
+
+
+@app.callback(
+    Output("regime-note", "children"),
+    Output("regime-kpi-grid", "children"),
+    Output("regime-chart", "figure"),
+    Input("regime-date-range", "start_date"),
+    Input("regime-date-range", "end_date"),
+    Input("regime-group-input", "value"),
+)
+def update_regime_comparison(start_date, end_date, group_column):
+    try:
+        summary, cards = _regime_summary_view(start_date, end_date, group_column)
+        figure = _regime_summary_figure(summary, group_column)
+    except (ValueError, KeyError, TypeError) as error:
+        message = f"Regime comparison could not be calculated: {error}"
+        return message, [], _empty_figure(message)
+    stage14_days = int(summary["stage14_days"].sum())
+    note = html.Div([
+        html.Div(
+            f"Grouping: {_regime_group_label(group_column)}. Regime thresholds are frozen from {REGIME_MANIFEST['thresholds']['calibration_days']} development-OOF days and use forecast quantities only.",
+            className="scenario-note-line",
+        ),
+        html.Div(
+            f"Stage 14 P10/P90 diagnostics are available for {stage14_days} locked days inside the selected range; market-value fields are available only where the 420-day pre-delivery market backtest exists.",
+            className="scenario-note-line uncertainty-line",
+        ),
+    ])
+    return note, cards, figure
 
 
 @app.callback(
@@ -4075,7 +4280,7 @@ def run_tomorrow_planning(
             f"Selected by the {design_target_pct:.0f}% firming / {design_reliability_pct:.0f}% days design gate",
         ),
         _kpi_card("Current SOC", f"{float(current_soc_pct):.0f}%", "Operator-entered SOC before the forecast day"),
-        _kpi_card("Forecast energy", f"{planning['forecast_energy_mwh']:.1f} MWh", "V2 scheduled renewable export"),
+        _kpi_card("Forecast energy", f"{planning['forecast_energy_mwh']:.1f} MWh", "Scheduled renewable export"),
         _kpi_card("Peak forecast", f"{planning['peak_forecast_mw']:.1f} MW", "Highest scheduled renewable export"),
     ]
 
@@ -4106,7 +4311,7 @@ def run_tomorrow_planning(
     forecast_figure = _tomorrow_forecast_figure(forecast)
     reserve_figure = (
         _reserve_plan_figure(forecast, reserve)
-        if reserve else _empty_figure("Directional reserve evidence is unavailable.")
+        if reserve else _empty_figure("Stage 14 probabilistic reserve evidence is unavailable.")
     )
     issue = pd.Timestamp(LATEST_FORECAST["forecast_created_utc"].iloc[0]).strftime(
         "%Y-%m-%d %H:%M UTC"
@@ -4151,16 +4356,22 @@ def run_tomorrow_planning(
         className="scenario-note-line",
     ))
     if uncertainty.get("available"):
+        effective_share = 1.0 if portfolio_type == "wind" else 0.0 if portfolio_type == "solar" else float(wind_share_pct) / 100.0
+        matching = PROBABILISTIC_MIX_SUMMARY.loc[
+            (PROBABILISTIC_MIX_SUMMARY["wind_share"] - effective_share).abs().lt(1e-9)
+        ]
+        locked_ref = matching.iloc[0].to_dict()
         note_parts.append(html.Div(
-            f"Directional uncertainty range: empirical q{uncertainty['lower_quantile_pct']:.0f}–q{uncertainty['upper_quantile_pct']:.0f} residual bounds "
-            f"calibrated from {uncertainty['history_days']} earlier out-of-sample days "
-            f"({uncertainty['calibration_start']} to {uncertainty['calibration_end']}); mean width "
-            f"{uncertainty['mean_interval_width_mw']:.2f} MW. This is not yet a weather-ensemble probabilistic forecast.",
+            f"Stage 14 uncertainty: conditional P10/P50/P90 with an 80% central target. The current mix uses a "
+            f"{uncertainty['conformal_correction_cf']:.4f} CF conformal correction and has mean P10–P90 width "
+            f"{uncertainty['mean_p10_p90_width_mw']:.2f} MW. The locked reference coverage is "
+            f"{locked_ref['observed_p10_p90_coverage_pct']:.1f}% for the displayed reference technology/mix. "
+            "This is a statistical post-processor of V2, not an ECMWF ensemble forecast.",
             className="scenario-note-line uncertainty-line",
         ))
     else:
         note_parts.append(html.Div(
-            "Directional uncertainty is unavailable because the verified historical archive does not contain enough prior calibration days.",
+            "Stage 14 probabilistic uncertainty is unavailable for the selected mix or forecast bundle.",
             className="scenario-note-line uncertainty-warning",
         ))
 
@@ -4181,7 +4392,7 @@ def run_tomorrow_planning(
             first_sp = int(grid["settlement_period"].min())
             last_sp = int(grid["settlement_period"].max())
             note_parts.append(html.Div(
-                f"Grid context is a live remaining-day NESO forecast: {period_count} periods (SP{first_sp}?SP{last_sp}) are currently published for {LATEST_TARGET_DATE}. Earlier settlement periods have already elapsed and are not returned by this endpoint.",
+                f"Grid context is a live remaining-day NESO forecast: {period_count} periods (SP{first_sp}–SP{last_sp}) are currently published for {LATEST_TARGET_DATE}. Earlier settlement periods have already elapsed and are not returned by this endpoint.",
                 className="scenario-note-line uncertainty-warning",
             ))
         note_parts.append(html.Div(
