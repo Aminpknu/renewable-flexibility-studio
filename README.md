@@ -309,3 +309,14 @@ The remaining roadmap focuses on automated cross-repository bundle handoff, opti
 ## Learning checkpoints
 
 The project includes `docs/LEARNING_CHECKPOINT_1.md`. It asks the project owner to verify four settlement periods manually, identify power versus energy constraints and explain the result in interview-ready language.
+
+## Competitive product releases A-D (September 2026)
+
+The Studio now includes four product-focused releases after Stages 18-21:
+
+- **Release A — Product workspace:** sticky Overview / Assets / Forecast & Risk / Markets / Investment / Evidence navigation, compact decision overview, browser-local Scenario A/B comparison, and URL-serialised shareable primary scenario state.
+- **Release B — Site & connection realism:** POC import/export limits, ramp limit, auxiliary-load screen, grid-charging permission, daily cycle warranty, annual throughput cap and co-location scenario inputs. These remain engineering scenario constraints, not a DNO/TO connection study.
+- **Release C — Battery BM evidence:** official Elexon BM Unit reference data + BOD + BOALF are used to build a bounded, identifiable battery/storage-BMU opportunity dataset. The current recent sample contains 6,048 BOD-active settlement periods from 18 battery BMUs; observed directional activation incidence seeds Stage 20 defaults. The included logistic model is an in-sample diagnostic, not a causal or bankable acceptance model.
+- **Release D — Portfolio & benchmarking:** saved assets are aggregated across MW, MWh, SOH-adjusted energy and connection-limited power. A Stage-13 reference-scaled value is shown only as a common comparison normalisation, not a site-specific revenue forecast.
+
+The new BM evidence builders are `scripts/refresh_bm_acceptances.py` and `scripts/build_bm_battery_evidence.py`. Frozen evidence lives in `data/bm_acceptance_*` and `data/bm_battery_*` with explicit claim boundaries.

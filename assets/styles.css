@@ -249,3 +249,25 @@ footer { text-align: center; padding: 24px 20px 40px; color: var(--muted); font-
 @media (max-width: 560px) {
   .analyst-actions > * { width: 100%; justify-content: center; }
 }
+
+/* Release A: product workspace navigation */
+.product-nav { position: sticky; top: 0; z-index: 50; display: flex; gap: 4px; padding: 8px max(14px, calc((100vw - 1440px) / 2)); background: rgba(247,249,250,.97); border-bottom: 1px solid var(--line); backdrop-filter: blur(8px); overflow-x: auto; }
+.product-nav a { flex: 0 0 auto; padding: 8px 11px; border-radius: 4px; color: var(--ink); font-size: .79rem; font-weight: 760; text-decoration: none; }
+.product-nav a:hover { background: var(--accent-soft); color: var(--accent-dark); }
+.product-anchor, #overview { scroll-margin-top: 58px; }
+.overview-section { border-top: 3px solid var(--accent); }
+.overview-grid .kpi-card { min-height: 96px; }
+@media (max-width: 620px) { .product-nav { padding-left: 10px; padding-right: 10px; } .overview-grid { grid-template-columns: 1fr 1fr; } }
+
+/* Competitive releases A-D */
+.scenario-share-actions, .asset-actions, .analyst-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+.scenario-share-actions a { text-decoration:none; display:inline-flex; align-items:center; }
+.compare-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:12px; }
+.compare-card { border:1px solid var(--line); background:var(--surface-2); border-radius:5px; padding:12px; font-size:.82rem; line-height:1.5; }
+.compare-delta { border-left:3px solid var(--accent); }
+.site-grid { display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)); gap:12px; }
+.site-realism-section, .portfolio-benchmark-section, .bm-evidence-section { border-top:3px solid var(--accent); }
+.site-envelope-summary, .portfolio-benchmark-summary { margin-top:14px; }
+.portfolio-benchmark-table { margin-top:12px; }
+@media (max-width:900px){ .site-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.compare-grid{grid-template-columns:1fr 1fr;} }
+@media (max-width:620px){ .site-grid,.compare-grid{grid-template-columns:1fr;} .scenario-share-actions>*{width:100%;justify-content:center;} }

@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "stage": "release_c_battery_bm_evidence",
+  "from": "2026-08-28T07:00:00+00:00",
+  "to": "2026-09-04T06:00:00+00:00",
+  "battery_bmus_considered": 24,
+  "battery_bmus_with_bod": 18,
+  "opportunity_periods": 6048,
+  "accepted_periods": 2469,
+  "accepted_up_periods": 1896,
+  "accepted_down_periods": 1887,
+  "observed_any_acceptance_pct": 40.823412698412696,
+  "observed_up_pct": 31.349206349206348,
+  "observed_down_pct": 31.200396825396826,
+  "source": "Elexon Insights reference BM Units + BOD + BOALF",
+  "identity_rule": "BM Unit name contains battery/storage/BESS; retained explicitly in frozen dataset",
+  "claim_boundary": "Observed submitted-BOD settlement periods for a bounded sample of named battery/storage BMUs. This is not a complete GB BESS fleet census and not a causal bid acceptance model.",
+  "model": {
+    "type": "in_sample_logistic_diagnostic",
+    "brier_score": 0.2403956162583884,
+    "features": [
+      "settlementPeriod",
+      "pair_count",
+      "bid_mean",
+      "offer_mean",
+      "spread"
+    ],
+    "intercept": -1.1584707777037813,
+    "coefficients": {
+      "settlementPeriod": 0.005035919901971763,
+      "pair_count": 0.32626341577190765,
+      "bid_mean": 0.00017084935154044147,
+      "offer_mean": 0.00010917660740994584,
+      "spread": -6.167275126309605e-05
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "events": 100,
+  "storage_events": 0,
+  "storage_bmus": 0,
+  "storage_up_events": 0,
+  "storage_down_events": 0,
+  "storage_up_share": 0.0,
+  "storage_down_share": 0.0,
+  "mean_storage_delta_mw": 0.0,
+  "first_date": "2026-09-04",
+  "last_date": "2026-09-04",
+  "calibration_ready": false,
+  "boundary": "BOALF contains accepted instructions only. Without the corresponding complete submitted bid/offer opportunity set, this archive supports activation-direction/intensity evidence but not an unconditional acceptance probability.",
+  "source": "Elexon Insights BOALF latest market-wide endpoint",
+  "refresh_rows": 100
+}
