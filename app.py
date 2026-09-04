@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from dash import Dash, Input, Output, State, dcc, html, no_update
+from dash import Dash, Input, Output, State, ctx, dcc, html, no_update
 from plotly.subplots import make_subplots
 
 from adapters.design_grid import load_design_grid, scaled_design_grid
@@ -25,6 +25,10 @@ from adapters.spatial_forecast import build_spatial_virtual_forecast, load_lates
 from adapters.spatial_demand import load_latest_spatial_demand, select_zone_demand
 from adapters.market_forecast_bundle import assess_market_forecast_bundle, validate_market_forecast_bundle
 from engine.battery import BatteryConfig, simulate_reactive_firming
+from engine.asset_workspace import AssetConfig, delete_asset, get_asset, normalise_asset_store, upsert_asset
+from engine.degradation import DegradationConfig, annual_degradation_screen
+from engine.stochastic_bidding import StochasticBiddingConfig, build_stochastic_market_scenarios, optimise_stochastic_wholesale_bm
+from engine.analyst import EvidenceRecord, answer_evidence_question
 from engine.design_sizing import select_stable_design
 from engine.frontier import build_risk_value_frontier
 from engine.forecast_handoff import assess_forecast_freshness, select_forecast_bundle, validate_national_forecast
@@ -2158,6 +2162,9 @@ def _mix_design_sensitivity_figure(frame: pd.DataFrame) -> go.Figure:
 app.layout = html.Div(
     [
         dcc.Store(id="scenario-store"),
+        dcc.Store(id="asset-store", storage_type="local"),
+        dcc.Store(id="degradation-store"),
+        dcc.Store(id="stochastic-store"),
         dcc.Download(id="scenario-download"),
         html.Header(
             [
@@ -2194,6 +2201,72 @@ app.layout = html.Div(
         ),
         html.Main(
             [
+                html.Section([
+                    html.Div([
+                        html.Div("STAGE 18 · ASSET WORKSPACE", className="eyebrow dark-eyebrow"),
+                        html.H2("My asset / site scenario"),
+                        html.P("Save technical site assumptions in this browser and reuse them across the Studio. National evidence remains a modelling proxy until site-specific forecasts, metering and connection constraints are supplied.", className="section-copy"),
+                    ], className="asset-heading"),
+                    html.Div([
+                        html.Div([html.Label("Saved asset"), dcc.Dropdown(id="asset-select", clearable=True, placeholder="Create a new asset")]),
+                        html.Div([html.Label("Asset name"), dcc.Input(id="asset-name", type="text", value="Reference BESS")]),
+                        html.Div([html.Label("Location / site label"), dcc.Input(id="asset-location", type="text", value="GB virtual site")]),
+                        html.Div([html.Label("Battery power (MW)"), dcc.Input(id="asset-power", type="number", min=1, value=25)]),
+                        html.Div([html.Label("Duration (h)"), dcc.Input(id="asset-duration", type="number", min=.5, step=.5, value=8)]),
+                        html.Div([html.Label("Grid import limit (MW)"), dcc.Input(id="asset-import", type="number", min=1, value=25)]),
+                        html.Div([html.Label("Grid export limit (MW)"), dcc.Input(id="asset-export", type="number", min=1, value=25)]),
+                        html.Div([html.Label("State of health (%)"), dcc.Input(id="asset-soh", type="number", min=1, max=100, value=100)]),
+                    ], className="asset-grid"),
+                    html.Div([
+                        html.Button("Save / update asset", id="asset-save", n_clicks=0, className="primary-button"),
+                        html.Button("Delete selected", id="asset-delete", n_clicks=0, className="secondary-button"),
+                    ], className="asset-actions"),
+                    html.Div(id="asset-summary", className="asset-summary"),
+                ], className="download-section asset-workspace"),
+                html.Section([
+                    html.Div("STAGE 19 · DEGRADATION & SOH", className="eyebrow dark-eyebrow"),
+                    html.H2("Battery health and marginal cycling cost"),
+                    html.P("Convert state of health, cycle-life and replacement-cost assumptions into usable energy, equivalent cycles and a marginal wear cost that can be carried into dispatch decisions.", className="section-copy"),
+                    html.Div([
+                        html.Div([html.Label("Cycle life at reference DoD"), dcc.Input(id="deg-cycle-life", type="number", min=100, value=6000)]),
+                        html.Div([html.Label("Reference depth of discharge (%)"), dcc.Input(id="deg-dod", type="number", min=1, max=100, value=80)]),
+                        html.Div([html.Label("Calendar fade (%/year)"), dcc.Input(id="deg-calendar", type="number", min=0, step=.1, value=1.5)]),
+                        html.Div([html.Label("Replacement cost (£/kWh)"), dcc.Input(id="deg-replacement", type="number", min=0, step=5, value=100)]),
+                        html.Div([html.Label("Expected total throughput (MWh/day)"), dcc.Input(id="deg-daily-throughput", type="number", min=0, step=1, value=100)]),
+                    ], className="health-grid"),
+                    html.Div(id="degradation-summary", className="health-summary"),
+                    html.P("Screening model only: no cell-temperature, C-rate, chemistry-specific rainflow or warranty curve is inferred unless supplied explicitly.", className="control-help"),
+                ], className="download-section degradation-section"),
+                html.Section([
+                    html.Div("STAGE 20 · STOCHASTIC MARKET BIDDING", className="eyebrow dark-eyebrow"),
+                    html.H2("Pre-delivery wholesale + BM decision screen"),
+                    html.P("Choose one wholesale schedule and Balancing Mechanism reserve offer before the realised scenario is known. Finite scenarios vary wholesale price and BM activation; every scenario shares the same physical battery limits.", className="section-copy"),
+                    html.Div([
+                        html.Div([html.Label("Wholesale uncertainty σ (£/MWh)"), dcc.Input(id="stoch-sigma", type="number", min=0, step=5, value=20)]),
+                        html.Div([html.Label("BM upward activation probability (%)"), dcc.Input(id="stoch-up-prob", type="number", min=0, max=100, value=15)]),
+                        html.Div([html.Label("BM downward activation probability (%)"), dcc.Input(id="stoch-down-prob", type="number", min=0, max=100, value=15)]),
+                        html.Div([html.Label("BM upward activation value (£/MWh)"), dcc.Input(id="stoch-up-value", type="number", value=140)]),
+                        html.Div([html.Label("BM downward activation value (£/MWh)"), dcc.Input(id="stoch-down-value", type="number", value=80)]),
+                        html.Div([html.Label("Risk aversion"), dcc.Input(id="stoch-risk", type="number", min=0, max=2, step=.1, value=.2)]),
+                        html.Div([html.Label("Other throughput cost (£/MWh)"), dcc.Input(id="stoch-throughput", type="number", min=0, step=1, value=2)]),
+                    ], className="stoch-grid"),
+                    html.Button("Run stochastic bid screen", id="stoch-run", n_clicks=0, className="primary-button stoch-run"),
+                    html.Div(id="stoch-summary", className="stoch-summary"),
+                    dcc.Graph(id="stoch-chart", config={"displayModeBar": False}),
+                    html.P("BM boundary: activation probabilities and activation values are explicit user scenarios in this generic release. They are not a forecast of actual BOA acceptance, utilisation settlement or National Grid ESO dispatch instructions.", className="control-help"),
+                ], className="download-section stochastic-section"),
+                html.Section([
+                    html.Div("STAGE 21 · EXPLAINABLE EVIDENCE ANALYST", className="eyebrow dark-eyebrow"),
+                    html.H2("Ask the Studio"),
+                    html.P("Ask a natural-language question about forecast uncertainty, a saved asset, degradation, stochastic market bidding, ancillary services, investment, project finance, spatial modelling, assumptions or sources. Answers are retrieved only from the Studio evidence registry and always expose provenance and limitations.", className="section-copy"),
+                    dcc.Input(id="analyst-question", type="text", debounce=True, placeholder="e.g. Why is the default NPV negative, and what is the source?", className="analyst-input"),
+                    html.Div([
+                        html.Button("Ask evidence analyst", id="analyst-ask", n_clicks=0, className="primary-button"),
+                        html.A("Open full methods guide", href="#models-data-validation-guide", className="secondary-button analyst-guide-link"),
+                    ], className="analyst-actions"),
+                    html.Div(id="analyst-answer", className="analyst-answer"),
+                    html.P("Grounding boundary: this release is deterministic retrieval + evidence composition, not an external generative LLM. If evidence is absent, it says so instead of filling the gap from general knowledge.", className="control-help"),
+                ], className="download-section analyst-section"),
                 html.Section(
                     [
                         html.Div(
@@ -2973,6 +3046,258 @@ app.layout = html.Div(
     className="app-shell",
 )
 
+
+def _build_analyst_records(selected, asset_data, degradation, stochastic):
+    records = []
+    p14 = PROBABILISTIC_SUMMARY["locked_reference"]["mixed_50_50"]
+    records.append(EvidenceRecord(
+        key="stage14_forecast", title="Stage 14 probabilistic renewable forecast",
+        summary=f"The mixed 50/50 P10-P90 model is a prior-data residual post-processor around the frozen V2 schedule. Locked coverage is {p14['observed_p10_p90_coverage_pct']:.1f}% with mean width {p14['mean_p10_p90_width_cf']:.4f} CF.",
+        facts={"locked days": int(p14["days"]), "P10-P90 coverage": f"{p14['observed_p10_p90_coverage_pct']:.1f}%", "P50 MAE": f"{p14['p50_mae_cf']:.4f} CF"},
+        sources=("models/probabilistic_quantiles.joblib", "outputs/probabilistic/stage14_summary.json", "data/historical_backtest.csv"),
+        limitations=("Statistical residual quantiles, not ECMWF ensemble-member probabilities.",),
+        keywords=("forecast uncertainty p10 p50 p90 quantile residual reserve soc",),
+        formulas=("P_q(t) = clip(V2 forecast + conditional residual quantile +/- conformal correction, 0, 1)",),
+    ))
+    asset = get_asset(asset_data, selected)
+    if asset:
+        records.append(EvidenceRecord(
+            key="stage18_asset", title=f"Stage 18 saved asset: {asset.asset_name}",
+            summary=f"Saved technical scenario: {asset.power_mw:.1f} MW / {asset.nameplate_energy_mwh:.1f} MWh at {100*asset.state_of_health_fraction:.0f}% SOH, with {asset.grid_import_limit_mw:.1f} MW import and {asset.grid_export_limit_mw:.1f} MW export limits.",
+            facts={"location": asset.location_label or "not specified", "available energy": f"{asset.available_energy_mwh:.1f} MWh", "effective charge/discharge": f"{asset.effective_charge_power_mw:.1f}/{asset.effective_discharge_power_mw:.1f} MW"},
+            sources=("browser-local Stage 18 asset-store",),
+            limitations=("Technical scenario metadata only; no site metering, connection study or local error history is inferred.",),
+            keywords=("asset site bess battery grid import export location saved configuration",),
+        ))
+
+    if degradation:
+        records.append(EvidenceRecord(
+            key="stage19_degradation", title="Stage 19 degradation and SOH screen",
+            summary=f"Current assumptions imply marginal wear cost £{degradation.get('marginal_wear_cost_gbp_per_mwh_throughput',0):.2f}/MWh throughput and indicative end-year SOH {100*degradation.get('end_state_of_health_fraction',0):.1f}%.",
+            facts={"annual EFC": f"{degradation.get('equivalent_full_cycles',0):.0f}", "usable energy": f"{degradation.get('usable_energy_mwh',0):.1f} MWh", "annual wear allocation": f"£{degradation.get('estimated_wear_cost_gbp',0):,.0f}"},
+            sources=("engine/degradation.py", "Stage 19 user assumptions"),
+            limitations=("Throughput + calendar screen; not chemistry-, temperature- or warranty-specific.",),
+            keywords=("degradation wear soh health cycle cycling lifetime replacement cost",),
+            formulas=("EFC = total throughput / (2 x usable energy)", "marginal wear cost = replacement cost / assumed lifetime total throughput"),
+        ))
+    if stochastic:
+        records.append(EvidenceRecord(
+            key="stage20_stochastic_bm", title="Stage 20 stochastic wholesale + BM screen",
+            summary=f"Latest seven-scenario screen: expected net value £{stochastic.get('expected_net_value_gbp',0):,.0f}; P10/P50/P90 £{stochastic.get('p10_net_value_gbp',0):,.0f}/£{stochastic.get('p50_net_value_gbp',0):,.0f}/£{stochastic.get('p90_net_value_gbp',0):,.0f}; 90% CVaR loss £{stochastic.get('cvar_loss_gbp',0):,.0f}.",
+            facts={"average BM up offer": f"{stochastic.get('average_bm_up_offer_mw',0):.1f} MW", "average BM down offer": f"{stochastic.get('average_bm_down_offer_mw',0):.1f} MW", "throughput cost": f"£{stochastic.get('throughput_cost_gbp_per_mwh',0):.2f}/MWh"},
+            sources=("data/latest_market_price_forecast.csv", "engine/stochastic_bidding.py", "Stage 20 user BM scenarios"),
+            limitations=("BM activation probability/value are user scenarios, not BOA acceptance or utilisation forecasts.",),
+            keywords=("stochastic market wholesale bm balancing mechanism bid offer cvar risk dispatch",),
+            formulas=("max expected net value - risk_aversion x CVaR(loss), subject to scenario-wise SOC and shared MW constraints",),
+        ))
+
+    mi = MARKET_INVESTMENT_SUMMARY["scenarios"]["forecast_wholesale_420d"]
+    mia = MARKET_INVESTMENT_SUMMARY["assumptions"]
+    records.append(EvidenceRecord(
+        key="stage10_investment", title="Stage 10 market-backed investment case",
+        summary=f"The 420-day forecast-selected wholesale case provides about £{mi['annual_operating_value_gbp']/1e6:.2f}m/year but has NPV £{mi['npv_gbp']/1e6:.1f}m and BCR {mi['benefit_cost_ratio']:.2f} under the default cost assumptions. The gap is driven primarily by lifecycle cost relative to operating value.",
+        facts={"CAPEX": f"£{mia['total_capex_gbp']/1e6:.1f}m", "fixed OPEX": f"£{mia['fixed_opex_gbp_per_year']/1e6:.2f}m/y", "break-even operating value": f"£{mi['minimum_annual_market_value_for_zero_npv_gbp']/1e6:.2f}m/y", "max CAPEX at NPV=0": f"£{mi['maximum_capex_for_zero_npv_gbp']/1e6:.2f}m"},
+        sources=("outputs/market_investment/market_investment_summary.json", "outputs/market_optimisation/pre_delivery_strategy_daily.csv"),
+        limitations=("Pre-feasibility valuation; not a bankable revenue forecast or supplier cost quote.",),
+        keywords=("investment npv bcr capex opex break even economics market value negative npv",),
+        formulas=("NPV = -CAPEX + discounted operating value - discounted OPEX/replacement",),
+    ))
+    pf = PROJECT_FINANCE_REFERENCE["scenarios"]["forecast_wholesale_base"]
+    pfa = PROJECT_FINANCE_REFERENCE["default_assumptions"]
+    records.append(EvidenceRecord(
+        key="stage12_finance", title="Stage 12 project-finance screen",
+        summary=f"The conservative wholesale finance base has project NPV £{pf['project_npv_gbp']/1e6:.1f}m, equity IRR {100*pf['equity_irr_fraction']:.1f}%, minimum DSCR {pf['minimum_dscr']:.2f}x and LLCR {pf['llcr']:.2f}x.",
+        facts={"debt": f"{100*pfa['debt_fraction']:.0f}%", "interest": f"{100*pfa['debt_interest_rate']:.1f}%", "tenor": f"{pfa['debt_tenor_years']} y", "annual debt service": f"£{pf['annual_debt_service_gbp']/1e6:.2f}m"},
+        sources=("outputs/project_finance/project_finance_summary.json",),
+        limitations=("Simplified tax/debt screen; no refinancing, hedging, sculpting or lender credit decision.",),
+        keywords=("finance debt equity irr dscr llcr lender tax project finance",),
+        formulas=("DSCR = CFADS / debt service", "LLCR = PV of loan-life CFADS at debt rate / initial debt"),
+    ))
+
+    s13 = STAGE13_SUMMARY["scenarios"]["non_bm"]
+    records.append(EvidenceRecord(
+        key="stage13_ancillary", title="Stage 13 issue-time ancillary-service strategy",
+        summary=f"The non-BM May-Jun screen annualises to about £{s13['annualised_acceptance_calibrated_total_gbp']/1e6:.2f}m/year, including £{s13['annualised_acceptance_calibrated_ancillary_gbp']/1e6:.2f}m/year acceptance-calibrated ancillary value, capturing {s13['capture_vs_stage11_perfect_information_pct']:.1f}% of the matching perfect-information upper bound.",
+        facts={"eligible days": int(s13["days"]), "mean predicted acceptance": f"{s13['mean_predicted_acceptance_pct']:.1f}%", "expected accepted MW-hours": f"{s13['expected_accepted_mw_hours']:,.0f}"},
+        sources=("outputs/multiservice/stage13_issue_time_multiservice_summary.json", "outputs/multiservice/stage13_acceptance_summary.json", "NESO Enduring Auction Capability Sell Orders / clearing results"),
+        limitations=("Counterfactual expected acceptance; utilisation/performance settlement is excluded.",),
+        keywords=("ancillary quick reserve qr slow reserve dynamic response acceptance neso service bid clearing",),
+        formulas=("expected accepted MW = min(offered MW, cleared volume) x predicted acceptance x price-eligibility indicator",),
+    ))
+    records.append(EvidenceRecord(
+        key="spatial", title="Ten-zone spatial supply, demand and net-load proxy",
+        summary=f"The spatial layer allocates the authoritative national forecast across {SPATIAL_DEMAND_MANIFEST['zones']} zones using DESNZ renewable-capacity proxies, issue-time weather and DESNZ/Elexon demand-shape evidence, then reconciles zone net load back to NESO National Demand.",
+        facts={"zones": SPATIAL_DEMAND_MANIFEST["zones"], "method": SPATIAL_DEMAND_MANIFEST["method"]},
+        sources=("data/latest_spatial_forecast.csv", "data/latest_spatial_demand_forecast.csv", "DESNZ REPD", "DESNZ subnational electricity consumption", "Elexon CDCA-I029", "NESO National Demand Forecast"),
+        limitations=("Planning allocation zones, not municipal metering, feeder power flow or site-specific BESS sizing.",),
+        keywords=("spatial zone city demand net load local weather repd gsp location",),
+    ))
+    records.append(EvidenceRecord(
+        key="sources_assumptions", title="Studio sources, assumptions and evidence boundaries",
+        summary="The Studio separates authoritative GB system/settlement evidence from user assumptions and modelling proxies. The Models, Data & Validation Guide lists equations, data sources, assumptions, validation and claim boundaries.",
+        facts={"historical evidence": "V2 OOF + locked test", "wholesale reference": "Elexon APX Market Index", "ancillary source": "NESO EAC", "spatial sources": "DESNZ + Elexon + NESO"},
+        sources=("manual.py", "README.md", "data and outputs manifests/checksums"),
+        limitations=("A displayed number is not automatically an observed market value; inspect its class and source.",),
+        keywords=("source reference provenance assumption evidence methodology validation manual data",),
+    ))
+    return records
+
+
+@app.callback(
+    Output("analyst-answer", "children"),
+    Input("analyst-ask", "n_clicks"),
+    State("analyst-question", "value"), State("asset-select", "value"),
+    State("asset-store", "data"), State("degradation-store", "data"),
+    State("stochastic-store", "data"), prevent_initial_call=True,
+)
+def ask_evidence_analyst(_clicks, question, selected, asset_data, degradation, stochastic):
+    if not question or not str(question).strip():
+        return html.Div("Enter a question first.", className="uncertainty-warning")
+    answer = answer_evidence_question(
+        str(question), _build_analyst_records(selected, asset_data, degradation, stochastic)
+    )
+    evidence_items = [
+        html.Li([html.Strong(item["title"]), html.Span(" · "), html.Code(item["key"])])
+        for item in answer["evidence"]
+    ]
+    source_items = [html.Li(html.Code(source)) for source in answer["sources"]]
+    limit_items = [html.Li(limit) for limit in answer["limitations"]]
+    formula_items = [html.Li(html.Code(formula)) for formula in answer["formulas"]]
+    children = [
+        html.Div([html.Span(f"Grounding confidence: {answer['confidence'].upper()}", className=f"analyst-confidence analyst-{answer['confidence']}")]),
+        html.P(answer["answer"], className="analyst-main-answer"),
+    ]
+    if evidence_items:
+        children.extend([html.H4("Evidence used"), html.Ul(evidence_items)])
+    if formula_items:
+        children.extend([html.H4("Formulation"), html.Ul(formula_items)])
+    if source_items:
+        children.extend([html.H4("Provenance"), html.Ul(source_items)])
+    if limit_items:
+        children.extend([html.H4("Limits"), html.Ul(limit_items)])
+    return html.Div(children)
+
+@app.callback(
+    Output("stoch-summary", "children"), Output("stoch-chart", "figure"), Output("stochastic-store", "data"),
+    Input("stoch-run", "n_clicks"),
+    State("asset-select", "value"), State("asset-store", "data"), State("degradation-store", "data"),
+    State("stoch-sigma", "value"), State("stoch-up-prob", "value"), State("stoch-down-prob", "value"),
+    State("stoch-up-value", "value"), State("stoch-down-value", "value"), State("stoch-risk", "value"), State("stoch-throughput", "value"),
+    prevent_initial_call=True,
+)
+def run_stochastic_bid_screen(_clicks, selected, asset_data, degradation, sigma, up_prob, down_prob, up_value, down_value, risk, other_throughput):
+    try:
+        asset = get_asset(asset_data, selected)
+        battery = asset.to_battery_config() if asset else BatteryConfig(power_mw=25, duration_hours=8, initial_soc_fraction=.5)
+        wear = float((degradation or {}).get("marginal_wear_cost_gbp_per_mwh_throughput", 0.0))
+        scenarios = build_stochastic_market_scenarios(
+            LATEST_MARKET_FORECAST, scenario_count=7,
+            wholesale_sigma_gbp_per_mwh=float(sigma),
+            bm_up_probability=float(up_prob)/100.0, bm_down_probability=float(down_prob)/100.0,
+            bm_up_value_gbp_per_mwh=float(up_value), bm_down_value_gbp_per_mwh=float(down_value), seed=42,
+        )
+        schedule, summary = optimise_stochastic_wholesale_bm(
+            scenarios, battery,
+            StochasticBiddingConfig(
+                throughput_cost_gbp_per_mwh=float(other_throughput) + wear,
+                terminal_restoration_price_gbp_per_mwh=float(LATEST_MARKET_FORECAST["forecast_market_index_price_gbp_per_mwh"].median()),
+                cvar_alpha=.90, risk_aversion=float(risk),
+            ),
+        )
+    except (ValueError, RuntimeError) as exc:
+        fig = go.Figure().update_layout(height=260, annotations=[dict(text=str(exc), showarrow=False)])
+        return html.Div(str(exc), className="uncertainty-warning"), fig, no_update
+    cards = [
+        ("Expected net value", f"£{summary['expected_net_value_gbp']:,.0f}", "Across seven finite scenarios"),
+        ("P10 / P50 / P90", f"£{summary['p10_net_value_gbp']:,.0f} / £{summary['p50_net_value_gbp']:,.0f} / £{summary['p90_net_value_gbp']:,.0f}", "Scenario-value distribution"),
+        ("90% CVaR loss", f"£{summary['cvar_loss_gbp']:,.0f}", "Tail cost used in risk penalty"),
+        ("Avg BM up / down offer", f"{summary['average_bm_up_offer_mw']:.1f} / {summary['average_bm_down_offer_mw']:.1f} MW", "Shared with wholesale schedule"),
+        ("Wear + other throughput", f"£{summary['throughput_cost_gbp_per_mwh']:,.2f}/MWh", "Stage 19 wear carried into dispatch"),
+    ]
+    summary_ui = html.Div([html.Div([html.Div(a, className="kpi-label"), html.Div(b, className="kpi-value"), html.Div(c, className="kpi-help")], className="kpi-card") for a,b,c in cards], className="stoch-kpi-grid")
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=schedule["settlement_period"], y=schedule["wholesale_discharge_mw"], name="Wholesale discharge"))
+    fig.add_trace(go.Bar(x=schedule["settlement_period"], y=-schedule["wholesale_charge_mw"], name="Wholesale charge"))
+    fig.add_trace(go.Scatter(x=schedule["settlement_period"], y=schedule["bm_up_offer_mw"], name="BM up offer", mode="lines"))
+    fig.add_trace(go.Scatter(x=schedule["settlement_period"], y=-schedule["bm_down_offer_mw"], name="BM down offer", mode="lines"))
+    fig.update_layout(height=340, barmode="relative", margin=dict(l=45,r=20,t=35,b=45), xaxis_title="Settlement period", yaxis_title="MW (charge/down shown negative)", legend=dict(orientation="h", y=1.03))
+    payload = dict(summary)
+    payload["asset_name"] = asset.asset_name if asset else "Default 25 MW / 200 MWh reference"
+    payload["market_forecast_target_date"] = str(LATEST_TARGET_DATE)
+    return summary_ui, fig, payload
+
+@app.callback(
+    Output("degradation-summary", "children"), Output("degradation-store", "data"),
+    Input("asset-select", "value"), Input("asset-store", "data"),
+    Input("deg-cycle-life", "value"), Input("deg-dod", "value"),
+    Input("deg-calendar", "value"), Input("deg-replacement", "value"),
+    Input("deg-daily-throughput", "value"),
+)
+def update_degradation_screen(selected, asset_data, cycle_life, dod, calendar, replacement, daily_throughput):
+    asset = get_asset(asset_data, selected)
+    nominal_energy = asset.nameplate_energy_mwh if asset else 200.0
+    soh = asset.state_of_health_fraction if asset else 1.0
+    cfg = DegradationConfig(
+        nominal_energy_mwh=nominal_energy, state_of_health_fraction=soh,
+        cycle_life=float(cycle_life), reference_depth_of_discharge_fraction=float(dod)/100.0,
+        calendar_fade_fraction_per_year=float(calendar)/100.0,
+        replacement_cost_gbp_per_kwh=float(replacement),
+    )
+    result = annual_degradation_screen(float(daily_throughput), cfg)
+    cards = [
+        ("Usable energy", f"{cfg.usable_energy_mwh:,.1f} MWh", "Nameplate × current SOH"),
+        ("Marginal wear cost", f"£{cfg.marginal_wear_cost_gbp_per_mwh_throughput:,.2f}/MWh", "Charge + discharge throughput basis"),
+        ("Annual equivalent cycles", f"{result['equivalent_full_cycles']:,.0f}", "From expected total throughput"),
+        ("Indicative end-year SOH", f"{100*result['end_state_of_health_fraction']:.1f}%", "Cycle + calendar screening fade"),
+        ("Annual wear allocation", f"£{result['estimated_wear_cost_gbp']:,.0f}", "Replacement-cost amortisation"),
+    ]
+    children = html.Div([html.Div([html.Div(label, className="kpi-label"), html.Div(value, className="kpi-value"), html.Div(help_text, className="kpi-help")], className="kpi-card") for label, value, help_text in cards], className="health-kpi-grid")
+    payload = dict(result)
+    payload.update({"nominal_energy_mwh": nominal_energy, "usable_energy_mwh": cfg.usable_energy_mwh, "state_of_health_fraction": soh, "cycle_life": float(cycle_life), "reference_dod_fraction": float(dod)/100.0, "replacement_cost_gbp_per_kwh": float(replacement)})
+    return children, payload
+
+@app.callback(
+    Output("asset-store", "data"), Output("asset-select", "value"),
+    Input("asset-save", "n_clicks"), Input("asset-delete", "n_clicks"),
+    State("asset-store", "data"), State("asset-select", "value"),
+    State("asset-name", "value"), State("asset-location", "value"),
+    State("asset-power", "value"), State("asset-duration", "value"),
+    State("asset-import", "value"), State("asset-export", "value"),
+    State("asset-soh", "value"), prevent_initial_call=True,
+)
+def update_asset_store(_save, _delete, data, selected, name, location, power, duration, imp, exp, soh):
+    trigger = ctx.triggered_id
+    if trigger == "asset-delete":
+        if not selected:
+            return no_update, no_update
+        return delete_asset(data, selected), None
+    asset = AssetConfig(asset_name=str(name or "").strip(), location_label=str(location or "").strip(), power_mw=float(power), duration_hours=float(duration), grid_import_limit_mw=float(imp), grid_export_limit_mw=float(exp), state_of_health_fraction=float(soh) / 100.0)
+    return upsert_asset(data, asset), asset.asset_name
+
+@app.callback(Output("asset-select", "options"), Input("asset-store", "data"))
+def refresh_asset_options(data):
+    try:
+        records = normalise_asset_store(data)
+    except ValueError:
+        records = []
+    return [{"label": r["asset_name"], "value": r["asset_name"]} for r in records]
+
+@app.callback(
+    Output("asset-name", "value"), Output("asset-location", "value"), Output("asset-power", "value"), Output("asset-duration", "value"), Output("asset-import", "value"), Output("asset-export", "value"), Output("asset-soh", "value"),
+    Input("asset-select", "value"), State("asset-store", "data"), prevent_initial_call=True,
+)
+def load_asset_form(selected, data):
+    asset = get_asset(data, selected)
+    if asset is None:
+        return no_update, no_update, no_update, no_update, no_update, no_update, no_update
+    return (asset.asset_name, asset.location_label, asset.power_mw, asset.duration_hours, asset.grid_import_limit_mw, asset.grid_export_limit_mw, 100.0 * asset.state_of_health_fraction)
+
+@app.callback(Output("asset-summary", "children"), Input("asset-select", "value"), Input("asset-store", "data"))
+def render_asset_summary(selected, data):
+    asset = get_asset(data, selected)
+    if asset is None:
+        return "No saved asset selected. Save a scenario above to create a reusable browser-local technical profile."
+    return html.Div([html.Strong(asset.asset_name), html.Span(f" · {asset.location_label or 'location not specified'}"), html.Div(f"{asset.power_mw:.1f} MW / {asset.nameplate_energy_mwh:.1f} MWh nameplate · {asset.available_energy_mwh:.1f} MWh at {100*asset.state_of_health_fraction:.0f}% SOH"), html.Div(f"Effective grid limits: charge {asset.effective_charge_power_mw:.1f} MW · discharge {asset.effective_discharge_power_mw:.1f} MW"), html.Small("Scenario metadata only. Site-specific metering, connection studies and local forecast-error evidence are not inferred from this profile.")])
 
 @app.callback(
     Output("regime-note", "children"),

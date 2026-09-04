@@ -140,3 +140,112 @@ footer { text-align: center; padding: 24px 20px 40px; color: var(--muted); font-
   .decision-path { grid-template-columns: 1fr 1fr; }
   .decision-step { padding: 8px 9px; }
 }
+
+/* Stage 18 asset workspace */
+.dark-eyebrow { color: var(--accent-dark); opacity: .8; }
+.asset-workspace { border-top: 3px solid var(--ink); }
+.asset-heading { max-width: 900px; margin-bottom: 10px; }
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 10px 14px;
+}
+.asset-grid label { margin-top: 8px; }
+.asset-grid input { width: 100%; }
+.asset-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.asset-summary {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  line-height: 1.5;
+  font-size: .84rem;
+}
+.asset-summary small { display: block; color: var(--muted); margin-top: 5px; }
+@media (max-width: 900px) {
+  .asset-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 520px) {
+  .asset-grid { grid-template-columns: 1fr; }
+  .asset-actions button { width: 100%; }
+}
+
+/* Stage 19 degradation / SOH */
+.degradation-section { border-top: 3px solid #6d5b18; }
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
+  gap: 10px 12px;
+  margin-top: 8px;
+}
+.health-grid label { margin-top: 7px; }
+.health-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.health-summary .kpi-card { background: #fffdf5; }
+@media (max-width: 1000px) {
+  .health-grid, .health-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .health-grid, .health-kpi-grid { grid-template-columns: 1fr; }
+}
+
+/* Stage 20 stochastic wholesale + BM */
+.stochastic-section { border-top: 3px solid #355c7d; }
+.stoch-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px 12px;
+  margin-top: 8px;
+}
+.stoch-grid label { margin-top: 7px; }
+.stoch-run { margin-top: 15px; }
+.stoch-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.stoch-summary .kpi-card { background: #f8fbfd; }
+@media (max-width: 1000px) {
+  .stoch-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stoch-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .stoch-grid, .stoch-kpi-grid { grid-template-columns: 1fr; }
+}
+
+/* Stage 21 explainable evidence analyst */
+.analyst-section { border-top: 3px solid #4d3f73; }
+.analyst-input {
+  width: 100%;
+  max-width: 980px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  padding: 13px 14px;
+  font-size: .96rem;
+  margin-top: 8px;
+}
+.analyst-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.analyst-guide-link { display: inline-flex; align-items: center; text-decoration: none; padding: 10px 14px; }
+.analyst-answer {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  background: #fbfafc;
+  min-height: 64px;
+  line-height: 1.55;
+}
+.analyst-answer h4 { margin: 14px 0 5px; font-size: .86rem; }
+.analyst-answer ul { margin: 5px 0 0; padding-left: 20px; }
+.analyst-main-answer { margin: 10px 0 0; }
+.analyst-confidence { display: inline-block; padding: 4px 7px; border-radius: 3px; font-size: .68rem; font-weight: 800; letter-spacing: .05em; }
+.analyst-high { background: #e5f2ed; color: #195d48; }
+.analyst-medium { background: #fff4d6; color: #795100; }
+.analyst-low { background: #f7e6e6; color: #7b3434; }
+@media (max-width: 560px) {
+  .analyst-actions > * { width: 100%; justify-content: center; }
+}
