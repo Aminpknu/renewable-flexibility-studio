@@ -5189,6 +5189,13 @@ def download_scenario(_clicks: int, stored: str | None):
     return dcc.send_data_frame(frame.to_csv, "renewable_flexibility_scenario.csv", index=False)
 
 
+@app.callback(Output("product-tabs", "value"), Input("url-state", "hash"), prevent_initial_call=False)
+def open_tab_from_hash(hash_value: str | None):
+    if hash_value == "#models-data-validation-guide":
+        return "evidence"
+    return no_update
+
+
 @app.callback(Output("tab-intro", "children"), Input("product-tabs", "value"))
 def update_tab_intro(tab: str):
     copy = {
@@ -5223,6 +5230,12 @@ app.clientside_callback(
         });
         const guide = document.getElementById('evidence');
         if (guide) guide.style.display = tab === 'evidence' ? '' : 'none';
+        if (tab === 'evidence' && window.location.hash === '#models-data-validation-guide') {
+            window.setTimeout(function() {
+                const target = document.getElementById('models-data-validation-guide');
+                if (target) target.scrollIntoView({behavior: 'smooth', block: 'start'});
+            }, 80);
+        }
         return tab + ':' + Date.now();
     }
     """,

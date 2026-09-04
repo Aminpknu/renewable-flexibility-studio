@@ -17,3 +17,14 @@ def test_tab_intros_use_plain_english() -> None:
     assert 'what that means for reserve and state of charge' in forecast
     assert 'what is observed and what is modelled' in markets
     assert 'where a result came from' in evidence
+
+
+def test_methods_guide_deeplink_opens_evidence_tab() -> None:
+    assert app.open_tab_from_hash('#models-data-validation-guide') == 'evidence'
+    assert app.open_tab_from_hash(None) is app.no_update
+
+
+def test_methods_guide_deeplink_scrolls_after_tab_is_visible() -> None:
+    source = open(app.__file__, encoding='utf-8').read()
+    assert "window.location.hash === '#models-data-validation-guide'" in source
+    assert "target.scrollIntoView" in source
