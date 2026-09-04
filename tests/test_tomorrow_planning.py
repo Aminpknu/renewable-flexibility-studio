@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_latest_forecast_bundle_is_complete() -> None:
     frame = load_latest_forecast(ROOT / "data" / "latest_forecast.csv")
     assert len(frame) == 48
-    assert frame["target_date"].dt.strftime("%Y-%m-%d").unique().tolist() == ["2026-09-03"]
+    assert frame["target_date"].dt.strftime("%Y-%m-%d").unique().tolist() == [app.LATEST_TARGET_DATE]
     assert frame["forecast_created_utc"].notna().all()
 
 
