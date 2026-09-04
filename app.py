@@ -480,6 +480,14 @@ def _kpi_card(label: str, value: str, help_text: str) -> html.Div:
     )
 
 
+def _reader_explanation(what: str, why: str, how: str) -> html.Div:
+    return html.Div([
+        html.Div([html.Strong("What this shows"), html.P(what)]),
+        html.Div([html.Strong("Why it matters"), html.P(why)]),
+        html.Div([html.Strong("How to read it"), html.P(how)]),
+    ], className="reader-explanation")
+
+
 def _kpi_cards(metrics: dict[str, Any]) -> list[html.Div]:
     return [
         _kpi_card("MAE before", f"{metrics['mae_before_mw']:.2f} MW", "Original portfolio forecast error"),
@@ -2475,8 +2483,10 @@ app.layout = html.Div(
                                     className="chart-subtitle",
                                 ),
                                 dcc.Graph(id="generation-chart", config={"displaylogo": False}),
+                        _reader_explanation("The forecast curve, realised renewable output for historical days, and the uncertainty band around the forecast.", "This is the starting point for every battery decision. Wider uncertainty means the battery needs more room to absorb forecast error.", "Focus first on the gap between forecast and actual output, then on how wide the uncertainty band becomes during difficult periods."),
                                 html.Div("Battery operation and state of charge", className="chart-title"),
                                 dcc.Graph(id="battery-chart", config={"displaylogo": False}),
+                                _reader_explanation("How the battery charges, discharges and moves through its state-of-charge range while responding to renewable forecast error.", "A battery can have enough MW but still run out of energy headroom. This chart shows which constraint is actually binding.", "Watch the SOC line first. If it repeatedly reaches the top or bottom limit, energy capacity is the problem; if SOC stays comfortable but residual error remains, power is more likely the limit."),
                             ],
                             className="results-panel",
                         ),
@@ -2522,6 +2532,7 @@ app.layout = html.Div(
                             figure=_empty_figure("Future sizing evidence is loading."),
                             config={"displaylogo": False},
                         ),
+                        _reader_explanation("Which combinations of battery power and energy meet the selected firming target across the out-of-sample evidence.", "This is the main engineering sizing screen. It distinguishes a battery that looks good on one day from one that works reliably across many days.", "Look for the smallest configuration that passes the target and reliability gates. Moving right adds duration; moving up adds power. The first passing region shows which dimension is driving size."),
                     ],
                     className="download-section design-section",
                 ),
@@ -2561,6 +2572,7 @@ app.layout = html.Div(
                         html.Div(id="regime-note", className="scenario-note"),
                         html.Div(id="regime-kpi-grid", className="kpi-grid"),
                         dcc.Graph(id="regime-chart", figure=_empty_figure("Regime evidence is loading."), config={"displaylogo": False}),
+                        _reader_explanation("How forecast error and battery performance change across seasons or renewable operating regimes.", "A design that works on an average day may still struggle in specific seasons or high-ramp conditions.", "Look for groups with larger errors, lower absorption or more difficult battery behaviour. Those groups are the stress cases that should influence design margins."),
                         html.Div("Stable BESS design across wind/solar mix", className="chart-title"),
                         html.Div(
                             "The bars show the minimum-energy design that passes the 90% firming / 90%-of-days gates on both development and locked evidence for every 5% wind-share step. This is mix sensitivity for the national virtual portfolio, not local-zone sizing.",
@@ -2638,6 +2650,7 @@ app.layout = html.Div(
                         html.Div("CAPEX and consequence-value sensitivity", className="chart-title"),
                         html.Div("This heatmap varies the selected-design CAPEX by ±25% and consequence value from 50% to 150% of the entered scenario value while holding other assumptions constant.", className="chart-subtitle"),
                         dcc.Graph(id="risk-value-sensitivity", figure=_empty_figure("Sensitivity analysis is loading."), config={"displaylogo": False}),
+                        _reader_explanation("How the investment result changes when battery CAPEX and the assumed value of avoiding renewable forecast error are varied.", "This separates a robust result from one that only works under a narrow set of assumptions.", "Read the heatmap from the base-case cell outward. If the result stays attractive across a wide area, the case is more resilient; if it flips quickly, the economics are assumption-sensitive."),
                         html.Button("Download risk-value scenario JSON", id="risk-value-download-button", n_clicks=0, className="secondary-button"),
                         dcc.Download(id="risk-value-download"),
                         html.Hr(),
@@ -2727,6 +2740,7 @@ app.layout = html.Div(
                         html.Div(id="project-finance-kpi-grid", className="kpi-grid"),
                         html.Div("Project/equity value and base-case debt service", className="chart-title"),
                         dcc.Graph(id="project-finance-chart", figure=_empty_figure("Project-finance screening is loading."), config={"displaylogo": False}),
+                        _reader_explanation("How project value, equity value and debt service evolve under the selected financing assumptions.", "A technically profitable battery can still be difficult to finance if cash flow arrives at the wrong time or debt service is too demanding.", "Check project and equity value together, then compare operating cash flow with debt service. Weak DSCR periods matter even when headline NPV is positive."),
                         html.H4("Project-finance downside simulation"),
                         html.P(
                             "The probabilistic finance case resamples the realised daily Stage 10 forecast-selected wholesale value in contiguous blocks and varies CAPEX, OPEX, availability, degradation and debt rate. Stage 11 ancillary-service upside is deliberately excluded from this base simulation.",
@@ -2854,6 +2868,7 @@ app.layout = html.Div(
                             figure=_empty_figure("Run a historical scenario above to calculate grid imbalance settlement."),
                             config={"displaylogo": False},
                         ),
+                        _reader_explanation("The portfolio forecast error alongside the official Elexon System Price for each settlement period.", "Being long or short matters more when imbalance prices are extreme. Timing, not just total error, drives exposure.", "Positive imbalance means more generation than scheduled; negative means less. Pay most attention to large imbalances that line up with high absolute System Prices."),
                     ],
                     className="download-section",
                 ),
@@ -2896,6 +2911,7 @@ app.layout = html.Div(
                             figure=_empty_figure("Select a historical day and run the market optimisation."),
                             config={"displaylogo": False},
                         ),
+                        _reader_explanation("How a battery would have allocated its limited power and energy when both renewable firming and market value were visible after the fact.", "It shows the opportunity-cost trade-off: sometimes using the battery for the market is worth more than removing the last part of forecast error.", "Compare the price peaks with battery action and the residual error. Residual error is not automatically a failure if the battery was deliberately saved for a higher-value period."),
                         html.Hr(),
                         html.H3("Pre-delivery forecast-price strategy"),
                         html.P(
@@ -2948,6 +2964,7 @@ app.layout = html.Div(
                             figure=_empty_figure("Quick Reserve evidence is available for Apr–Jun 2026 historical dates."),
                             config={"displaylogo": False},
                         ),
+                        _reader_explanation("The cleared Quick Reserve prices, MW committed to upward/downward reserve, and battery SOC supporting those commitments.", "Reserve revenue is only credible if the same battery still has enough power and energy headroom to deliver it.", "Check commitments against SOC. High reserve MW with little remaining SOC headroom is a warning that the stack is physically tight."),
                         html.H4("Pre-delivery Quick Reserve capacity signal"),
                         html.P(
                             "This layer forecasts PQR/NQR clearing prices using earlier EAC delivery dates only, freezes the capacity split before the target date, and measures how much of the perfect-information availability value that allocation would retain. It is intentionally separate from asset-specific bid acceptance.",
@@ -3002,6 +3019,7 @@ app.layout = html.Div(
                             className="chart-subtitle",
                         ),
                         dcc.Graph(id="stage13-evidence-chart", figure=_stage13_evidence_figure(), config={"displaylogo": False}),
+                        _reader_explanation("How much value the issue-time strategy actually captures compared with the wholesale-only baseline and the perfect-information upper bound.", "This is a strong reality check because it separates what could be decided before delivery from what only looks possible with hindsight.", "Treat the perfect-information result as a ceiling. The important number is how much of that ceiling the issue-time strategy captures without using future information."),
                         html.Hr(),
                         html.H3(f"Forecast-day market schedule · {LATEST_TARGET_DATE}"),
                         html.P(
@@ -3015,6 +3033,7 @@ app.layout = html.Div(
                             figure=_empty_figure("Forecast-day market scheduling is loading."),
                             config={"displaylogo": False},
                         ),
+                        _reader_explanation("The forecast-day wholesale battery schedule after keeping enough SOC reserve for renewable uncertainty.", "This is the practical conflict between earning market value and protecting the battery for forecast error.", "Compare the unrestricted market opportunity with the reserve-aware schedule. The gap is the price of keeping flexibility available for uncertainty."),
                     ],
                     id="markets", className="download-section market-optimisation-section product-anchor",
                 ),
@@ -3046,9 +3065,11 @@ app.layout = html.Div(
                         html.Div("Forecast-day renewable schedule with Stage 14 P10/P50/P90", className="chart-title"),
                         html.Div("The dashed line remains the deterministic V2 scheduled export. P10/P50/P90 come from a mix-aware conditional residual quantile model with conformal calibration. They are statistical forecast quantiles, not ECMWF ensemble members.", className="chart-subtitle"),
                         dcc.Graph(id="tomorrow-forecast-chart", figure=_empty_figure("Forecast-day planning will load automatically."), config={"displaylogo": False}),
+                        _reader_explanation("The latest wind-and-solar schedule together with P10, P50 and P90 statistical uncertainty for each half-hour.", "The distance between P10 and P90 is the uncertainty the battery may need to cover. It is more useful for reserve planning than a single point forecast alone.", "Use the dashed schedule as the planned export. A wide P10-P90 band means more uncertainty; asymmetric bands show whether the bigger risk is renewable under-production or over-production."),
                         html.Div("Rolling battery reserve and headroom requirements", className="chart-title"),
                         html.Div("Each point asks how much downward discharge reserve or upward charging headroom may be needed over the following window equal to the installed battery duration. Dashed reference lines show what is available at the recommended starting SOC.", className="chart-subtitle"),
                         dcc.Graph(id="tomorrow-reserve-chart", figure=_empty_figure("Reserve planning will load automatically."), config={"displaylogo": False}),
+                        _reader_explanation("The discharge reserve and charging headroom the battery may need as the forecast day progresses.", "This translates forecast uncertainty into a direct operating recommendation: how full the battery should be before the risk arrives.", "Compare required reserve/headroom with the dashed available levels. If the requirement approaches or crosses what is available, the starting SOC or battery size is becoming restrictive."),
                         html.Hr(),
                         html.H3("Spatial renewable allocation zones"),
                         html.P(
@@ -3078,6 +3099,7 @@ app.layout = html.Div(
                             figure=_empty_figure("Spatial allocation will load automatically."),
                             config={"displaylogo": False},
                         ),
+                        _reader_explanation("An indicative share of the national wind and solar forecast allocated to the selected zone using capacity and weather proxies.", "It helps compare regional timing and renewable concentration without pretending that national data is a measured city forecast.", "Use the shape and relative contribution, not the exact MW as a site forecast. The ten zones are designed to reconcile back to the national total."),
                         html.Div("Underlying demand, embedded renewables and net load", className="chart-title"),
                         html.Div(
                             "This second chart uses the full embedded wind/solar V2 spatial allocation, not the user-scaled virtual portfolio. The underlying-demand proxy is reconstructed from NESO National Demand plus embedded wind/solar, then spatially allocated. Subtracting the same embedded forecast yields a zone net-load proxy whose ten-zone sum reconciles to NESO National Demand; it is not a measured city feeder trace.",
@@ -3091,6 +3113,7 @@ app.layout = html.Div(
                         html.Div("Official GB day-ahead demand context", className="chart-title"),
                         html.Div("National Demand Forecast is official NESO data served through Elexon Insights. It provides system-scale context; the virtual portfolio is not claimed to be a physical national battery.", className="chart-subtitle"),
                         dcc.Graph(id="grid-demand-chart", figure=_empty_figure("GB demand context will load automatically."), config={"displaylogo": False}),
+                        _reader_explanation("Official GB day-ahead demand alongside the renewable forecast context.", "Renewable uncertainty matters differently during high-demand and low-demand periods. This gives the system context around the virtual portfolio.", "Look for periods where demand is high while renewable output is low or uncertain. Those periods are more likely to place value on stored energy and flexibility."),
                     ],
                     className="download-section",
                 ),
