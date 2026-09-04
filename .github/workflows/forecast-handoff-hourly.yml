@@ -1,0 +1,57 @@
+﻿name: Sync live renewable forecast
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: live-renewable-forecast-handoff
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.13"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Download source forecast
+        shell: bash
+        run: |
+          mkdir -p .tmp_sync
+          curl -fsSL https://raw.githubusercontent.com/Aminpknu/gb-renewable-forecast/master/outputs/forecasts/latest_forecast.csv -o .tmp_sync/latest_forecast.csv
+          curl -fsSL https://raw.githubusercontent.com/Aminpknu/gb-renewable-forecast/master/outputs/forecasts/latest_forecast_summary.json -o .tmp_sync/latest_forecast_summary.json
+          git ls-remote https://github.com/Aminpknu/gb-renewable-forecast.git refs/heads/master | cut -f1 > .tmp_sync/source_sha.txt
+      - name: Validate and publish if current
+        shell: bash
+        env:
+          PYTHONPATH: .
+        run: |
+          SOURCE_SHA="$(cat .tmp_sync/source_sha.txt)"
+          python scripts/sync_latest_forecast.py .tmp_sync/latest_forecast.csv \
+            --source-summary .tmp_sync/latest_forecast_summary.json \
+            --source-revision "$SOURCE_SHA"
+      - name: Run handoff tests
+        run: python -m pytest -q tests/test_forecast_handoff.py
+      - name: Commit refreshed bundle
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/latest_forecast.csv data/latest_forecast_summary.json data/latest_forecast_manifest.json
+          git add data/last_valid_forecast.csv data/last_valid_forecast_summary.json data/last_valid_forecast_manifest.json
+          if git diff --cached --quiet; then
+            echo "Forecast handoff already current."
+          else
+            git commit -m "Sync live renewable forecast bundle"
+            git push
+          fi
+

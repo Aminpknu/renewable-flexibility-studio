@@ -1970,6 +1970,13 @@ def _spatial_zone_view(
     design_target_pct: float,
     design_reliability_pct: float,
 ):
+    live_target = pd.to_datetime(LATEST_FORECAST["target_date"]).dt.normalize().iloc[0]
+    spatial_target = pd.to_datetime(LATEST_SPATIAL_FORECAST["target_date"]).dt.normalize().iloc[0]
+    demand_target = pd.to_datetime(LATEST_SPATIAL_DEMAND["target_date"]).dt.normalize().iloc[0]
+    if spatial_target != live_target or demand_target != live_target:
+        note = html.Div([html.Div(f"Live national forecast target: {live_target.date()}. Spatial context is validated only through {min(spatial_target, demand_target).date()}.", className="scenario-note-line uncertainty-warning"), html.Div("Yesterday's spatial allocation is not reused as current. Target-specific spatial charts are withheld until refreshed.", className="scenario-note-line uncertainty-line")])
+        cards = [_kpi_card("National forecast", str(live_target.date()), "CURRENT live handoff"), _kpi_card("Spatial context", "STALE", f"Latest validated target {min(spatial_target, demand_target).date()}")]
+        return note, cards, _empty_figure("Spatial allocation is awaiting a target-matched refresh."), _empty_figure("Spatial demand context is awaiting a target-matched refresh.")
     spatial = build_spatial_virtual_forecast(
         LATEST_SPATIAL_FORECAST, LATEST_FORECAST,
         portfolio_type, float(capacity_mw), float(wind_share_pct) / 100.0,

@@ -42,12 +42,17 @@ def _archive_current() -> None:
         if LATEST_SUMMARY.exists():
             shutil.copy2(LATEST_SUMMARY, LAST_VALID_SUMMARY)
 
-def publish(source_csv: Path, source_summary: Path | None = None) -> dict[str, object]:
+def publish(source_csv: Path, source_summary: Path | None = None, source_revision: str | None = None) -> dict[str, object]:
     candidate = pd.read_csv(source_csv)
     metadata = validate_national_forecast(candidate)
     health = assess_forecast_freshness(metadata)
     if health["status"] != "CURRENT":
         raise ValueError(f"Forecast candidate is not current: {health['status']}")
+    candidate_hash = sha256_file(source_csv)
+    if MANIFEST.exists() and LATEST.exists():
+        current_manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        if current_manifest.get("target_date") == metadata["target_date"] and current_manifest.get("sha256") == candidate_hash:
+            return current_manifest
     with tempfile.TemporaryDirectory(dir=DATA) as temp_dir:
         temp = Path(temp_dir)
         staged_csv = temp / "latest_forecast.csv"
@@ -58,11 +63,11 @@ def publish(source_csv: Path, source_summary: Path | None = None) -> dict[str, o
             "bundle_type": "latest_day_ahead_forecast",
             "source_repository": "https://github.com/Aminpknu/gb-renewable-forecast",
             "source_file": source_csv.name,
-            "source_revision": _source_revision(source_csv),
+            "source_revision": source_revision or _source_revision(source_csv),
             "target_date": metadata["target_date"],
             "forecast_created_utc": metadata["forecast_created_utc"],
             "row_count": metadata["period_count"],
-            "sha256": sha256_file(staged_csv),
+            "sha256": candidate_hash,
             "health_at_publication": health,
         }
         staged_manifest.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
@@ -79,8 +84,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("source_csv", type=Path)
     parser.add_argument("--source-summary", type=Path, default=None)
+    parser.add_argument("--source-revision", type=str, default=None)
     args = parser.parse_args()
-    print(json.dumps(publish(args.source_csv, args.source_summary), indent=2))
+    print(json.dumps(publish(args.source_csv, args.source_summary, args.source_revision), indent=2))
 
 
 if __name__ == "__main__":

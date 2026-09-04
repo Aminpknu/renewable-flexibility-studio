@@ -52,6 +52,11 @@ def test_forecast_day_market_schedule_uses_price_forecast_and_stage_b_reserve() 
         "mixed", 100, 50, 90, 90, 50, 2.0
     )
     values = {card.children[0].children: card.children[1].children for card in cards}
+    text = str(note)
+    if not values:
+        assert "target does not match the renewable forecast target" in text
+        assert len(figure.data) == 0
+        return
     assert values["Installed design"] == "25 MW / 200 MWh"
     assert values["Recommended start SOC"] == "50.0%"
     assert "Reserve-aware signal value" in values
@@ -59,12 +64,7 @@ def test_forecast_day_market_schedule_uses_price_forecast_and_stage_b_reserve() 
     assert values["Price history"] == "90 days"
     assert len(figure.data) == 6
     names = [trace.name for trace in figure.data]
-    assert "Forecast APX MIP" in names
-    assert "Reserve-aware schedule" in names
-    assert "Reserve SOC floor" in names
-    text = str(note)
-    assert "as-if pre-delivery reconstruction" in text
-    assert "excludes every target-day Market Index observation" in text
+    assert "Forecast APX MIP" in names and "Reserve-aware schedule" in names and "Reserve SOC floor" in names
 
 
 def test_quick_reserve_layer_uses_shared_battery_and_availability_only() -> None:

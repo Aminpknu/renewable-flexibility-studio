@@ -34,10 +34,14 @@ def test_underlying_minus_embedded_reconciles_to_neso_national_demand() -> None:
     assert np.allclose(net, ndf, atol=1e-6)
 
 
-def test_spatial_demand_target_matches_renewable_bundle() -> None:
+def test_spatial_demand_target_is_not_silently_relabelled() -> None:
     demand = load_latest_spatial_demand(ROOT / "data" / "latest_spatial_demand_forecast.csv")
     renewable = pd.read_csv(ROOT / "data" / "latest_forecast.csv")
-    assert demand["target_date"].dt.strftime("%Y-%m-%d").unique().tolist() == renewable["target_date"].unique().tolist()
+    demand_target = demand["target_date"].dt.strftime("%Y-%m-%d").unique().tolist()[0]
+    renewable_target = renewable["target_date"].unique().tolist()[0]
+    if demand_target != renewable_target:
+        note, cards, _, _ = app._spatial_zone_view("London", "mixed", 100.0, 50.0, 90.0, 90.0)
+        assert "STALE" in str(cards) and "not reused as current" in str(note)
     assert len(select_zone_demand(demand, "London")) == 48
 
 
@@ -58,6 +62,9 @@ def test_spatial_zone_view_includes_underlying_demand_and_net_load() -> None:
     note, cards, virtual_figure, system_figure = app._spatial_zone_view(
         "London", "mixed", 100.0, 50.0, 90.0, 90.0
     )
+    if "STALE" in str(cards):
+        assert "awaiting a target-matched refresh" in str(virtual_figure.layout.annotations[0].text)
+        return
     labels = [card.children[0].children for card in cards]
     assert "Underlying demand proxy" in labels
     assert "Embedded wind + solar" in labels

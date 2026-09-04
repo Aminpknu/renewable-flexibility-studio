@@ -1,48 +1,38 @@
 {
-  "nominal_forecast_issue_time_local": "2026-09-02T09:00:00+01:00",
-  "weather_run_init_utc": "2026-09-02T00:00:00+00:00",
-  "target_date": "2026-09-03",
+  "nominal_forecast_issue_time_local": "2026-09-03T09:00:00+01:00",
+  "weather_run_init_utc": "2026-09-03T00:00:00+00:00",
+  "target_date": "2026-09-04",
   "settlement_period_count": 48,
   "weather_model": "ECMWF IFS HRES 9 km",
   "weather_model_api_identifier": "ecmwf_ifs",
   "capacity_source": "NESO Daily Demand Update",
-  "capacity_source_date": "2026-09-03",
+  "capacity_source_date": "2026-09-04",
   "wind_capacity_mw": 6417.0,
   "solar_capacity_mw": 23963.0,
-  "peak_wind_mw": 3247.4103786349297,
-  "peak_wind_valid_time_local": "2026-09-03T23:30:00+01:00",
-  "peak_solar_mw": 8499.631800800562,
-  "peak_solar_valid_time_local": "2026-09-03T14:00:00+01:00",
-  "total_forecast_wind_energy_mwh": 65764.0711710155,
-  "total_forecast_solar_energy_mwh": 60392.009987806785,
+  "peak_wind_mw": 4416.7749064564705,
+  "peak_wind_valid_time_local": "2026-09-04T15:00:00+01:00",
+  "peak_solar_mw": 7324.917213568409,
+  "peak_solar_valid_time_local": "2026-09-04T14:30:00+01:00",
+  "total_forecast_wind_energy_mwh": 86890.66226479411,
+  "total_forecast_solar_energy_mwh": 53386.160664267656,
   "models": {
     "wind": "XGBoost",
-    "solar": "XGBoost"
+    "solar": "ExtraTrees"
   },
   "locked_historical_test_metrics": {
     "wind": {
-      "locked_test_MAE_MW": 239.13237827290894,
-      "locked_test_RMSE_MW": 313.43656640782854,
-      "locked_test_R2": 0.9123862395540391,
-      "locked_test_bias_MW": 70.96568771310311,
-      "locked_test_median_daily_MAE_MW": 216.79021492647013,
-      "locked_test_p95_daily_MAE_MW": 431.73383896975616,
-      "locked_test_MAE_CF": 0.037265447759530765,
-      "locked_test_RMSE_CF": 0.04884471971448163,
-      "locked_test_skill_vs_baseline_pct": 69.96538675334416,
-      "locked_test_baseline_MAE_MW": 796.1893043504889
+      "locked_test_MAE_CF": 0.04490508521712993,
+      "locked_test_RMSE_CF": 0.06107222487846498,
+      "locked_test_R2": 0.8675568128452792,
+      "locked_test_MAE_MW": 296.6429929443603,
+      "locked_test_skill_vs_baseline_pct": 66.35995274455611
     },
     "solar": {
-      "locked_test_MAE_MW": 385.4568414321373,
-      "locked_test_RMSE_MW": 717.5535093125698,
-      "locked_test_R2": 0.9736022231588878,
-      "locked_test_bias_MW": 90.97376977511378,
-      "locked_test_median_daily_MAE_MW": 369.65777610556006,
-      "locked_test_p95_daily_MAE_MW": 730.4560353155006,
-      "locked_test_MAE_CF": 0.01655130585463765,
-      "locked_test_RMSE_CF": 0.030816792305882322,
-      "locked_test_skill_vs_baseline_pct": 57.975154403722364,
-      "locked_test_baseline_MAE_MW": 917.2753041345934
+      "locked_test_MAE_CF": 0.020228209912105093,
+      "locked_test_RMSE_CF": 0.037634425724564484,
+      "locked_test_R2": 0.9549972333413317,
+      "locked_test_MAE_MW": 425.4104243049358,
+      "locked_test_skill_vs_baseline_pct": 41.96800452536412
     }
   }
 }
