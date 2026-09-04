@@ -2229,17 +2229,25 @@ app.layout = html.Div(
             ],
             className="hero",
         ),
-        html.Nav([
-            html.A("Overview", href="#overview"), html.A("Assets", href="#assets"),
-            html.A("Forecast & Risk", href="#forecast-risk"), html.A("Markets", href="#markets"),
-            html.A("Investment", href="#investment"), html.A("Evidence", href="#evidence"),
-        ], className="product-nav"),
+        dcc.Tabs(
+            id="product-tabs", value="overview", className="product-tabs",
+            children=[
+                dcc.Tab(label="Overview", value="overview"),
+                dcc.Tab(label="Assets", value="assets"),
+                dcc.Tab(label="Forecast & Risk", value="forecast"),
+                dcc.Tab(label="Markets", value="markets"),
+                dcc.Tab(label="Investment", value="investment"),
+                dcc.Tab(label="Evidence", value="evidence"),
+            ],
+        ),
+        html.Div(id="tab-intro", className="tab-intro"),
+        html.Div(id="tab-render-signal", style={"display": "none"}),
         html.Main(
             [
                 html.Section([
                     html.Div("DECISION OVERVIEW", className="eyebrow dark-eyebrow"),
                     html.H2("What matters now"),
-                    html.P("A compact release view of forecast health, uncertainty, market evidence and investment status. Use the workspace navigation to drill into each decision layer.", className="section-copy"),
+                    html.P("Start here for the current picture: what the forecast says, how uncertain it is, what the battery can do, and where the main value or risk sits.", className="section-copy"),
                     html.Div(_product_overview_cards(), className="kpi-grid overview-grid"),
                     html.Div([
                         html.A("Share current scenario", id="scenario-share-link", href="#", className="secondary-button"),
@@ -2250,9 +2258,9 @@ app.layout = html.Div(
                 ], id="overview", className="download-section overview-section"),
                 html.Section([
                     html.Div([
-                        html.Div("STAGE 18 · ASSET WORKSPACE", className="eyebrow dark-eyebrow"),
+                        html.Div("ASSET WORKSPACE", className="eyebrow dark-eyebrow"),
                         html.H2("My asset / site scenario"),
-                        html.P("Save technical site assumptions in this browser and reuse them across the Studio. National evidence remains a modelling proxy until site-specific forecasts, metering and connection constraints are supplied.", className="section-copy"),
+                        html.P("Set up the battery or site you want to explore. Save it once, then reuse the same limits across the rest of the Studio. If you have not entered site-specific data, results are still based on GB-level evidence and should be read as a planning scenario.", className="section-copy"),
                     ], className="asset-heading"),
                     html.Div([
                         html.Div([html.Label("Saved asset"), dcc.Dropdown(id="asset-select", clearable=True, placeholder="Create a new asset")]),
@@ -2271,9 +2279,9 @@ app.layout = html.Div(
                     html.Div(id="asset-summary", className="asset-summary"),
                 ], id="assets", className="download-section asset-workspace product-anchor"),
                 html.Section([
-                    html.Div("STAGE 19 · DEGRADATION & SOH", className="eyebrow dark-eyebrow"),
+                    html.Div("BATTERY HEALTH", className="eyebrow dark-eyebrow"),
                     html.H2("Battery health and marginal cycling cost"),
-                    html.P("Convert state of health, cycle-life and replacement-cost assumptions into usable energy, equivalent cycles and a marginal wear cost that can be carried into dispatch decisions.", className="section-copy"),
+                    html.P("A battery does not stay new forever. This section estimates how much energy is still usable, how hard the battery is being cycled, and the approximate wear cost of each extra MWh of throughput.", className="section-copy"),
                     html.Div([
                         html.Div([html.Label("Cycle life at reference DoD"), dcc.Input(id="deg-cycle-life", type="number", min=100, value=6000)]),
                         html.Div([html.Label("Reference depth of discharge (%)"), dcc.Input(id="deg-dod", type="number", min=1, max=100, value=80)]),
@@ -2285,9 +2293,9 @@ app.layout = html.Div(
                     html.P("Screening model only: no cell-temperature, C-rate, chemistry-specific rainflow or warranty curve is inferred unless supplied explicitly.", className="control-help"),
                 ], className="download-section degradation-section"),
                 html.Section([
-                    html.Div("RELEASE B · SITE & CONNECTION REALISM", className="eyebrow dark-eyebrow"),
+                    html.Div("SITE & CONNECTION", className="eyebrow dark-eyebrow"),
                     html.H2("Connection, warranty and co-location envelope"),
-                    html.P("Translate the saved asset into an operating envelope with point-of-connection limits, ramping, auxiliary load, grid-charging permission and throughput warranty constraints.", className="section-copy"),
+                    html.P("Turn the saved asset into realistic operating limits. This is where you tell the model how fast the battery can move, how much the grid connection can import or export, what auxiliary losses apply, and what the warranty allows.", className="section-copy"),
                     html.Div([
                         html.Div([html.Label("Ramp limit (MW / 30 min)"), dcc.Input(id="site-ramp", type="number", min=.1, value=25)]),
                         html.Div([html.Label("Auxiliary load (%)"), dcc.Input(id="site-aux", type="number", min=0, max=20, step=.1, value=1)]),
@@ -2301,16 +2309,16 @@ app.layout = html.Div(
                     html.P("Connection inputs are scenario constraints, not a DNO/TO connection offer. Co-location capacity does not create a local renewable forecast unless site data are supplied.", className="control-help"),
                 ], className="download-section site-realism-section"),
                 html.Section([
-                    html.Div("RELEASE D · PORTFOLIO & BENCHMARKING", className="eyebrow dark-eyebrow"),
+                    html.Div("PORTFOLIO", className="eyebrow dark-eyebrow"),
                     html.H2("Saved-asset portfolio view"),
-                    html.P("Aggregate saved assets and compare technical capability on one consistent evidence basis. Reference-scaled value is a transparent normalisation of the Stage 13 25 MW benchmark, not a site revenue forecast.", className="section-copy"),
+                    html.P("See all saved assets together and compare their size, usable energy and connection-limited capability on the same basis. The value comparison is only a scaled reference benchmark, not a revenue forecast for a real site.", className="section-copy"),
                     html.Div(id="portfolio-benchmark-summary", className="portfolio-benchmark-summary"),
                     html.Div(id="portfolio-benchmark-table", className="portfolio-benchmark-table"),
                 ], className="download-section portfolio-benchmark-section"),
                 html.Section([
-                    html.Div("STAGE 20 · STOCHASTIC MARKET BIDDING", className="eyebrow dark-eyebrow"),
+                    html.Div("MARKET DECISION", className="eyebrow dark-eyebrow"),
                     html.H2("Pre-delivery wholesale + BM decision screen"),
-                    html.P("Choose one wholesale schedule and Balancing Mechanism reserve offer before the realised scenario is known. Finite scenarios vary wholesale price and BM activation; every scenario shares the same physical battery limits.", className="section-copy"),
+                    html.P("This section asks a practical question: before the day unfolds, how should the battery split its capacity between wholesale trading and the Balancing Mechanism? The model tests several plausible outcomes while keeping the same physical battery limits in every case.", className="section-copy"),
                     html.Div([
                         html.Div([html.Label("Wholesale uncertainty σ (£/MWh)"), dcc.Input(id="stoch-sigma", type="number", min=0, step=5, value=20)]),
                         html.Div([html.Label("BM upward activation incidence (%)"), dcc.Input(id="stoch-up-prob", type="number", min=0, max=100, value=round(BM_BATTERY_EVIDENCE.get("observed_up_pct",15),1))]),
@@ -2326,9 +2334,9 @@ app.layout = html.Div(
                     html.P("BM boundary: the default up/down activation incidence is seeded from the bounded recent battery-BMU BOD/BOALF evidence set and remains user-adjustable. Activation values are explicit scenarios. This is not a forecast of a specific asset’s BOA acceptance, utilisation settlement or NESO dispatch instructions.", className="control-help"),
                 ], className="download-section stochastic-section"),
                 html.Section([
-                    html.Div("RELEASE C · BM ACCEPTANCE EVIDENCE", className="eyebrow dark-eyebrow"),
+                    html.Div("BALANCING MECHANISM EVIDENCE", className="eyebrow dark-eyebrow"),
                     html.H2("Battery BM acceptance / activation evidence"),
-                    html.P("The Studio now combines Elexon BM Unit reference data, BOD submissions and BOALF accepted instructions for explicitly named battery/storage BMUs. The bounded recent sample provides an empirical activation-incidence starting point for Stage 20 while preserving a strict claim boundary.", className="section-copy"),
+                    html.P("This section shows what recent Balancing Mechanism data actually says for a bounded sample of named battery/storage BMUs. Submitted bid/offer data are matched with accepted instructions to give the market model a more realistic starting point. It is evidence for context, not a prediction that a specific battery will be accepted.", className="section-copy"),
                     html.Div([
                         html.Div([html.Div("Battery BMUs with BOD",className="kpi-label"),html.Div(str(BM_BATTERY_EVIDENCE.get("battery_bmus_with_bod",0)),className="kpi-value"),html.Div("Explicit battery/storage names",className="kpi-help")],className="kpi-card"),
                         html.Div([html.Div("BOD-active periods",className="kpi-label"),html.Div(f"{BM_BATTERY_EVIDENCE.get('opportunity_periods',0):,}",className="kpi-value"),html.Div("Denominator for bounded sample",className="kpi-help")],className="kpi-card"),
@@ -2346,9 +2354,9 @@ app.layout = html.Div(
                     html.P("Official source: Elexon Insights / BMRS BOALF. Stage 20 BM probabilities remain explicit scenarios until a denominator of eligible submitted storage bids/offers is assembled; accepted instructions alone cannot identify unconditional acceptance probability.",className="section-copy"),
                 ], className="download-section bm-evidence-section"),
                 html.Section([
-                    html.Div("STAGE 21 · EXPLAINABLE EVIDENCE ANALYST", className="eyebrow dark-eyebrow"),
+                    html.Div("ASK THE STUDIO", className="eyebrow dark-eyebrow"),
                     html.H2("Ask the Studio"),
-                    html.P("Ask a natural-language question about forecast uncertainty, a saved asset, degradation, stochastic market bidding, ancillary services, investment, project finance, spatial modelling, assumptions or sources. Answers are retrieved only from the Studio evidence registry and always expose provenance and limitations.", className="section-copy"),
+                    html.P("Ask the Studio a normal question, for example: Why is the NPV negative? What is driving the reserve recommendation? Where did this assumption come from? The answer is grounded in the Studio evidence and shows the source and limitations instead of guessing.", className="section-copy"),
                     dcc.Input(id="analyst-question", type="text", debounce=True, placeholder="e.g. Why is the default NPV negative, and what is the source?", className="analyst-input"),
                     html.Div([
                         html.Button("Ask evidence analyst", id="analyst-ask", n_clicks=0, className="primary-button"),
@@ -5024,6 +5032,48 @@ def download_scenario(_clicks: int, stored: str | None):
     if "valid_time_utc" in frame.columns:
         frame["valid_time_utc"] = pd.to_datetime(frame["valid_time_utc"], utc=True)
     return dcc.send_data_frame(frame.to_csv, "renewable_flexibility_scenario.csv", index=False)
+
+
+@app.callback(Output("tab-intro", "children"), Input("product-tabs", "value"))
+def update_tab_intro(tab: str):
+    copy = {
+        "overview": ("Overview", "A quick read of the latest forecast, uncertainty, market signal and investment picture. Start here, then open a tab when you want the detail behind a number."),
+        "assets": ("Assets", "Describe the battery or renewable-plus-storage site you want to test. These inputs set the physical limits used elsewhere, so you can see how connection limits, battery health and warranties change the answer."),
+        "forecast": ("Forecast & Risk", "See what wind and solar are expected to do, how wide the uncertainty range is, and what that means for reserve and state of charge. The aim is to show the decision, not just the forecast curve."),
+        "markets": ("Markets", "Explore how the battery could earn value across wholesale, imbalance, ancillary services and the Balancing Mechanism. Evidence-backed results are separated from scenario assumptions so it is clear what is observed and what is modelled."),
+        "investment": ("Investment", "Move from daily operation to the business case. This tab brings together revenue, downside risk, cycling cost and project-finance assumptions to show what is driving value."),
+        "evidence": ("Evidence", "Use this tab when you want to check where a result came from. It brings together the model guide, assumptions, equations, validation, source provenance and the Ask the Studio evidence assistant."),
+    }
+    title, text = copy.get(tab, copy["overview"])
+    return html.Div([html.H2(title), html.P(text), html.P("Tip: technical details are still available, but the first explanation is written in plain English.", className="tab-intro-tip")])
+
+
+app.clientside_callback(
+    """
+    function(tab) {
+        const map = {
+            overview: ["What matters now"],
+            assets: ["My asset / site scenario", "Battery health and marginal cycling cost", "Connection, warranty and co-location envelope", "Saved-asset portfolio view"],
+            forecast: ["Configure the scenario", "Future battery sizing benchmark", "Seasonal & forecast-defined regime comparison", "Forecast-day operational planning", "Renewable-only continuous-SOC stress test"],
+            markets: ["Pre-delivery wholesale + BM decision screen", "Battery BM acceptance / activation evidence", "Historical grid imbalance & System Price", "GB market-linked battery optimisation"],
+            investment: ["Risk & Value decision layer", "Selected-day battery sizing (exploratory)"],
+            evidence: ["Ask the Studio", "Export and inspect", "Interpretation and limits"]
+        };
+        const wanted = map[tab] || map.overview;
+        document.querySelectorAll('main > section').forEach(function(section) {
+            const h2 = section.querySelector('h2');
+            if (!h2) return;
+            const title = (h2.textContent || '').trim();
+            section.style.display = wanted.some(x => title.startsWith(x)) ? '' : 'none';
+        });
+        const guide = document.getElementById('evidence');
+        if (guide) guide.style.display = tab === 'evidence' ? '' : 'none';
+        return tab + ':' + Date.now();
+    }
+    """,
+    Output("tab-render-signal", "children"),
+    Input("product-tabs", "value"),
+)
 
 
 if __name__ == "__main__":
