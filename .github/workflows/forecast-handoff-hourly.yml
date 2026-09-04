@@ -1,9 +1,10 @@
-﻿name: Sync live renewable forecast
+name: Refresh validated renewable forecast
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "17 * * * *"
+    # GitHub schedules are best-effort. Two attempts per hour reduce latency.
+    - cron: "17,47 * * * *"
 
 permissions:
   contents: write
@@ -18,6 +19,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12.13"
@@ -27,9 +31,16 @@ jobs:
         shell: bash
         run: |
           mkdir -p .tmp_sync
-          curl -fsSL https://raw.githubusercontent.com/Aminpknu/gb-renewable-forecast/master/outputs/forecasts/latest_forecast.csv -o .tmp_sync/latest_forecast.csv
-          curl -fsSL https://raw.githubusercontent.com/Aminpknu/gb-renewable-forecast/master/outputs/forecasts/latest_forecast_summary.json -o .tmp_sync/latest_forecast_summary.json
-          git ls-remote https://github.com/Aminpknu/gb-renewable-forecast.git refs/heads/master | cut -f1 > .tmp_sync/source_sha.txt
+          curl --fail --silent --show-error --location --retry 3 --retry-all-errors \
+            --connect-timeout 15 --max-time 90 \
+            https://raw.githubusercontent.com/Aminpknu/gb-renewable-forecast/master/outputs/forecasts/latest_forecast.csv \
+            -o .tmp_sync/latest_forecast.csv
+          curl --fail --silent --show-error --location --retry 3 --retry-all-errors \
+            --connect-timeout 15 --max-time 90 \
+            https://raw.githubusercontent.com/Aminpknu/gb-renewable-forecast/master/outputs/forecasts/latest_forecast_summary.json \
+            -o .tmp_sync/latest_forecast_summary.json
+          git ls-remote https://github.com/Aminpknu/gb-renewable-forecast.git refs/heads/master \
+            | cut -f1 > .tmp_sync/source_sha.txt
       - name: Validate and publish if current
         shell: bash
         env:
@@ -51,7 +62,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "Forecast handoff already current."
           else
-            git commit -m "Sync live renewable forecast bundle"
-            git push
+            git commit -m "Sync validated renewable forecast bundle"
+            git pull --rebase origin main
+            git push origin HEAD:main
           fi
-

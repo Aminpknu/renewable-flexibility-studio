@@ -159,7 +159,7 @@ This is closer to a deployable information set but is still a **strategy benchma
 
 The same prior-data-only price model can be applied to the latest renewable forecast target. The public schedule compares a price-only wholesale plan with a reserve-aware plan constrained by the Stage B SOC corridor and the Stage A selected battery. The latter therefore makes the market-versus-resilience trade-off explicit before delivery.
 
-The current 3 September 2026 market-price file was regenerated after the target day had already started. Its manifest therefore records `operational_status = as_if_reconstruction_after_target_start`; it is **not** presented as an actually issued pre-delivery trading forecast. All target-day MIP observations remain excluded from its features. A future automated pipeline should generate this bundle before the target delivery day begins.
+The frozen 3 September 2026 market-price validation file was regenerated after the target day had already started. Its manifest therefore records `operational_status = as_if_reconstruction_after_target_start`; it is **not** presented as an actually issued pre-delivery trading forecast. All target-day MIP observations remain excluded from its features. A future automated pipeline should generate this bundle before the target delivery day begins.
 
 ## G. Automated forecast-bundle publication
 

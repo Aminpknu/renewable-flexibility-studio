@@ -1,10 +1,14 @@
 # Renewable Flexibility Studio
 
-A standalone, interactive decision-support prototype that converts historical wind and solar forecast deviations into transparent battery-firming and storage-sizing results.
+[![Tests](https://github.com/Aminpknu/renewable-flexibility-studio/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/Aminpknu/renewable-flexibility-studio/actions/workflows/tests.yml)
+[![Live PWA](https://img.shields.io/badge/Live-PWA-0d6b5f)](https://renewable-flexibility-studio.onrender.com/)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+
+A research-grade GB renewable and battery decision-support demonstrator. It links forecast uncertainty, battery readiness, market evidence and investment screening while keeping assumptions, validation and claim boundaries visible.
 
 The site is deliberately independent from the earlier GB renewable forecasting website. It does not import that dashboard, open it in a tab, use an iframe, or require it to be awake. The two projects exchange only compact, versioned data bundles.
 
-## What the current V2-backed prototype does
+## What the Studio does
 
 A user can:
 
@@ -24,10 +28,14 @@ A user can:
 - inspect gross imbalance-settlement exposure separately from signed settlement cashflow, without labelling exposure reduction as profit;
 - identify power-limited and energy-limited periods;
 - search a controlled 1h/2h/4h battery grid for the smallest tested configuration meeting a target;
-- download every half-hourly calculation as CSV;
+- download half-hourly calculations as CSV and export the wider result/evidence package as a multi-sheet Excel workbook;
 - run a separate 450-day **continuous-SOC** benchmark and extended storage-duration diagnostic from the command line.
 
 The application now uses a **450-day out-of-sample V2 bundle** from 1 April 2025 to 30 June 2026: 360 expanding-window out-of-fold development days plus 90 locked-test days. The original one-day file is retained only as a compact unit-test fixture.
+
+## Terminology and abbreviations
+
+The in-app **Models, Data & Validation Guide** includes a dedicated terminology section that expands the technical abbreviations used across battery, GB market, finance and data views. Important first mentions in the interface also show the full term before the abbreviation.
 
 ## Product boundary
 
@@ -40,6 +48,25 @@ This is a **virtual portfolio-level firming benchmark**. It is not:
 - direct control software for a battery management system.
 
 National forecast and actual capacity factors are scaled to a user-selected virtual portfolio. The value is comparative: it shows how battery power, duration, efficiency and starting SOC affect the ability to absorb forecast deviations.
+
+## Model assurance
+
+A negative NPV is not accepted as self-validating. The Studio now separates **calculation integrity** from the **investment outcome** and rechecks the default market-backed case independently.
+
+For the current frozen 420-day forecast-selected wholesale evidence and default assumptions, the independent reconciliation is approximately:
+
+```text
+PV operating value   £8.69m
+less CAPEX           £25.00m
+less PV fixed OPEX   £4.28m
+less replacement     £0.00m
+--------------------------------
+NPV                 -£20.58m
+```
+
+The following checks are automated: unique daily evidence keys; annualisation; NPV accounting identity; reported-versus-independent PV reconciliation; zero-NPV CAPEX back-solve; break-even annual-value back-solve; revenue/CAPEX monotonicity; project-finance cash-flow NPV; debt principal and closing balance; tax signs; and DSCR row identities.
+
+A calculation pass means the arithmetic and stated data contract reconcile. It does **not** prove that the public-data revenue scope, CAPEX, OPEX, financing or auction assumptions are commercially complete or bankable. See [Quality Assurance](docs/QUALITY_ASSURANCE.md) for the audit scope, passed checks, known data-freshness boundaries and deferred technical debt.
 
 ## Architecture
 
@@ -91,7 +118,7 @@ energy capacity (MWh) = power (MW) × duration (hours)
 
 The historical generation chart includes a nominal **80% rolling prediction interval** around the point forecast. For each selected day, the interval is calibrated only from earlier out-of-sample forecast residuals, using a 90-day lookback and forecast-level-local residual matching. The selected day's actual output is never used to construct its own band; actuals are used only afterward to assess coverage and mark periods outside the expected range.
 
-Backtesting over eligible dates gives about **80.6% wind**, **77.0% solar** and **79.9% mixed** overall coverage. On the locked Apr–Jun 2026 period, coverage is **80.7%**, **81.1%** and **80.8%**, respectively. This is a residual-based uncertainty band, not yet an ECMWF weather-ensemble or dedicated P10/P50/P90 probabilistic forecast.
+Backtesting over eligible dates gives about **80.6% wind**, **77.0% solar** and **79.9% mixed** overall coverage. On the locked Apr–Jun 2026 period, coverage is **80.7%**, **81.1%** and **80.8%**, respectively. This selected-day residual band is separate from the conditional P10/P50/P90 layer used for forecast-day reserve planning. Neither is presented as an ECMWF weather-ensemble forecast.
 
 ## GB imbalance-settlement context
 
@@ -123,7 +150,7 @@ The Stage B planner carries the selected future design into the latest V2 foreca
 
 Reserve energy is evaluated over a rolling horizon equal to the installed battery duration. These requirements define an energy-feasible starting-SOC band. If the operator-entered current SOC is already inside that band, the planner recommends **hold current SOC**. If it is outside, the planner moves only to the nearest safe boundary and reports the grid energy needed for that preparation. If no starting SOC can cover both directional energy requirements simultaneously, it does not force an unvalidated compromise: it holds current SOC and reports the reserve-coverage shortfall.
 
-For the default 100 MW 50/50 portfolio and 25 MW / 200 MWh (8 h) design, the current 3 September forecast gives a safe starting-SOC band around **33.6–76.6%**; therefore a current 50% SOC requires no adjustment. The largest rolling downside requirement is about **44.8 MWh** and the largest upward headroom requirement about **28.3 MWh**. This is a reserve-readiness calculation, not a simulated future dispatch trajectory.
+In the frozen 3 September 2026 validation snapshot, the default 100 MW 50/50 portfolio and 25 MW / 200 MWh (8 h) design gives a safe starting-SOC band around **33.6–76.6%**; therefore a current 50% SOC requires no adjustment. The largest rolling downside requirement is about **44.8 MWh** and the largest upward headroom requirement about **28.3 MWh**. This is a reserve-readiness calculation, not a simulated future dispatch trajectory.
 
 A formal prior-data-only backtest covers 420 eligible dates. At a 50% baseline SOC, the solar and mixed designs remain inside their calculated safe bands on all eligible dates, so the conservative policy makes no unnecessary adjustments. The directional interval achieves about **88.7% solar, 83.3% mixed and 81.9% wind coverage** on Apr–Jun 2026. Wind is explicitly flagged when its 24 h two-sided energy envelope cannot fit inside the installed usable SOC range.
 
@@ -158,7 +185,7 @@ The pre-delivery price forecast is now operationalised as an atomic bundle pipel
 
 The forecast-based market layer now removes price perfect foresight using an expanding ridge forecast trained only on earlier Market Index settlement dates. Across 420 eligible days, price MAE is **£20.0/MWh**, 11.2% better than the previous-observed-same-period baseline. A 25 MW / 200 MWh forecast-selected arbitrage schedule captures about **60.0%** of the perfect-information upper bound overall and **63.4%** on Apr-Jun 2026. Preserving the Stage B SOC reserve corridor reduces capture to **49.6%**, quantifying the market opportunity cost of maintaining renewable-risk headroom.
 
-The current 3 September forecast-day market bundle is explicitly marked as an **as-if reconstruction generated after delivery began**, while still excluding all target-day Market Index observations. Future automation should generate this bundle before the target day starts.
+The frozen 3 September 2026 validation bundle is explicitly marked as an **as-if reconstruction generated after delivery began**, while still excluding all target-day Market Index observations. Future automation should generate this bundle before the target day starts.
 
 ### Quick Reserve availability stacking
 

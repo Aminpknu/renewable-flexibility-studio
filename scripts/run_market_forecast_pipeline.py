@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -47,10 +48,36 @@ def _archive_current() -> None:
     shutil.copy2(LATEST_MANIFEST, LAST_VALID_MANIFEST)
 
 
-def _publish(candidate_csv: Path, candidate_manifest: Path) -> None:
+def _replace_with_retry(source: Path, destination: Path, attempts: int = 6) -> str:
+    """Prefer atomic replacement, with a validated copy fallback for OneDrive."""
+    pending = destination.with_name(f".{destination.name}.pending")
+    pending.unlink(missing_ok=True)
+    shutil.copy2(source, pending)
+    try:
+        for attempt in range(attempts):
+            try:
+                os.replace(pending, destination)
+                return "ATOMIC_REPLACE"
+            except PermissionError:
+                if attempt + 1 < attempts:
+                    time.sleep(0.25 * (attempt + 1))
+        # Some Windows Files-On-Demand paths reject replace-over-existing even
+        # when normal overwrite is permitted. Manifest-last publication plus
+        # immediate contract validation keeps this fallback bounded and visible.
+        shutil.copy2(pending, destination)
+        return "VALIDATED_COPY_FALLBACK"
+    finally:
+        pending.unlink(missing_ok=True)
+
+
+def _publish(candidate_csv: Path, candidate_manifest: Path) -> dict[str, str]:
     _archive_current()
-    os.replace(candidate_csv, LATEST_CSV)
-    os.replace(candidate_manifest, LATEST_MANIFEST)
+    modes = {
+        "csv": _replace_with_retry(candidate_csv, LATEST_CSV),
+        "manifest": _replace_with_retry(candidate_manifest, LATEST_MANIFEST),
+    }
+    validate_market_forecast_bundle(LATEST_CSV, LATEST_MANIFEST)
+    return modes
 
 
 def run_pipeline(
@@ -59,6 +86,18 @@ def run_pipeline(
     renewable = load_latest_forecast(RENEWABLE)
     expected_target = latest_target_date(renewable)
     current = _load_if_valid(LATEST_CSV, LATEST_MANIFEST)
+    if current is not None:
+        current_health = assess_market_forecast_bundle(
+            current[1], expected_target_date=expected_target
+        )
+        if current_health["status"] == "LIVE":
+            result = {
+                "pipeline_status": "RETAINED_LIVE_BUNDLE",
+                "bundle_health": current_health,
+                "expected_target_date": expected_target,
+            }
+            _write_status(result)
+            return result
     with tempfile.TemporaryDirectory(dir=DATA) as temp_dir:
         temp = Path(temp_dir)
         candidate_csv = temp / "candidate.csv"
@@ -98,9 +137,10 @@ def run_pipeline(
                 }
                 _write_status(result)
                 return result
-            _publish(candidate_csv, candidate_manifest)
+            publication_mode = _publish(candidate_csv, candidate_manifest)
             result = {
                 "pipeline_status": "PUBLISHED",
+                "publication_mode": publication_mode,
                 "bundle_health": candidate_health,
                 "expected_target_date": expected_target,
             }

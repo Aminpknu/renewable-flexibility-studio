@@ -13,8 +13,8 @@ def test_tab_intros_use_plain_english() -> None:
     forecast = str(app.update_tab_intro('forecast'))
     markets = str(app.update_tab_intro('markets'))
     evidence = str(app.update_tab_intro('evidence'))
-    assert 'battery or renewable-plus-storage site' in assets
-    assert 'what that means for reserve and state of charge' in forecast
+    assert 'battery energy storage system (BESS)' in assets and 'renewable-plus-storage site' in assets
+    assert 'state of charge (SOC)' in forecast and 'P10/P50/P90' in forecast
     assert 'what is observed and what is modelled' in markets
     assert 'where a result came from' in evidence
 
@@ -26,5 +26,5 @@ def test_methods_guide_deeplink_opens_evidence_tab() -> None:
 
 def test_methods_guide_deeplink_scrolls_after_tab_is_visible() -> None:
     source = open(app.__file__, encoding='utf-8').read()
-    assert "window.location.hash === '#models-data-validation-guide'" in source
+    assert "#models-data-validation-guide" in source and "#terminology-abbreviations" in source
     assert "target.scrollIntoView" in source

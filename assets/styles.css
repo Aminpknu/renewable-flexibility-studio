@@ -407,3 +407,286 @@ footer { text-align: center; padding: 24px 20px 40px; color: var(--muted); font-
     text-align: center;
   }
 }
+
+/* Model assurance and professional accessibility */
+:root {
+  --success: #126b4f;
+  --success-soft: #e8f4ef;
+  --warning-ink: #7a5200;
+  --warning-soft: #fff7df;
+  --focus: #237dff;
+}
+
+.model-assurance-panel {
+  margin: 0 0 16px;
+  padding: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: #fbfcfc;
+}
+
+.assurance-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.assurance-badge {
+  min-height: 96px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 5px;
+}
+.assurance-pass { border-left-color: var(--success); background: var(--success-soft); }
+.assurance-warning { border-left-color: #b58000; background: var(--warning-soft); }
+.assurance-fail { border-left-color: var(--danger); background: #fff0f0; }
+.assurance-label { color: var(--muted); font-size: .71rem; font-weight: 800; letter-spacing: .065em; text-transform: uppercase; }
+.assurance-value { margin: 6px 0 4px; font-size: 1rem; font-weight: 850; }
+.assurance-detail { color: var(--muted); font-size: .76rem; line-height: 1.4; }
+.assurance-reconciliation { margin: 14px 0 7px; font-weight: 740; line-height: 1.55; }
+.assurance-interpretation { margin: 0 0 10px; color: var(--muted); line-height: 1.55; }
+.assurance-details { border-top: 1px solid var(--line); padding-top: 9px; }
+.assurance-details summary { cursor: pointer; font-weight: 760; }
+.assurance-details ul { margin: 10px 0 4px; padding-left: 21px; color: var(--muted); line-height: 1.55; }
+.compact-assurance { margin-bottom: 10px; }
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+summary:focus-visible,
+.product-tabs .tab:focus-visible,
+.Select-control:focus-within {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 620px) {
+  .assurance-status-grid { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* Professional model-assurance and accessibility polish */
+.npv-assurance-panel {
+  margin: 18px 0 22px;
+}
+
+.npv-assurance-content {
+  border: 1px solid rgba(16, 43, 42, 0.22);
+  border-left: 5px solid #2f766f;
+  background: #f7fbfa;
+  padding: 20px;
+  box-shadow: 0 8px 24px rgba(16, 43, 42, 0.06);
+}
+
+.npv-assurance-content.is-warning {
+  border-left-color: #a8661b;
+  background: #fffaf2;
+}
+
+.npv-assurance-content.is-neutral {
+  border-left-color: #687b7a;
+  background: #f7f8f8;
+}
+
+.assurance-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.assurance-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.assurance-status.is-pass {
+  color: #15594f;
+  background: #dff2ed;
+  border: 1px solid #9dcec3;
+}
+
+.assurance-status.is-warning {
+  color: #7a4510;
+  background: #fff0d8;
+  border: 1px solid #dfb16f;
+}
+
+.assurance-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.assurance-metric {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(16, 43, 42, 0.14);
+  background: #ffffff;
+}
+
+.assurance-metric-label {
+  color: #526866;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.assurance-metric-value {
+  margin-top: 4px;
+  color: #102b2a;
+  font-size: 1.2rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.assurance-metric-help {
+  margin-top: 3px;
+  color: #687b7a;
+  font-size: 0.8rem;
+}
+
+.assurance-break-even,
+.assurance-caveat {
+  margin-top: 12px;
+  padding: 12px 14px;
+}
+
+.assurance-break-even {
+  background: #edf6f4;
+}
+
+.assurance-caveat {
+  background: #fff5e7;
+  border-left: 3px solid #c4822f;
+}
+
+.assurance-break-even p,
+.assurance-caveat p {
+  margin: 5px 0 0;
+}
+
+.assurance-details {
+  margin-top: 12px;
+}
+
+.assurance-details summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.assurance-details code {
+  display: block;
+  margin-top: 10px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  background: #102b2a;
+  color: #f4fbf9;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(a, button, input, select, summary, [role="tab"]):focus-visible {
+  outline: 3px solid #efb247;
+  outline-offset: 3px;
+}
+
+html {
+  scroll-padding-top: 88px;
+}
+
+@media (max-width: 820px) {
+  .assurance-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .npv-assurance-content {
+    padding: 15px;
+  }
+
+  .assurance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .assurance-status {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Terminology / abbreviation guide, matching the companion forecasting site */
+.guide-terminology-heading {
+  margin: 20px 0 8px;
+}
+
+.guide-terminology-heading h3 {
+  margin: 0 0 6px;
+}
+
+.guide-definition-grid {
+  display: grid;
+  grid-template-columns: minmax(150px, .58fr) minmax(280px, 1.42fr) minmax(150px, .58fr) minmax(280px, 1.42fr);
+  gap: 12px 16px;
+  margin: 0;
+}
+
+.guide-definition-grid dt {
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.guide-definition-grid dd {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+@media (max-width: 1040px) {
+  .guide-definition-grid {
+    grid-template-columns: minmax(140px, .55fr) minmax(240px, 1.45fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .guide-definition-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .guide-definition-grid dt {
+    margin-top: 8px;
+  }
+
+  .guide-definition-grid dd {
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--line);
+  }
+}

@@ -5,13 +5,13 @@ import app
 
 def test_stage13_layout_cards_and_chart() -> None:
     layout = str(app.app.layout)
-    assert "Issue-time, acceptance-calibrated multi-service strategy (Stage 13)" in layout
+    assert "Issue-time, acceptance-calibrated service strategy" in layout
     assert "stage13-evidence-chart" in layout
     cards = app._stage13_evidence_cards()
     labels = [card.children[0].children for card in cards]
-    assert "Stage 13 non-BM value" in labels
+    assert "Issue-time non-BM value" in labels
     assert "Acceptance Brier improvement" in labels
-    non_bm_card = next(card for card in cards if card.children[0].children == "Stage 13 non-BM value")
+    non_bm_card = next(card for card in cards if card.children[0].children == "Issue-time non-BM value")
     assert "£2.22m/yr" in non_bm_card.children[1].children
     figure = app._stage13_evidence_figure()
     assert len(figure.data) == 4

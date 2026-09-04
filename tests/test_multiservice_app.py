@@ -3,7 +3,7 @@ import app
 
 def test_stage11_layout_and_non_bm_callback() -> None:
     layout = str(app.app.layout)
-    assert "NESO multi-service stacking (Stage 11)" in layout
+    assert "NESO multi-service stacking" in layout
     assert "multiservice-bm-input" in layout
     note, cards, figure = app.run_multiservice_stacking(
         1, "2026-04-01", "mixed", 100.0, 50.0, 90.0, 90.0, 2.0, []
