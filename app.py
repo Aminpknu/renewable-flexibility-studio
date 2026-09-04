@@ -6,6 +6,7 @@ from io import StringIO
 import json
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlencode
 
 import numpy as np
 import pandas as pd
@@ -27,6 +28,7 @@ from adapters.market_forecast_bundle import assess_market_forecast_bundle, valid
 from engine.battery import BatteryConfig, simulate_reactive_firming
 from engine.asset_workspace import AssetConfig, delete_asset, get_asset, normalise_asset_store, upsert_asset
 from engine.degradation import DegradationConfig, annual_degradation_screen
+from engine.site_constraints import SiteConstraintConfig, site_capability
 from engine.stochastic_bidding import StochasticBiddingConfig, build_stochastic_market_scenarios, optimise_stochastic_wholesale_bm
 from engine.analyst import EvidenceRecord, answer_evidence_question
 from engine.design_sizing import select_stable_design
@@ -63,6 +65,7 @@ from engine.monte_carlo import (
     build_daily_value_evidence, run_value_monte_carlo,
 )
 from engine.portfolio import build_virtual_forecast, build_virtual_portfolio
+from engine.portfolio_benchmarking import benchmark_asset_portfolio
 from engine.probabilistic import load_probabilistic_bundle, predict_portfolio_quantiles
 from engine.pre_delivery_strategy import build_reserve_soc_corridor
 from engine.reserve_planning import ReservePlanningConfig, build_reserve_plan
@@ -127,6 +130,8 @@ PROBABILISTIC_MIX_SUMMARY_PATH = ROOT / "outputs" / "probabilistic" / "stage14_l
 REGIME_DAILY_PATH = ROOT / "outputs" / "regimes" / "stage15_daily_regime_evidence.csv"
 REGIME_MANIFEST_PATH = ROOT / "outputs" / "regimes" / "stage15_regime_manifest.json"
 REGIME_MIX_PATH = ROOT / "outputs" / "regimes" / "stage15_mix_design_sensitivity.csv"
+BM_ACCEPTANCE_SUMMARY_PATH = ROOT / "data" / "bm_acceptance_summary.json"
+BM_BATTERY_EVIDENCE_PATH = ROOT / "data" / "bm_battery_evidence_summary.json"
 HISTORICAL_DATA = load_historical_predictions(DATA_PATH)
 SYSTEM_PRICES = load_system_price_history(SYSTEM_PRICES_PATH)
 MARKET_INDEX_PRICES = load_market_index_history(MARKET_INDEX_PATH)
@@ -153,6 +158,8 @@ REGIME_DAILY = pd.read_csv(REGIME_DAILY_PATH)
 REGIME_DAILY["settlement_date"] = pd.to_datetime(REGIME_DAILY["settlement_date"]).dt.normalize()
 REGIME_MANIFEST = json.loads(REGIME_MANIFEST_PATH.read_text(encoding="utf-8"))
 REGIME_MIX = pd.read_csv(REGIME_MIX_PATH)
+BM_ACCEPTANCE_SUMMARY = json.loads(BM_ACCEPTANCE_SUMMARY_PATH.read_text(encoding="utf-8")) if BM_ACCEPTANCE_SUMMARY_PATH.exists() else {"events":0,"storage_events":0,"calibration_ready":False}
+BM_BATTERY_EVIDENCE = json.loads(BM_BATTERY_EVIDENCE_PATH.read_text(encoding="utf-8")) if BM_BATTERY_EVIDENCE_PATH.exists() else {"opportunity_periods":0,"observed_up_pct":15.0,"observed_down_pct":15.0}
 LATEST_SPATIAL_FORECAST = load_latest_spatial_forecast(LATEST_SPATIAL_FORECAST_PATH)
 LATEST_SPATIAL_DEMAND = load_latest_spatial_demand(LATEST_SPATIAL_DEMAND_PATH)
 SPATIAL_DEMAND_MANIFEST = json.loads(SPATIAL_DEMAND_MANIFEST_PATH.read_text(encoding="utf-8"))
@@ -1186,7 +1193,8 @@ def _forecast_day_market_schedule(
     else:
         timing_text = (
             f"Market bundle status is {status}. The site keeps the last validated bundle visible for audit, "
-            "but it must not be used as a current operating schedule until a matching fresh target is published."
+            "but it must not be used as a current operating schedule until a matching fresh target is published. "
+            "The retained file was built as an as-if pre-delivery reconstruction and excludes every target-day Market Index observation."
         )
     pipeline_text = f"Market forecast pipeline: {MARKET_PIPELINE_STATUS.get('pipeline_status', 'MANUAL_BUNDLE')}."
     if MARKET_PIPELINE_STATUS.get("refresh_error"):
@@ -2159,9 +2167,24 @@ def _mix_design_sensitivity_figure(frame: pd.DataFrame) -> go.Figure:
     return figure
 
 
+def _product_overview_cards():
+    p14 = PROBABILISTIC_SUMMARY["locked_reference"]["mixed_50_50"]
+    finance = PROJECT_FINANCE_REFERENCE["scenarios"]["forecast_wholesale_base"]
+    stage13 = STAGE13_SUMMARY["scenarios"]["non_bm"]
+    return [
+        html.Div([html.Div("Forecast target", className="kpi-label"), html.Div(str(LATEST_TARGET_DATE), className="kpi-value"), html.Div("Validated V2 handoff", className="kpi-help")], className="kpi-card"),
+        html.Div([html.Div("P10-P90 coverage", className="kpi-label"), html.Div(f"{p14['observed_p10_p90_coverage_pct']:.1f}%", className="kpi-value"), html.Div("Locked 50/50 evidence", className="kpi-help")], className="kpi-card"),
+        html.Div([html.Div("Stage 13 value", className="kpi-label"), html.Div(f"£{stage13['annualised_acceptance_calibrated_total_gbp']/1e6:.2f}m/y", className="kpi-value"), html.Div("Acceptance-calibrated non-BM screen", className="kpi-help")], className="kpi-card"),
+        html.Div([html.Div("Base project NPV", className="kpi-label"), html.Div(f"£{finance['project_npv_gbp']/1e6:.1f}m", className="kpi-value"), html.Div("Forecast-wholesale finance base", className="kpi-help")], className="kpi-card"),
+        html.Div([html.Div("Forecast data", className="kpi-label"), html.Div(str(LATEST_FORECAST_HANDOFF).upper(), className="kpi-value"), html.Div("Atomic validated bundle", className="kpi-help")], className="kpi-card"),
+        html.Div([html.Div("Decision mode", className="kpi-label"), html.Div("Pre-delivery", className="kpi-value"), html.Div("Issue-time boundaries preserved", className="kpi-help")], className="kpi-card"),
+    ]
+
 app.layout = html.Div(
     [
         dcc.Store(id="scenario-store"),
+        dcc.Location(id="url-state", refresh=False),
+        dcc.Store(id="scenario-compare-store", storage_type="local"),
         dcc.Store(id="asset-store", storage_type="local"),
         dcc.Store(id="degradation-store"),
         dcc.Store(id="stochastic-store"),
@@ -2199,8 +2222,25 @@ app.layout = html.Div(
             ],
             className="hero",
         ),
+        html.Nav([
+            html.A("Overview", href="#overview"), html.A("Assets", href="#assets"),
+            html.A("Forecast & Risk", href="#forecast-risk"), html.A("Markets", href="#markets"),
+            html.A("Investment", href="#investment"), html.A("Evidence", href="#evidence"),
+        ], className="product-nav"),
         html.Main(
             [
+                html.Section([
+                    html.Div("DECISION OVERVIEW", className="eyebrow dark-eyebrow"),
+                    html.H2("What matters now"),
+                    html.P("A compact release view of forecast health, uncertainty, market evidence and investment status. Use the workspace navigation to drill into each decision layer.", className="section-copy"),
+                    html.Div(_product_overview_cards(), className="kpi-grid overview-grid"),
+                    html.Div([
+                        html.A("Share current scenario", id="scenario-share-link", href="#", className="secondary-button"),
+                        html.Button("Save as scenario A", id="save-scenario-a", n_clicks=0, className="secondary-button"),
+                        html.Button("Save as scenario B", id="save-scenario-b", n_clicks=0, className="secondary-button"),
+                    ], className="scenario-share-actions"),
+                    html.Div(id="scenario-compare-summary", className="scenario-compare-summary"),
+                ], id="overview", className="download-section overview-section"),
                 html.Section([
                     html.Div([
                         html.Div("STAGE 18 · ASSET WORKSPACE", className="eyebrow dark-eyebrow"),
@@ -2222,7 +2262,7 @@ app.layout = html.Div(
                         html.Button("Delete selected", id="asset-delete", n_clicks=0, className="secondary-button"),
                     ], className="asset-actions"),
                     html.Div(id="asset-summary", className="asset-summary"),
-                ], className="download-section asset-workspace"),
+                ], id="assets", className="download-section asset-workspace product-anchor"),
                 html.Section([
                     html.Div("STAGE 19 · DEGRADATION & SOH", className="eyebrow dark-eyebrow"),
                     html.H2("Battery health and marginal cycling cost"),
@@ -2238,13 +2278,36 @@ app.layout = html.Div(
                     html.P("Screening model only: no cell-temperature, C-rate, chemistry-specific rainflow or warranty curve is inferred unless supplied explicitly.", className="control-help"),
                 ], className="download-section degradation-section"),
                 html.Section([
+                    html.Div("RELEASE B · SITE & CONNECTION REALISM", className="eyebrow dark-eyebrow"),
+                    html.H2("Connection, warranty and co-location envelope"),
+                    html.P("Translate the saved asset into an operating envelope with point-of-connection limits, ramping, auxiliary load, grid-charging permission and throughput warranty constraints.", className="section-copy"),
+                    html.Div([
+                        html.Div([html.Label("Ramp limit (MW / 30 min)"), dcc.Input(id="site-ramp", type="number", min=.1, value=25)]),
+                        html.Div([html.Label("Auxiliary load (%)"), dcc.Input(id="site-aux", type="number", min=0, max=20, step=.1, value=1)]),
+                        html.Div([html.Label("Daily cycle warranty (EFC/day)"), dcc.Input(id="site-daily-cycles", type="number", min=.1, step=.1, value=2)]),
+                        html.Div([html.Label("Annual throughput warranty (MWh, 0=cycle limit)"), dcc.Input(id="site-annual-throughput", type="number", min=0, step=1000, value=0)]),
+                        html.Div([html.Label("Co-located renewable capacity (MW)"), dcc.Input(id="site-renewable", type="number", min=0, value=0)]),
+                        html.Div([html.Label("Curtailment cap (%)"), dcc.Input(id="site-curtailment", type="number", min=0, max=100, value=100)]),
+                    ], className="site-grid"),
+                    dcc.Checklist(id="site-grid-charge", options=[{"label":"Allow grid charging within POC import limit","value":"grid"}], value=["grid"]),
+                    html.Div(id="site-envelope-summary", className="site-envelope-summary"),
+                    html.P("Connection inputs are scenario constraints, not a DNO/TO connection offer. Co-location capacity does not create a local renewable forecast unless site data are supplied.", className="control-help"),
+                ], className="download-section site-realism-section"),
+                html.Section([
+                    html.Div("RELEASE D · PORTFOLIO & BENCHMARKING", className="eyebrow dark-eyebrow"),
+                    html.H2("Saved-asset portfolio view"),
+                    html.P("Aggregate saved assets and compare technical capability on one consistent evidence basis. Reference-scaled value is a transparent normalisation of the Stage 13 25 MW benchmark, not a site revenue forecast.", className="section-copy"),
+                    html.Div(id="portfolio-benchmark-summary", className="portfolio-benchmark-summary"),
+                    html.Div(id="portfolio-benchmark-table", className="portfolio-benchmark-table"),
+                ], className="download-section portfolio-benchmark-section"),
+                html.Section([
                     html.Div("STAGE 20 · STOCHASTIC MARKET BIDDING", className="eyebrow dark-eyebrow"),
                     html.H2("Pre-delivery wholesale + BM decision screen"),
                     html.P("Choose one wholesale schedule and Balancing Mechanism reserve offer before the realised scenario is known. Finite scenarios vary wholesale price and BM activation; every scenario shares the same physical battery limits.", className="section-copy"),
                     html.Div([
                         html.Div([html.Label("Wholesale uncertainty σ (£/MWh)"), dcc.Input(id="stoch-sigma", type="number", min=0, step=5, value=20)]),
-                        html.Div([html.Label("BM upward activation probability (%)"), dcc.Input(id="stoch-up-prob", type="number", min=0, max=100, value=15)]),
-                        html.Div([html.Label("BM downward activation probability (%)"), dcc.Input(id="stoch-down-prob", type="number", min=0, max=100, value=15)]),
+                        html.Div([html.Label("BM upward activation incidence (%)"), dcc.Input(id="stoch-up-prob", type="number", min=0, max=100, value=round(BM_BATTERY_EVIDENCE.get("observed_up_pct",15),1))]),
+                        html.Div([html.Label("BM downward activation incidence (%)"), dcc.Input(id="stoch-down-prob", type="number", min=0, max=100, value=round(BM_BATTERY_EVIDENCE.get("observed_down_pct",15),1))]),
                         html.Div([html.Label("BM upward activation value (£/MWh)"), dcc.Input(id="stoch-up-value", type="number", value=140)]),
                         html.Div([html.Label("BM downward activation value (£/MWh)"), dcc.Input(id="stoch-down-value", type="number", value=80)]),
                         html.Div([html.Label("Risk aversion"), dcc.Input(id="stoch-risk", type="number", min=0, max=2, step=.1, value=.2)]),
@@ -2253,8 +2316,28 @@ app.layout = html.Div(
                     html.Button("Run stochastic bid screen", id="stoch-run", n_clicks=0, className="primary-button stoch-run"),
                     html.Div(id="stoch-summary", className="stoch-summary"),
                     dcc.Graph(id="stoch-chart", config={"displayModeBar": False}),
-                    html.P("BM boundary: activation probabilities and activation values are explicit user scenarios in this generic release. They are not a forecast of actual BOA acceptance, utilisation settlement or National Grid ESO dispatch instructions.", className="control-help"),
+                    html.P("BM boundary: the default up/down activation incidence is seeded from the bounded recent battery-BMU BOD/BOALF evidence set and remains user-adjustable. Activation values are explicit scenarios. This is not a forecast of a specific asset’s BOA acceptance, utilisation settlement or NESO dispatch instructions.", className="control-help"),
                 ], className="download-section stochastic-section"),
+                html.Section([
+                    html.Div("RELEASE C · BM ACCEPTANCE EVIDENCE", className="eyebrow dark-eyebrow"),
+                    html.H2("Battery BM acceptance / activation evidence"),
+                    html.P("The Studio now combines Elexon BM Unit reference data, BOD submissions and BOALF accepted instructions for explicitly named battery/storage BMUs. The bounded recent sample provides an empirical activation-incidence starting point for Stage 20 while preserving a strict claim boundary.", className="section-copy"),
+                    html.Div([
+                        html.Div([html.Div("Battery BMUs with BOD",className="kpi-label"),html.Div(str(BM_BATTERY_EVIDENCE.get("battery_bmus_with_bod",0)),className="kpi-value"),html.Div("Explicit battery/storage names",className="kpi-help")],className="kpi-card"),
+                        html.Div([html.Div("BOD-active periods",className="kpi-label"),html.Div(f"{BM_BATTERY_EVIDENCE.get('opportunity_periods',0):,}",className="kpi-value"),html.Div("Denominator for bounded sample",className="kpi-help")],className="kpi-card"),
+                        html.Div([html.Div("Any BOA observed",className="kpi-label"),html.Div(f"{BM_BATTERY_EVIDENCE.get('observed_any_acceptance_pct',0):.1f}%",className="kpi-value"),html.Div("Battery-BMU settlement periods",className="kpi-help")],className="kpi-card"),
+                        html.Div([html.Div("Up / down incidence",className="kpi-label"),html.Div(f"{BM_BATTERY_EVIDENCE.get('observed_up_pct',0):.1f}% / {BM_BATTERY_EVIDENCE.get('observed_down_pct',0):.1f}%",className="kpi-value"),html.Div("Used as Stage 20 defaults",className="kpi-help")],className="kpi-card"),
+                    ],className="kpi-grid"),
+                    html.P(BM_BATTERY_EVIDENCE.get("claim_boundary","Battery BM evidence unavailable."),className="control-help"),
+                    html.Div([
+                        html.Div([html.Div("Archived BOALF",className="kpi-label"),html.Div(f"{BM_ACCEPTANCE_SUMMARY.get('events',0):,}",className="kpi-value"),html.Div("Accepted instruction records",className="kpi-help")],className="kpi-card"),
+                        html.Div([html.Div("Storage-tagged",className="kpi-label"),html.Div(f"{BM_ACCEPTANCE_SUMMARY.get('storage_events',0):,}",className="kpi-value"),html.Div("storFlag=true records",className="kpi-help")],className="kpi-card"),
+                        html.Div([html.Div("Storage BMUs",className="kpi-label"),html.Div(str(BM_ACCEPTANCE_SUMMARY.get('storage_bmus',0)),className="kpi-value"),html.Div("Distinct accepted units",className="kpi-help")],className="kpi-card"),
+                        html.Div([html.Div("Calibration",className="kpi-label"),html.Div("READY" if BM_ACCEPTANCE_SUMMARY.get('calibration_ready') else "COLLECTING",className="kpi-value"),html.Div("Storage-event evidence gate",className="kpi-help")],className="kpi-card"),
+                    ],className="kpi-grid"),
+                    html.P(BM_ACCEPTANCE_SUMMARY.get("boundary","BOALF acceptance archive is collecting."),className="control-help"),
+                    html.P("Official source: Elexon Insights / BMRS BOALF. Stage 20 BM probabilities remain explicit scenarios until a denominator of eligible submitted storage bids/offers is assembled; accepted instructions alone cannot identify unconditional acceptance probability.",className="section-copy"),
+                ], className="download-section bm-evidence-section"),
                 html.Section([
                     html.Div("STAGE 21 · EXPLAINABLE EVIDENCE ANALYST", className="eyebrow dark-eyebrow"),
                     html.H2("Ask the Studio"),
@@ -2383,7 +2466,7 @@ app.layout = html.Div(
                             className="results-panel",
                         ),
                     ],
-                    className="workspace",
+                    className="workspace product-anchor", id="forecast-risk",
                 ),
                 html.Section(
                     [
@@ -2714,7 +2797,7 @@ app.layout = html.Div(
                         ),
                         dcc.Download(id="downside-risk-download"),
                     ],
-                    className="download-section risk-value-section",
+                    id="investment", className="download-section risk-value-section product-anchor",
                 ),
                 html.Section(
                     [
@@ -2918,7 +3001,7 @@ app.layout = html.Div(
                             config={"displaylogo": False},
                         ),
                     ],
-                    className="download-section market-optimisation-section",
+                    id="markets", className="download-section market-optimisation-section product-anchor",
                 ),
                 html.Section(
                     [
@@ -3022,9 +3105,9 @@ app.layout = html.Div(
                     ],
                     className="download-section",
                 ),
-                build_models_data_validation_guide(
+                html.Div(build_models_data_validation_guide(
                     PROBABILISTIC_SUMMARY, PROBABILISTIC_COMPARISON, STAGE13_SUMMARY
-                ),
+                ), id="evidence", className="product-anchor"),
                 html.Section(
                     [
                         html.H2("Interpretation and limits"),
@@ -3141,6 +3224,78 @@ def _build_analyst_records(selected, asset_data, degradation, stochastic):
         keywords=("source reference provenance assumption evidence methodology validation manual data",),
     ))
     return records
+
+
+@app.callback(Output("scenario-share-link","href"),
+    Input("portfolio-input","value"),Input("capacity-input","value"),Input("wind-share-input","value"),Input("power-input","value"),Input("duration-input","value"),Input("soc-input","value"),Input("efficiency-input","value"))
+def update_scenario_share_link(portfolio,capacity,wind,power,duration,soc,efficiency):
+    q=urlencode({"portfolio":portfolio,"capacity":capacity,"wind":wind,"power":power,"duration":duration,"soc":soc,"eff":efficiency})
+    return "?"+q
+
+@app.callback(Output("portfolio-input","value"),Output("capacity-input","value"),Output("wind-share-input","value"),Output("power-input","value"),Output("duration-input","value"),Output("soc-input","value"),Output("efficiency-input","value"), Input("url-state","search"), prevent_initial_call=False)
+def load_shared_scenario(search):
+    if not search or "portfolio=" not in search: return (no_update,)*7
+    q=parse_qs(search.lstrip("?"))
+    try: return q.get("portfolio",["mixed"])[0],float(q.get("capacity",[100])[0]),float(q.get("wind",[50])[0]),float(q.get("power",[25])[0]),float(q.get("duration",[2])[0]),float(q.get("soc",[50])[0]),float(q.get("eff",[90])[0])
+    except Exception: return (no_update,)*7
+
+@app.callback(Output("scenario-compare-store","data"), Input("save-scenario-a","n_clicks"),Input("save-scenario-b","n_clicks"), State("scenario-compare-store","data"),State("portfolio-input","value"),State("capacity-input","value"),State("wind-share-input","value"),State("power-input","value"),State("duration-input","value"),State("soc-input","value"),State("efficiency-input","value"), prevent_initial_call=True)
+def save_compare_scenario(_a,_b,data,portfolio,capacity,wind,power,duration,soc,efficiency):
+    slot="A" if ctx.triggered_id=="save-scenario-a" else "B"
+    out=dict(data or {}); out[slot]={"portfolio":portfolio,"capacity_mw":capacity,"wind_share_pct":wind,"battery_power_mw":power,"duration_h":duration,"soc_pct":soc,"efficiency_pct":efficiency}; return out
+
+@app.callback(Output("scenario-compare-summary","children"), Input("scenario-compare-store","data"))
+def render_compare_scenarios(data):
+    data=data or {}; a=data.get("A"); b=data.get("B")
+    if not a and not b: return html.Div("Save two configurations to compare scenario assumptions side by side.",className="control-help")
+    cols=[]
+    for name,item in (("A",a),("B",b)):
+        if item: cols.append(html.Div([html.Strong(f"Scenario {name}"),html.Div(f"{item['portfolio']} · {item['capacity_mw']:.0f} MW · wind {item['wind_share_pct']:.0f}%"),html.Div(f"BESS {item['battery_power_mw']:.0f} MW × {item['duration_h']:.1f} h · SOC {item['soc_pct']:.0f}% · ηRT {item['efficiency_pct']:.0f}%")],className="compare-card"))
+    if a and b: cols.append(html.Div([html.Strong("Δ B − A"),html.Div(f"Battery power {b['battery_power_mw']-a['battery_power_mw']:+.1f} MW"),html.Div(f"Energy {(b['battery_power_mw']*b['duration_h'])-(a['battery_power_mw']*a['duration_h']):+.1f} MWh")],className="compare-card compare-delta"))
+    return html.Div(cols,className="compare-grid")
+
+
+@app.callback(
+    Output("portfolio-benchmark-summary", "children"), Output("portfolio-benchmark-table", "children"),
+    Input("asset-store", "data"),
+)
+def update_portfolio_benchmark(asset_data):
+    ref=STAGE13_SUMMARY["scenarios"]["non_bm"]["annualised_acceptance_calibrated_total_gbp"]
+    frame,summary=benchmark_asset_portfolio(asset_data,ref,25.0)
+    if frame.empty:
+        return html.Div("Save at least one asset above to build the portfolio view.",className="scenario-note"), html.Div()
+    cards=[("Assets",f"{summary['asset_count']:.0f}"),("Nameplate",f"{summary['total_power_mw']:.1f} MW / {summary['total_energy_mwh']:.1f} MWh"),("SOH-adjusted energy",f"{summary['available_energy_mwh']:.1f} MWh"),("Connection-limited power",f"{summary['connection_limited_power_mw']:.1f} MW"),("Reference-scaled value",f"£{summary['reference_scaled_value_gbp_per_year']/1e6:.2f}m/y")]
+    summary_ui=html.Div([html.Div([html.Div(k,className="kpi-label"),html.Div(v,className="kpi-value")],className="kpi-card") for k,v in cards],className="kpi-grid")
+    header=html.Tr([html.Th(x) for x in ("Asset","Location","MW","MWh available","SOH","POC-limited MW","Reference-scaled £/y")])
+    rows=[]
+    for _,r in frame.iterrows(): rows.append(html.Tr([html.Td(r.asset_name),html.Td(r.location),html.Td(f"{r.power_mw:.1f}"),html.Td(f"{r.available_energy_mwh:.1f}"),html.Td(f"{r.soh_pct:.0f}%"),html.Td(f"{r.connection_limited_power_mw:.1f}"),html.Td(f"£{r.reference_scaled_value_gbp_per_year:,.0f}")]))
+    table=html.Div(html.Table([html.Thead(header),html.Tbody(rows)],className="guide-table"),className="guide-table-wrap")
+    return summary_ui,table
+
+
+@app.callback(
+    Output("site-envelope-summary", "children"),
+    Input("asset-power", "value"), Input("asset-duration", "value"),
+    Input("asset-import", "value"), Input("asset-export", "value"), Input("asset-soh", "value"),
+    Input("site-ramp", "value"), Input("site-aux", "value"), Input("site-grid-charge", "value"),
+    Input("site-daily-cycles", "value"), Input("site-annual-throughput", "value"),
+    Input("site-renewable", "value"), Input("site-curtailment", "value"),
+)
+def update_site_envelope(power, duration, imp, exp, soh, ramp, aux, grid_charge, cycles, annual_tp, renewable, curtailment):
+    try:
+        cfg=SiteConstraintConfig(float(imp),float(exp),float(ramp),float(aux)/100.0,"grid" in (grid_charge or []),float(cycles),None if not annual_tp or float(annual_tp)<=0 else float(annual_tp),float(renewable or 0),float(curtailment)/100.0)
+        cap=site_capability(float(power),float(power)*float(duration),float(soh)/100.0,cfg)
+        cards=[
+            ("Usable energy",f"{cap['usable_energy_mwh']:.1f} MWh"),
+            ("Charge / discharge",f"{cap['effective_charge_power_mw']:.1f} / {cap['effective_discharge_power_mw']:.1f} MW"),
+            ("Daily throughput cap",f"{cap['daily_throughput_cap_mwh']:.0f} MWh"),
+            ("Annual throughput cap",f"{cap['annual_throughput_cap_mwh']:,.0f} MWh"),
+            ("Full-power auxiliaries",f"{cap['auxiliary_loss_at_full_power_mw']:.2f} MW"),
+            ("Grid charging","Allowed" if cap['grid_charging_allowed'] else "Blocked"),
+        ]
+        return html.Div([html.Div([html.Div(k,className="kpi-label"),html.Div(v,className="kpi-value")],className="kpi-card") for k,v in cards],className="kpi-grid")
+    except Exception as exc:
+        return html.Div(f"Site envelope unavailable: {exc}", className="scenario-note uncertainty-warning")
 
 
 @app.callback(

@@ -205,6 +205,16 @@ def build_models_data_validation_guide(
         html.P("No external generative model or web search is used inside this release. An unsupported question returns a low-confidence evidence-gap response instead of inventing an answer.", className="section-copy"),
     ])
 
+    competitive = _details("14. Competitive product releases A-D", [
+        html.P("Release A restructures the Studio around Overview, Assets, Forecast & Risk, Markets, Investment and Evidence. Scenario A/B snapshots are browser-local and share links serialise the principal scenario controls into the URL.", className="section-copy"),
+        html.P("Release B adds point-of-connection import/export limits, ramp limits, auxiliary load, grid-charging permission, daily-cycle and annual-throughput warranty screens, plus co-location scenario fields. These are user constraints, not a connection study.", className="section-copy"),
+        _equation("Connection-limited capability", r"P^{dis}_{site}=min(P_{BESS},P_{export}),\qquad P^{ch}_{site}=min(P_{BESS},P_{import})", "Grid charging can be disabled explicitly; SOH scales available energy but does not invent a chemistry-specific power derate."),
+        _equation("Warranty throughput cap", r"E^{yr}_{throughput}\le min(365\times 2E_{usable}N_{cycle/day},\ E^{warranty}_{annual})", "This is a transparent operating envelope used for screening."),
+        html.P("Release C builds a bounded battery-BMU evidence set from Elexon BM Unit reference names, BOD submissions and BOALF accepted instructions. Stage 20 uses the observed directional activation incidence as its default, while keeping the control editable.", className="section-copy"),
+        html.P("The current BM diagnostic is not a causal acceptance model: the frozen sample is recent, identity is based on explicit battery/storage/BESS unit names, and the fitted logistic result is an in-sample diagnostic only.", className="section-copy"),
+        html.P("Release D aggregates browser-saved assets and compares technical capability using one reference-normalised value basis. Reference-scaled value is not a site revenue forecast because local prices, grid constraints, availability, metering and bidding behaviour are not inferred.", className="section-copy"),
+    ])
+
     return html.Section([
         html.Div([
             html.Div("TECHNICAL TRANSPARENCY", className="eyebrow"),
@@ -213,6 +223,6 @@ def build_models_data_validation_guide(
         ], className="guide-heading"),
         html.Div(workflow, className="guide-workflow-wrap"),
         probabilistic, battery, reserve, market, acceptance, economics, finance,
-        spatial, controls, provenance, assumptions, limits, reproducibility,
+        spatial, controls, provenance, assumptions, limits, reproducibility, competitive,
         asset_workspace, degradation, stochastic, analyst,
     ], id="models-data-validation-guide", className="download-section methodology-guide")
