@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from io import StringIO
+from io import BytesIO, StringIO
 import json
 from pathlib import Path
 from typing import Any
@@ -2204,6 +2204,7 @@ app.layout = html.Div(
         dcc.Store(id="degradation-store"),
         dcc.Store(id="stochastic-store"),
         dcc.Download(id="scenario-download"),
+        dcc.Download(id="full-excel-download"),
         html.Header(
             [
                 html.Div("RENEWABLE FLEXIBILITY STUDIO", className="eyebrow"),
@@ -3139,7 +3140,11 @@ app.layout = html.Div(
                             "Download the half-hourly scenario so every charge, discharge, SOC and residual-error calculation can be checked outside the website.",
                             className="section-copy",
                         ),
-                        html.Button("Download scenario CSV", id="download-button", n_clicks=0, className="secondary-button"),
+                        html.Div([
+                            html.Button("Download scenario CSV", id="download-button", n_clicks=0, className="secondary-button"),
+                            html.Button("Download full results Excel", id="full-excel-button", n_clicks=0, className="primary-button"),
+                        ], className="button-row"),
+                        html.P("The Excel workbook packages the current scenario together with live forecast data, spatial context, design evidence, market settlement data, saved assets and any risk/Monte Carlo results already generated in this browser session.", className="control-help"),
                     ],
                     className="download-section",
                 ),
@@ -5040,6 +5045,133 @@ def run_sizing(
             ]
         )
     return recommendation, figure
+
+
+def _flatten_for_excel(value: Any, prefix: str = "") -> list[tuple[str, Any]]:
+    rows: list[tuple[str, Any]] = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            name = f"{prefix}.{key}" if prefix else str(key)
+            rows.extend(_flatten_for_excel(item, name))
+    elif isinstance(value, (list, tuple)):
+        rows.append((prefix, json.dumps(value, default=str)))
+    else:
+        rows.append((prefix, value))
+    return rows
+
+
+def _excel_safe_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    out = frame.copy()
+    for column in out.columns:
+        series = out[column]
+        if isinstance(series.dtype, pd.DatetimeTZDtype):
+            out[column] = series.astype(str)
+        elif pd.api.types.is_datetime64_any_dtype(series):
+            out[column] = series.dt.strftime("%Y-%m-%d %H:%M:%S")
+        elif series.dtype == "object":
+            out[column] = series.map(lambda x: json.dumps(x, default=str) if isinstance(x, (dict, list, tuple)) else x)
+    return out
+
+
+def _payload_frame(payload: Any) -> pd.DataFrame:
+    if not payload:
+        return pd.DataFrame({"status": ["No result generated in this browser session"]})
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError:
+            return pd.DataFrame({"value": [payload]})
+    if isinstance(payload, list) and payload and all(isinstance(x, dict) for x in payload):
+        return pd.DataFrame(payload)
+    return pd.DataFrame(_flatten_for_excel(payload), columns=["field", "value"])
+
+
+@app.callback(
+    Output("full-excel-download", "data"),
+    Input("full-excel-button", "n_clicks"),
+    State("scenario-store", "data"), State("date-input", "value"),
+    State("portfolio-input", "value"), State("capacity-input", "value"), State("wind-share-input", "value"),
+    State("power-input", "value"), State("duration-input", "value"), State("soc-input", "value"), State("efficiency-input", "value"),
+    State("design-target-input", "value"), State("design-reliability-input", "value"),
+    State("asset-store", "data"), State("degradation-store", "data"), State("stochastic-store", "data"),
+    State("downside-risk-store", "data"), State("market-investment-mc-store", "data"), State("project-finance-mc-store", "data"),
+    State("scenario-compare-store", "data"),
+    prevent_initial_call=True,
+)
+def download_full_results_excel(
+    _clicks, scenario_json, date_value, portfolio_type, capacity_mw, wind_share_pct,
+    battery_power_mw, duration_hours, soc_pct, efficiency_pct, design_target_pct,
+    design_reliability_pct, asset_store, degradation, stochastic, downside,
+    market_mc, finance_mc, compare_store,
+):
+    inputs = pd.DataFrame([
+        ["Historical scenario date", date_value], ["Portfolio type", portfolio_type],
+        ["Portfolio capacity (MW)", capacity_mw], ["Wind share (%)", wind_share_pct],
+        ["Battery power (MW)", battery_power_mw], ["Battery duration (h)", duration_hours],
+        ["Initial SOC (%)", soc_pct], ["Round-trip efficiency (%)", efficiency_pct],
+        ["Firming target (%)", design_target_pct], ["Required reliability (%)", design_reliability_pct],
+        ["Latest live forecast target", LATEST_TARGET_DATE], ["Forecast handoff", LATEST_FORECAST_HANDOFF],
+    ], columns=["input", "value"])
+    sheets: dict[str, pd.DataFrame] = {"Inputs": inputs}
+
+    if scenario_json:
+        scenario = pd.read_json(StringIO(scenario_json), orient="split")
+        scenario["valid_time_utc"] = pd.to_datetime(scenario["valid_time_utc"], utc=True)
+        sheets["Historical Scenario"] = scenario
+        try:
+            prices = select_system_prices(SYSTEM_PRICES, date_value)
+            sheets["Imbalance Settlement"] = apply_imbalance_settlement(scenario, prices)
+        except (TypeError, ValueError, KeyError):
+            pass
+    else:
+        sheets["Historical Scenario"] = pd.DataFrame({"status": ["Run a historical scenario to populate this sheet."]})
+
+    sheets["Live Forecast"] = LATEST_FORECAST
+    sheets["Spatial Forecast"] = LATEST_SPATIAL_FORECAST
+    sheets["Spatial Demand"] = LATEST_SPATIAL_DEMAND
+    try:
+        sheets["Market Index Selected Day"] = select_market_index_prices(MARKET_INDEX_PRICES, date_value)
+    except (TypeError, ValueError, KeyError):
+        sheets["Market Index Selected Day"] = pd.DataFrame({"status": ["No market-index data for selected date."]})
+    sheets["Design Evidence"] = scaled_design_grid(DESIGN_GRID, portfolio_type, float(capacity_mw), float(wind_share_pct))
+    sheets["BM Evidence Summary"] = _payload_frame(BM_BATTERY_EVIDENCE)
+    sheets["Stage 13 Summary"] = _payload_frame(STAGE13_SUMMARY)
+    sheets["Saved Assets"] = _payload_frame(normalise_asset_store(asset_store or []))
+    sheets["Degradation Result"] = _payload_frame(degradation)
+    sheets["Stochastic Result"] = _payload_frame(stochastic)
+    sheets["Downside Risk"] = _payload_frame(downside)
+    sheets["Market Investment MC"] = _payload_frame(market_mc)
+    sheets["Project Finance MC"] = _payload_frame(finance_mc)
+    sheets["Scenario A vs B"] = _payload_frame(compare_store)
+
+    readme = pd.DataFrame({"Renewable Flexibility Studio Excel export": [
+        "This workbook is a snapshot of the data and results available when Download full results Excel was pressed.",
+        "Sheets marked as not generated require the corresponding interactive analysis to be run first.",
+        "Live forecast and spatial sheets use the latest validated bundles available to the deployed Studio.",
+        "Market, BM, investment and finance outputs retain the same evidence boundaries and limitations shown in the website.",
+        f"Export target forecast: {LATEST_TARGET_DATE}",
+    ]})
+    sheets = {"Read Me": readme, **sheets}
+
+    def write_workbook(buffer: BytesIO) -> None:
+        with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+            workbook = writer.book
+            header = workbook.add_format({"bold": True, "font_color": "white", "bg_color": "#16324F", "border": 0})
+            note = workbook.add_format({"text_wrap": True, "valign": "top"})
+            for sheet_name, frame in sheets.items():
+                safe = _excel_safe_frame(frame)
+                safe.to_excel(writer, sheet_name=sheet_name[:31], index=False)
+                worksheet = writer.sheets[sheet_name[:31]]
+                worksheet.freeze_panes(1, 0)
+                worksheet.autofilter(0, 0, max(len(safe), 1), max(len(safe.columns) - 1, 0))
+                for col_idx, column in enumerate(safe.columns):
+                    worksheet.write(0, col_idx, column, header)
+                    sample = safe[column].astype(str).head(200) if len(safe) else pd.Series(dtype=str)
+                    width = min(max([len(str(column))] + [len(x) for x in sample.tolist()]) + 2, 42)
+                    worksheet.set_column(col_idx, col_idx, max(width, 12), note if width >= 30 else None)
+                worksheet.set_row(0, 22)
+    filename = f"renewable_flexibility_studio_results_{LATEST_TARGET_DATE}.xlsx"
+    return dcc.send_bytes(write_workbook, filename)
 
 
 @app.callback(
