@@ -11,7 +11,7 @@ def test_stage15_regime_callback_and_layout() -> None:
     assert len(figure.data) >= 4
     assert "forecast quantities only" in str(note)
     layout = str(app.app.layout)
-    assert "Seasonal & forecast-defined regime comparison (Stage 15)" in layout
+    assert "Seasonal & forecast-defined regime comparison" in layout
     assert "regime-date-range" in layout
 
 
@@ -19,9 +19,9 @@ def test_models_data_validation_guide_is_visible_and_complete() -> None:
     layout = str(app.app.layout)
     required = [
         "Models, Data & Validation Guide",
-        "Forecast evidence and Stage 14 P10/P50/P90",
-        "Battery physics, firming and SOC",
-        "Wholesale, imbalance and NESO service optimisation",
+        "Forecast evidence and probabilistic percentiles (P10/P50/P90)",
+        "Battery physics, firming and state of charge (SOC)",
+        "Wholesale, imbalance and National Energy System Operator (NESO) service optimisation",
         "Project-finance screening",
         "Data sources and references",
         "Assumption register",

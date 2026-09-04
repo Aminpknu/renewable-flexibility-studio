@@ -47,7 +47,7 @@ def test_pipeline_retains_valid_bundle_when_refresh_fails(monkeypatch, tmp_path)
     _redirect_paths(monkeypatch, tmp_path, target)
     _write_bundle(
         pipeline.LATEST_CSV, pipeline.LATEST_MANIFEST,
-        target, "2099-01-01T18:00:00Z",
+        target, "2099-01-03T08:00:00Z",
     )
     before = pipeline.LATEST_CSV.read_text(encoding="utf-8")
 
@@ -95,5 +95,26 @@ def test_pipeline_never_replaces_live_issue_with_reconstruction(monkeypatch, tmp
         return {"target_date": target_date}
 
     result = pipeline.run_pipeline(builder=builder)
-    assert result["pipeline_status"] == "RETAINED_PRE_DELIVERY_BUNDLE"
+    assert result["pipeline_status"] == "RETAINED_LIVE_BUNDLE"
     assert pipeline.LATEST_CSV.read_text(encoding="utf-8") == before
+
+
+def test_replace_with_retry_handles_transient_permission_error(monkeypatch, tmp_path) -> None:
+    source = tmp_path / "source.txt"
+    destination = tmp_path / "destination.txt"
+    source.write_text("new", encoding="utf-8")
+    destination.write_text("old", encoding="utf-8")
+    original_replace = pipeline.os.replace
+    calls = {"count": 0}
+
+    def flaky_replace(src, dst):
+        calls["count"] += 1
+        if calls["count"] < 3:
+            raise PermissionError("transient file lock")
+        return original_replace(src, dst)
+
+    monkeypatch.setattr(pipeline.os, "replace", flaky_replace)
+    monkeypatch.setattr(pipeline.time, "sleep", lambda _seconds: None)
+    pipeline._replace_with_retry(source, destination)
+    assert destination.read_text(encoding="utf-8") == "new"
+    assert calls["count"] == 3

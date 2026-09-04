@@ -25,6 +25,6 @@ def test_stage14_chart_and_layout_are_explicit_about_quantiles() -> None:
     assert "P50 statistical median" in names
     assert "Scheduled renewable export" in names
     layout = str(app.app.layout)
-    assert "Stage 14" in layout
+    assert "probabilistic" in layout.lower()
     assert "P10/P50/P90" in layout
 

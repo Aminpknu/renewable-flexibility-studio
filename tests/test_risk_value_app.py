@@ -16,7 +16,7 @@ def test_default_risk_value_layer_uses_selected_stage_a_design() -> None:
     assert values["Expected availability"] == "95%"
     assert len(figure.data) >= 2
     assert len(sensitivity.data) == 1
-    assert any(trace.name == "Selected Stage A design" for trace in figure.data)
+    assert any(trace.name == "Selected stable design" for trace in figure.data)
     text = str(note)
     assert "scenario-based screening outputs" in text
     assert "No actual market-revenue claim" in text

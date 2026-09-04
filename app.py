@@ -56,6 +56,9 @@ from engine.project_finance_monte_carlo import (
     ProjectFinanceDistributions, ProjectFinanceMonteCarloConfig,
     run_project_finance_monte_carlo,
 )
+from engine.quality_assurance import (
+    annualise_unique_daily_values, assure_market_investment, assure_project_finance,
+)
 from engine.market_optimisation import (
     SettlementOptimisationConfig, WholesaleArbitrageConfig,
     optimise_firming_and_arbitrage, optimise_settlement_aware_firming,
@@ -202,13 +205,23 @@ app.index_string = """<!DOCTYPE html>
 <html lang="en">
 <head>
   {%metas%}
+  <meta name="description" content="Research-grade GB renewable forecasting, BESS reserve, market and investment decision-support demonstrator.">
   <meta name="theme-color" content="#102b2a">
+  <meta name="color-scheme" content="light">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Flex Studio">
   <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="canonical" href="https://renewable-flexibility-studio.onrender.com/">
   <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
+  <meta property="og:title" content="Renewable Flexibility Studio">
+  <meta property="og:description" content="Transparent GB renewable and battery decision intelligence from forecast uncertainty to investment screening.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://renewable-flexibility-studio.onrender.com/">
+  <meta property="og:image" content="https://renewable-flexibility-studio.onrender.com/assets/icon-512.png">
+  <meta name="twitter:card" content="summary">
   <title>{%title%}</title>
   {%favicon%}
   {%css%}
@@ -218,6 +231,12 @@ app.index_string = """<!DOCTYPE html>
   <footer>{%config%}{%scripts%}{%renderer%}</footer>
 </body>
 </html>"""
+
+
+@server.get("/healthz")
+def health_check() -> tuple[str, int]:
+    """Lightweight platform health endpoint."""
+    return "ok", 200
 
 
 @server.route("/manifest.webmanifest")
@@ -532,8 +551,8 @@ def _reader_explanation(what: str, why: str, how: str) -> html.Div:
 
 def _kpi_cards(metrics: dict[str, Any]) -> list[html.Div]:
     return [
-        _kpi_card("MAE before", f"{metrics['mae_before_mw']:.2f} MW", "Original portfolio forecast error"),
-        _kpi_card("MAE after", f"{metrics['mae_after_mw']:.2f} MW", "Residual error after battery response"),
+        _kpi_card("Mean absolute error (MAE) before", f"{metrics['mae_before_mw']:.2f} MW", "Original portfolio forecast error"),
+        _kpi_card("Mean absolute error (MAE) after", f"{metrics['mae_after_mw']:.2f} MW", "Residual error after battery response"),
         _kpi_card("Error absorbed", f"{metrics['error_reduction_pct']:.1f}%", "Absolute forecast deviation removed"),
         _kpi_card("Battery energy", f"{metrics['battery_energy_mwh']:.1f} MWh", "Power multiplied by selected duration"),
         _kpi_card("Equivalent cycles", f"{metrics['equivalent_full_cycles']:.2f}", "Throughput relative to usable energy"),
@@ -647,7 +666,7 @@ def _risk_value_frontier_figure(
             x=[row["lifecycle_cost_gbp"] / 1e6],
             y=[row["pv_avoided_loss_gbp"] / 1e6],
             mode="markers",
-            name="Selected Stage A design",
+            name="Selected stable design",
             marker={"symbol": "star", "size": 16},
             hovertemplate=(
                 f"Selected {row['power_mw']:.0f} MW / {row['energy_mwh']:.0f} MWh<br>"
@@ -1101,11 +1120,11 @@ def _pre_delivery_strategy_view(date_value: str):
     ]
     note = html.Div([
         html.Div(
-            "This schedule is chosen before the target day from a leakage-safe APX Market Index price forecast trained only on earlier settlement dates. Realised MIP is used only afterwards to score what the forecast-selected schedule would have been worth.",
+            "This schedule is chosen before the target day from a leakage-safe APX Market Index price forecast trained only on earlier settlement dates. Realised Market Index Price (MIP) is used only afterwards to score what the forecast-selected schedule would have been worth.",
             className="scenario-note-line",
         ),
         html.Div(
-            f"Across 420 eligible days the forecast strategy captures {PREDELIVERY_SUMMARY['forecast_capture_rate_pct']:.1f}% of the perfect-information arbitrage upper bound. Preserving the Stage B SOC reserve corridor lowers capture to {PREDELIVERY_SUMMARY['reserve_aware_capture_rate_pct']:.1f}% and costs about £{PREDELIVERY_SUMMARY['mean_reserve_opportunity_cost_gbp_per_day']:.0f}/day of market opportunity on the default benchmark.",
+            f"Across 420 eligible days the forecast strategy captures {PREDELIVERY_SUMMARY['forecast_capture_rate_pct']:.1f}% of the perfect-information arbitrage upper bound. Preserving the reserve-readiness SOC corridor lowers capture to {PREDELIVERY_SUMMARY['reserve_aware_capture_rate_pct']:.1f}% and costs about £{PREDELIVERY_SUMMARY['mean_reserve_opportunity_cost_gbp_per_day']:.0f}/day of market opportunity on the default benchmark.",
             className="scenario-note-line uncertainty-line",
         ),
         html.Div(
@@ -1222,8 +1241,8 @@ def _forecast_day_market_schedule(
     price_min = float(price["forecast_market_index_price_gbp_per_mwh"].min())
     price_max = float(price["forecast_market_index_price_gbp_per_mwh"].max())
     cards = [
-        _kpi_card("Installed design", f"{selected['power_mw']:.0f} MW / {selected['energy_mwh']:.0f} MWh", "Stage A selected battery"),
-        _kpi_card("Recommended start SOC", f"{recommended_soc:.1f}%", "Stage B reserve-readiness result"),
+        _kpi_card("Installed design", f"{selected['power_mw']:.0f} MW / {selected['energy_mwh']:.0f} MWh", "Selected stable-design battery"),
+        _kpi_card("Recommended start SOC", f"{recommended_soc:.1f}%", "Reserve-readiness result"),
         _kpi_card("Forecast price range", f"£{price_min:.0f}–£{price_max:.0f}/MWh", "APX MIP forecast signal"),
         _kpi_card("Price-only signal value", f"£{signal_value:,.0f}", "Model-implied value, not realised revenue"),
         _kpi_card("Reserve-aware signal value", f"£{guarded_value:,.0f}", "After preserving the SOC reserve corridor"),
@@ -1253,7 +1272,7 @@ def _forecast_day_market_schedule(
         html.Div(timing_text, className="scenario-note-line uncertainty-warning"),
         html.Div(pipeline_text, className="scenario-note-line uncertainty-line"),
         html.Div(
-            "The price-only schedule maximises value under the forecast APX signal. The reserve-aware schedule uses the same price forecast but keeps SOC inside the Stage B uncertainty corridor so battery energy/headroom remains available for renewable forecast risk.",
+            "The price-only schedule maximises value under the forecast APX signal. The reserve-aware schedule uses the same price forecast but keeps SOC inside the uncertainty-derived reserve corridor so battery energy/headroom remains available for renewable forecast risk.",
             className="scenario-note-line",
         ),
         html.Div(
@@ -1338,7 +1357,7 @@ def _multiservice_day_analysis(
 ):
     target = pd.Timestamp(date_value).normalize()
     if target < pd.Timestamp("2026-04-01") or target > pd.Timestamp("2026-06-30"):
-        raise ValueError("Stage 11 multi-service evidence is currently frozen to Apr-Jun 2026.")
+        raise ValueError("Multi-service evidence is currently frozen to Apr-Jun 2026.")
     source = select_date(HISTORICAL_DATA, date_value)
     portfolio = build_virtual_portfolio(
         source, portfolio_type, float(capacity_mw), wind_share=float(wind_share_pct) / 100.0
@@ -1397,14 +1416,14 @@ def _stage13_evidence_cards() -> list[Any]:
         if non_bm["offered_mw_hours"] > 0 else 0.0
     )
     return [
-        _kpi_card("Stage 13 non-BM value", f"£{non_bm['annualised_acceptance_calibrated_total_gbp']/1e6:.2f}m/yr", "60 eligible May–Jun dates"),
+        _kpi_card("Issue-time non-BM value", f"£{non_bm['annualised_acceptance_calibrated_total_gbp']/1e6:.2f}m/yr", "60 eligible May–Jun dates"),
         _kpi_card("Acceptance-calibrated ancillary", f"£{non_bm['annualised_acceptance_calibrated_ancillary_gbp']/1e6:.2f}m/yr", "Availability only"),
-        _kpi_card("Value captured vs Stage 11", f"{non_bm['capture_vs_stage11_perfect_information_pct']:.1f}%", "Issue-time vs perfect-information upper bound"),
-        _kpi_card("Increment vs reserve-aware wholesale", f"£{non_bm['incremental_value_vs_reserve_aware_wholesale_gbp_per_year']/1e6:.2f}m/yr", "Same Stage B reserve corridor"),
+        _kpi_card("Value captured vs upper bound", f"{non_bm['capture_vs_stage11_perfect_information_pct']:.1f}%", "Issue-time vs perfect-information upper bound"),
+        _kpi_card("Increment vs reserve-aware wholesale", f"£{non_bm['incremental_value_vs_reserve_aware_wholesale_gbp_per_year']/1e6:.2f}m/yr", "Same reserve-readiness corridor"),
         _kpi_card("Expected accepted MW-hours", f"{expected_acceptance:.1f}%", "Empirical issue-time acceptance calibration"),
         _kpi_card("EAC price forecast MAE", f"£{price['forecast']['mae']:.2f}/MW/h", f"{price['mae_improvement_vs_naive_pct']:.1f}% better than naive"),
         _kpi_card("Acceptance Brier improvement", f"{acceptance['brier_improvement_vs_product_baseline_pct']:.1f}%", f"{int(acceptance['orders']):,} held-out orders"),
-        _kpi_card("BM-eligible Stage 13 value", f"£{bm['annualised_acceptance_calibrated_total_gbp']/1e6:.2f}m/yr", "BR eligibility does not improve this screen"),
+        _kpi_card("BM-eligible issue-time value", f"£{bm['annualised_acceptance_calibrated_total_gbp']/1e6:.2f}m/yr", "BR eligibility does not improve this screen"),
     ]
 
 
@@ -1412,7 +1431,7 @@ def _stage13_evidence_figure() -> go.Figure:
     non_bm = STAGE13_SUMMARY["scenarios"]["non_bm"]
     bm = STAGE13_SUMMARY["scenarios"]["bm_eligible"]
     figure = make_subplots(rows=3, cols=1, vertical_spacing=0.12, row_heights=[0.32, 0.33, 0.35])
-    labels = ["Reserve-aware wholesale", "Stage 13 non-BM", "Stage 13 BM", "Stage 11 non-BM upper", "Stage 11 BM upper"]
+    labels = ["Reserve-aware wholesale", "Issue-time non-BM", "Issue-time BM", "Perfect-info non-BM", "Perfect-info BM"]
     values = [
         non_bm["annualised_reserve_aware_wholesale_only_gbp"],
         non_bm["annualised_acceptance_calibrated_total_gbp"],
@@ -1484,7 +1503,7 @@ def _quick_reserve_figure(analysis: dict[str, Any]) -> go.Figure:
     figure.add_hline(y=0.0, line_dash="dash", row=3, col=1)
     figure.add_hline(y=100.0 * battery.minimum_soc_fraction, line_dash="dot", row=4, col=1)
     figure.add_hline(y=100.0 * battery.maximum_soc_fraction, line_dash="dot", row=4, col=1)
-    figure.update_yaxes(title_text="?/MW/h", row=1, col=1)
+    figure.update_yaxes(title_text="£/MW/h", row=1, col=1)
     figure.update_yaxes(title_text="MW", row=2, col=1)
     figure.update_yaxes(title_text="Error (MW)", row=3, col=1)
     figure.update_yaxes(title_text="SOC (%)", row=4, col=1)
@@ -1596,10 +1615,7 @@ def _market_investment_reference_supported(
 
 
 def _annualise_daily_value(frame: pd.DataFrame, column: str) -> float:
-    values = pd.to_numeric(frame[column], errors="raise")
-    if frame.empty:
-        raise ValueError("Market investment evidence is empty.")
-    return float(values.sum() * 365.25 / len(frame))
+    return annualise_unique_daily_values(frame, column)
 
 
 def _market_investment_assumptions(
@@ -1658,6 +1674,11 @@ def _market_investment_scenarios(
             "npv_gbp": float(appraisal["npv_gbp"]),
             "benefit_cost_ratio": float(appraisal["benefit_cost_ratio"]),
             "simple_payback_years": appraisal["simple_payback_years"],
+            "pv_market_value_gbp": float(appraisal["pv_market_value_gbp"]),
+            "pv_fixed_opex_gbp": float(appraisal["pv_fixed_opex_gbp"]),
+            "pv_replacement_gbp": float(appraisal["pv_replacement_gbp"]),
+            "pv_total_cost_gbp": float(appraisal["pv_total_cost_gbp"]),
+            "total_capex_gbp": float(appraisal["total_capex_gbp"]),
             "maximum_capex_for_zero_npv_gbp": maximum_capex_for_market_zero_npv_gbp(
                 annual_value, assumptions
             ),
@@ -1766,14 +1787,23 @@ def _project_finance_scenarios(assumptions: ProjectFinanceAssumptions) -> dict[s
 
 def _project_finance_figure(scenarios: dict[str, dict[str, Any]], assumptions: ProjectFinanceAssumptions) -> go.Figure:
     names = list(scenarios)
+    display_map = {
+        "Forecast wholesale base": "Forecast-selected wholesale",
+        "Reserve-aware wholesale": "Reserve-aware wholesale",
+        "Stage 13 non-BM calibrated": "Issue-time non-BM",
+        "Stage 13 BM calibrated": "Issue-time BM",
+        "Stage 11 non-BM upside": "Perfect-info non-BM",
+        "Stage 11 BM upside": "Perfect-info BM",
+    }
+    display_names = [display_map.get(name, name) for name in names]
     figure = make_subplots(rows=3, cols=1, shared_xaxes=False, vertical_spacing=0.11, row_heights=[0.34, 0.36, 0.30])
-    figure.add_trace(go.Bar(x=names, y=[scenarios[name]["project_npv_gbp"] / 1e6 for name in names], name="Project NPV"), row=1, col=1)
-    figure.add_trace(go.Bar(x=names, y=[scenarios[name]["equity_npv_gbp"] / 1e6 for name in names], name="Equity NPV"), row=1, col=1)
+    figure.add_trace(go.Bar(x=display_names, y=[scenarios[name]["project_npv_gbp"] / 1e6 for name in names], name="Project NPV"), row=1, col=1)
+    figure.add_trace(go.Bar(x=display_names, y=[scenarios[name]["equity_npv_gbp"] / 1e6 for name in names], name="Equity NPV"), row=1, col=1)
     base = scenarios["Forecast wholesale base"]
     schedule = pd.DataFrame(base["yearly_schedule"])
-    figure.add_trace(go.Bar(x=schedule["year"], y=schedule["cfads_gbp"] / 1e6, name="CFADS"), row=2, col=1)
+    figure.add_trace(go.Bar(x=schedule["year"], y=schedule["cfads_gbp"] / 1e6, name="Cash flow available for debt service (CFADS)"), row=2, col=1)
     figure.add_trace(go.Bar(x=schedule["year"], y=schedule["debt_service_gbp"] / 1e6, name="Debt service"), row=2, col=1)
-    figure.add_trace(go.Scatter(x=schedule["year"], y=schedule["dscr"], mode="lines+markers", name="DSCR"), row=3, col=1)
+    figure.add_trace(go.Scatter(x=schedule["year"], y=schedule["dscr"], mode="lines+markers", name="Debt service coverage ratio (DSCR)"), row=3, col=1)
     figure.add_hline(y=assumptions.dscr_threshold, line_dash="dash", row=3, col=1)
     figure.update_yaxes(title_text="NPV (£m)", row=1, col=1)
     figure.update_yaxes(title_text="£m/year", row=2, col=1)
@@ -2073,8 +2103,8 @@ def _spatial_zone_view(
         _kpi_card("Allocated nameplate proxy", f"{zone_capacity:.1f} MW", f"{100*capacity_share:.1f}% of selected virtual portfolio"),
         _kpi_card("Forecast energy", f"{zone_energy:.1f} MWh", f"{energy_share:.1f}% of allocated forecast-day energy"),
         _kpi_card("Peak allocated forecast", f"{peak:.1f} MW", "Weather-informed share of national V2 forecast"),
-        _kpi_card("Indicative BESS share", f"{proxy_power:.1f} MW / {proxy_energy:.1f} MWh", "Proportional Stage A allocation only"),
-        _kpi_card("Implied duration", f"{float(selected_design['duration_hours']):.0f} h", "Inherited from national Stage A design"),
+        _kpi_card("Indicative BESS share", f"{proxy_power:.1f} MW / {proxy_energy:.1f} MWh", "Proportional stable-design allocation only"),
+        _kpi_card("Implied duration", f"{float(selected_design['duration_hours']):.0f} h", "Inherited from the national stable design"),
         _kpi_card("Underlying demand proxy", f"{demand_energy_gwh:.1f} GWh/day", f"Peak {demand_peak_gw:.2f} GW"),
         _kpi_card("Embedded wind + solar", f"{embedded_energy_gwh:.1f} GWh/day", f"{embedded_share_pct:.1f}% of underlying demand-proxy energy"),
         _kpi_card("Peak net load", f"{net_peak_gw:.2f} GW", "Demand minus embedded wind + solar"),
@@ -2090,7 +2120,7 @@ def _spatial_zone_view(
             className="scenario-note-line",
         ),
         html.Div(
-            "The BESS figure is only a proportional allocation of the national Stage A design. City-specific forecast-error histories and local grid constraints are not available, so it is not an independently sized local battery recommendation.",
+            "The BESS figure is only a proportional allocation of the national stable design. City-specific forecast-error histories and local grid constraints are not available, so it is not an independently sized local battery recommendation.",
             className="scenario-note-line uncertainty-line",
         ),
         html.Div(
@@ -2190,8 +2220,8 @@ def _regime_summary_figure(summary: pd.DataFrame, group_column: str) -> go.Figur
     figure.add_trace(go.Bar(x=labels, y=summary["mean_reserve_market_value_gbp"], name="Reserve-aware wholesale"), row=2, col=1)
     stage14 = summary.loc[summary["stage14_days"].gt(0)].copy()
     if not stage14.empty:
-        figure.add_trace(go.Bar(x=stage14["group"], y=stage14["mean_stage14_coverage_pct"], name="Stage 14 coverage (%)"), row=3, col=1)
-        figure.add_trace(go.Scatter(x=stage14["group"], y=stage14["mean_stage14_width_mw"], mode="lines+markers", name="Stage 14 width (MW)"), row=3, col=1)
+        figure.add_trace(go.Bar(x=stage14["group"], y=stage14["mean_stage14_coverage_pct"], name="Probabilistic coverage (%)"), row=3, col=1)
+        figure.add_trace(go.Scatter(x=stage14["group"], y=stage14["mean_stage14_width_mw"], mode="lines+markers", name="P10–P90 width (MW)"), row=3, col=1)
     figure.update_yaxes(title_text="MWh/day", row=1, col=1)
     figure.update_yaxes(title_text="£/day", row=2, col=1)
     figure.update_yaxes(title_text="Coverage (%)", row=3, col=1)
@@ -2224,17 +2254,146 @@ def _mix_design_sensitivity_figure(frame: pd.DataFrame) -> go.Figure:
     return figure
 
 
+
+def _format_gbp_m(value: float, decimals: int = 2, suffix: str = "") -> str:
+    sign = "−" if float(value) < 0 else ""
+    return f"{sign}£{abs(float(value)) / 1e6:.{decimals}f}m{suffix}"
+
+
+def _supporting_data_readiness() -> dict[str, Any]:
+    national_target = pd.Timestamp(LATEST_TARGET_DATE).normalize()
+    spatial_target = pd.to_datetime(LATEST_SPATIAL_FORECAST["target_date"]).dt.normalize().iloc[0]
+    demand_target = pd.to_datetime(LATEST_SPATIAL_DEMAND["target_date"]).dt.normalize().iloc[0]
+    market_target = pd.Timestamp(LATEST_MARKET_FORECAST_MANIFEST["target_date"]).normalize()
+    modules = {
+        "national": {
+            "status": str(LATEST_FORECAST_HEALTH.get("status", "UNKNOWN")),
+            "target": national_target.date().isoformat(),
+        },
+        "market": {
+            "status": str(LATEST_MARKET_FORECAST_HEALTH.get("status", "UNKNOWN")),
+            "target": market_target.date().isoformat(),
+        },
+        "spatial": {
+            "status": "CURRENT" if spatial_target == national_target and demand_target == national_target else "STALE_TARGET",
+            "target": min(spatial_target, demand_target).date().isoformat(),
+        },
+    }
+    current = sum(item["status"] in {"CURRENT", "LIVE"} for item in modules.values())
+    overall = "CURRENT" if current == len(modules) else "PARTIAL" if current else "STALE"
+    return {"overall": overall, "current": current, "total": len(modules), "modules": modules}
+
+
+def _assurance_badge(label: str, value: str, detail: str, class_name: str) -> html.Div:
+    return html.Div([
+        html.Div(label, className="assurance-label"),
+        html.Div(value, className="assurance-value"),
+        html.Div(detail, className="assurance-detail"),
+    ], className=f"assurance-badge {class_name}")
+
+
+def _market_assurance_panel(assurance: dict[str, Any]) -> html.Div:
+    calculation_ok = assurance["calculation_status"] == "PASS"
+    below_break_even = assurance["economic_outcome"] == "BELOW_BREAK_EVEN"
+    reconciliation = (
+        f"{_format_gbp_m(assurance['pv_market_value_gbp'])} operating value − "
+        f"{_format_gbp_m(assurance['total_capex_gbp'])} capital expenditure (CAPEX) − "
+        f"{_format_gbp_m(assurance['pv_fixed_opex_gbp'])} fixed operating expenditure (OPEX) − "
+        f"{_format_gbp_m(assurance['pv_replacement_gbp'])} replacement = "
+        f"{_format_gbp_m(assurance['npv_gbp'])} net present value (NPV)."
+    )
+    check_items = [
+        html.Li(f"{item['name']}: {'pass' if item['passed'] else 'fail'} — {item['detail']}")
+        for item in assurance["checks"]
+    ]
+    return html.Div([
+        html.Div([
+            _assurance_badge(
+                "Calculation integrity",
+                "CHECKED" if calculation_ok else "REVIEW REQUIRED",
+                f"{assurance['checks_passed']}/{assurance['checks_total']} independent checks passed",
+                "assurance-pass" if calculation_ok else "assurance-fail",
+            ),
+            _assurance_badge(
+                "Investment outcome",
+                "BELOW BREAK-EVEN" if below_break_even else "ABOVE BREAK-EVEN",
+                "Economic result, not an application error",
+                "assurance-warning" if below_break_even else "assurance-pass",
+            ),
+        ], className="assurance-status-grid"),
+        html.P(reconciliation, className="assurance-reconciliation"),
+        html.P(
+            f"The current year-one operating value covers {assurance['annual_value_coverage_of_break_even_pct']:.1f}% "
+            f"of the break-even requirement. The remaining gap is "
+            f"{_format_gbp_m(assurance['annual_value_gap_to_break_even_gbp'], suffix='/yr')}.",
+            className="assurance-interpretation",
+        ),
+        html.Details([
+            html.Summary("How this result was checked"),
+            html.Ul(check_items),
+            html.P(assurance["scope_boundary"], className="control-help"),
+        ], className="assurance-details"),
+    ], className="model-assurance-panel")
+
+
+def _project_finance_assurance_panel(assurance: dict[str, Any]) -> html.Div:
+    calculation_ok = assurance["calculation_status"] == "PASS"
+    below_break_even = assurance["economic_outcome"] == "BELOW_BREAK_EVEN"
+    return html.Div([
+        html.Div([
+            _assurance_badge(
+                "Finance calculation",
+                "CHECKED" if calculation_ok else "REVIEW REQUIRED",
+                f"{assurance['checks_passed']}/{assurance['checks_total']} cash-flow and debt checks passed",
+                "assurance-pass" if calculation_ok else "assurance-fail",
+            ),
+            _assurance_badge(
+                "Finance screen",
+                "FAILS BASE CASE" if below_break_even else "PASSES NET PRESENT VALUE (NPV) TEST",
+                "Screening outcome under the selected assumptions",
+                "assurance-warning" if below_break_even else "assurance-pass",
+            ),
+        ], className="assurance-status-grid"),
+        html.P(
+            "The project net present value (NPV) was recalculated directly from the full annual project cash-flow series. "
+            "Debt principal, closing balance, tax signs and every debt service coverage ratio (DSCR) row were also reconciled.",
+            className="assurance-reconciliation",
+        ),
+        html.P(assurance["scope_boundary"], className="control-help"),
+    ], className="model-assurance-panel compact-assurance")
+
 def _product_overview_cards():
     p14 = PROBABILISTIC_SUMMARY["locked_reference"]["mixed_50_50"]
-    finance = PROJECT_FINANCE_REFERENCE["scenarios"]["forecast_wholesale_base"]
-    stage13 = STAGE13_SUMMARY["scenarios"]["non_bm"]
+    service = STAGE13_SUMMARY["scenarios"]["non_bm"]
+    base = MARKET_INVESTMENT_SUMMARY["scenarios"]["forecast_wholesale_420d"]
+    assumptions_raw = MARKET_INVESTMENT_SUMMARY["assumptions"]
+    assumptions = MarketInvestmentAssumptions(
+        total_capex_gbp=float(assumptions_raw["total_capex_gbp"]),
+        fixed_opex_gbp_per_year=float(assumptions_raw["fixed_opex_gbp_per_year"]),
+        asset_life_years=int(assumptions_raw["asset_life_years"]),
+        discount_rate=float(assumptions_raw["discount_rate_pct"]) / 100.0,
+        annual_revenue_degradation_fraction=float(assumptions_raw["annual_revenue_degradation_pct"]) / 100.0,
+        replacement_year=assumptions_raw.get("replacement_year"),
+        replacement_cost_gbp=float(assumptions_raw.get("replacement_cost_gbp", 0.0)),
+    )
+    assurance = assure_market_investment(
+        float(base["annual_operating_value_gbp"]),
+        assumptions,
+        reported=base,
+        daily_evidence=PREDELIVERY_DAILY,
+    )
+    readiness = _supporting_data_readiness()["modules"]
+    market = readiness["market"]
+    spatial = readiness["spatial"]
     return [
-        html.Div([html.Div("Forecast target", className="kpi-label"), html.Div(str(LATEST_TARGET_DATE), className="kpi-value"), html.Div("Validated V2 handoff", className="kpi-help")], className="kpi-card"),
-        html.Div([html.Div("P10-P90 coverage", className="kpi-label"), html.Div(f"{p14['observed_p10_p90_coverage_pct']:.1f}%", className="kpi-value"), html.Div("Locked 50/50 evidence", className="kpi-help")], className="kpi-card"),
-        html.Div([html.Div("Stage 13 value", className="kpi-label"), html.Div(f"£{stage13['annualised_acceptance_calibrated_total_gbp']/1e6:.2f}m/y", className="kpi-value"), html.Div("Acceptance-calibrated non-BM screen", className="kpi-help")], className="kpi-card"),
-        html.Div([html.Div("Base project NPV", className="kpi-label"), html.Div(f"£{finance['project_npv_gbp']/1e6:.1f}m", className="kpi-value"), html.Div("Forecast-wholesale finance base", className="kpi-help")], className="kpi-card"),
-        html.Div([html.Div("Forecast data", className="kpi-label"), html.Div(str(LATEST_FORECAST_HANDOFF).upper(), className="kpi-value"), html.Div("Atomic validated bundle", className="kpi-help")], className="kpi-card"),
-        html.Div([html.Div("Decision mode", className="kpi-label"), html.Div("Pre-delivery", className="kpi-value"), html.Div("Issue-time boundaries preserved", className="kpi-help")], className="kpi-card"),
+        _kpi_card("National forecast target", str(LATEST_TARGET_DATE), f"{readiness['national']['status']} validated handoff"),
+        _kpi_card("P10–P90 coverage", f"{p14['observed_p10_p90_coverage_pct']:.1f}%", "Locked 50/50 probabilistic evidence"),
+        _kpi_card("Issue-time service value", f"£{service['annualised_acceptance_calibrated_total_gbp']/1e6:.2f}m/y", "Acceptance-calibrated non-BM screen"),
+        _kpi_card("Market-backed NPV", _format_gbp_m(base["npv_gbp"], 1), "Wholesale-only screen under default costs"),
+        _kpi_card("NPV calculation", "CHECKED" if assurance["calculation_status"] == "PASS" else "REVIEW", f"{assurance['checks_passed']}/{assurance['checks_total']} independent checks passed"),
+        _kpi_card("Market forecast", market["status"].replace("_", " "), f"Target {market['target']}; national target {LATEST_TARGET_DATE}"),
+        _kpi_card("Spatial context", spatial["status"].replace("_", " "), f"Target {spatial['target']}; stale data are not plotted as current"),
+        _kpi_card("Decision basis", "PRE-DELIVERY", "Issue-time and realised-scoring boundaries kept separate"),
     ]
 
 app.layout = html.Div(
@@ -2250,18 +2409,18 @@ app.layout = html.Div(
         html.Div([
             html.Div([
                 html.Div("INSTALL FLEX STUDIO", className="eyebrow dark-eyebrow"),
-                html.H3("Add the Studio to your home screen"),
+                html.H3("Add the Studio to your home screen", id="pwa-install-title"),
                 html.P("Install it for a full-screen app experience. Live forecasts and calculations still need an internet connection."),
                 html.P("Use your browser's install option.", id="pwa-install-help-text", className="control-help"),
-                html.Button("Close", id="pwa-install-close", n_clicks=0, className="secondary-button"),
-            ], className="pwa-install-card"),
-        ], id="pwa-install-help", className="pwa-install-help", style={"display": "none"}),
+                html.Button("Close", id="pwa-install-close", n_clicks=0, className="secondary-button", type="button", **{"aria-label": "Close installation instructions"}),
+            ], className="pwa-install-card", role="document"),
+        ], id="pwa-install-help", className="pwa-install-help", style={"display": "none"}, role="dialog", **{"aria-modal": "true", "aria-labelledby": "pwa-install-title"}),
         html.Header(
             [
                 html.Div("RENEWABLE FLEXIBILITY STUDIO", className="eyebrow"),
                 html.H1("Forecast. Reserve. Dispatch. Value."),
                 html.P(
-                    "A GB renewable and storage decision workspace linking forecast uncertainty, battery readiness, market opportunity and investment evidence.",
+                    "A Great Britain (GB) renewable and battery energy storage system (BESS) decision workspace linking forecast uncertainty, battery readiness, market opportunity and investment evidence.",
                     className="subtitle",
                 ),
                 html.Div([
@@ -2270,8 +2429,13 @@ app.layout = html.Div(
                         href="#models-data-validation-guide",
                         className="secondary-button guide-jump-link",
                     ),
-                    html.Button("Install app", id="pwa-install-button", n_clicks=0, className="secondary-button pwa-install-button"),
-                    html.Span("Online", id="pwa-connectivity", className="pwa-connectivity"),
+                    html.A(
+                        "Terminology & abbreviations",
+                        href="#terminology-abbreviations",
+                        className="secondary-button terminology-jump-link",
+                    ),
+                    html.Button("Install app", id="pwa-install-button", n_clicks=0, className="secondary-button pwa-install-button", type="button", **{"aria-label": "Install Renewable Flexibility Studio"}),
+                    html.Span("Online", id="pwa-connectivity", className="pwa-connectivity", role="status", **{"aria-live": "polite"}),
                 ], className="hero-actions"),
                 html.Div([
                     html.Div([html.Strong("01 Forecast"), "Wind / solar schedule"], className="decision-step"),
@@ -2285,7 +2449,7 @@ app.layout = html.Div(
                     [
                         html.Span([html.Span(className="live-dot"), "Validated analytical release"], className="status-pill"),
                         html.Span("Historical evidence: 1 Apr 2025 to 30 Jun 2026", className="status-pill"),
-                        html.Span("V2 out-of-sample: OOF + locked test", className="status-pill"),
+                        html.Span("V2 validation: out-of-fold (OOF) + locked test", className="status-pill"),
                         html.Span("Reactive strategy", className="status-pill"),
                     ],
                     className="status-row",
@@ -2334,7 +2498,7 @@ app.layout = html.Div(
                         html.Div([html.Label("Duration (h)"), dcc.Input(id="asset-duration", type="number", min=.5, step=.5, value=8)]),
                         html.Div([html.Label("Grid import limit (MW)"), dcc.Input(id="asset-import", type="number", min=1, value=25)]),
                         html.Div([html.Label("Grid export limit (MW)"), dcc.Input(id="asset-export", type="number", min=1, value=25)]),
-                        html.Div([html.Label("State of health (%)"), dcc.Input(id="asset-soh", type="number", min=1, max=100, value=100)]),
+                        html.Div([html.Label("State of health (SOH, %)"), dcc.Input(id="asset-soh", type="number", min=1, max=100, value=100)]),
                     ], className="asset-grid"),
                     html.Div([
                         html.Button("Save / update asset", id="asset-save", n_clicks=0, className="primary-button"),
@@ -2347,7 +2511,7 @@ app.layout = html.Div(
                     html.H2("Battery health and marginal cycling cost"),
                     html.P("A battery does not stay new forever. This section estimates how much energy is still usable, how hard the battery is being cycled, and the approximate wear cost of each extra MWh of throughput.", className="section-copy"),
                     html.Div([
-                        html.Div([html.Label("Cycle life at reference DoD"), dcc.Input(id="deg-cycle-life", type="number", min=100, value=6000)]),
+                        html.Div([html.Label("Cycle life at reference depth of discharge (DoD)"), dcc.Input(id="deg-cycle-life", type="number", min=100, value=6000)]),
                         html.Div([html.Label("Reference depth of discharge (%)"), dcc.Input(id="deg-dod", type="number", min=1, max=100, value=80)]),
                         html.Div([html.Label("Calendar fade (%/year)"), dcc.Input(id="deg-calendar", type="number", min=0, step=.1, value=1.5)]),
                         html.Div([html.Label("Replacement cost (£/kWh)"), dcc.Input(id="deg-replacement", type="number", min=0, step=5, value=100)]),
@@ -2363,14 +2527,14 @@ app.layout = html.Div(
                     html.Div([
                         html.Div([html.Label("Ramp limit (MW / 30 min)"), dcc.Input(id="site-ramp", type="number", min=.1, value=25)]),
                         html.Div([html.Label("Auxiliary load (%)"), dcc.Input(id="site-aux", type="number", min=0, max=20, step=.1, value=1)]),
-                        html.Div([html.Label("Daily cycle warranty (EFC/day)"), dcc.Input(id="site-daily-cycles", type="number", min=.1, step=.1, value=2)]),
+                        html.Div([html.Label("Daily cycle warranty (equivalent full cycles, EFC/day)"), dcc.Input(id="site-daily-cycles", type="number", min=.1, step=.1, value=2)]),
                         html.Div([html.Label("Annual throughput warranty (MWh, 0=cycle limit)"), dcc.Input(id="site-annual-throughput", type="number", min=0, step=1000, value=0)]),
                         html.Div([html.Label("Co-located renewable capacity (MW)"), dcc.Input(id="site-renewable", type="number", min=0, value=0)]),
                         html.Div([html.Label("Curtailment cap (%)"), dcc.Input(id="site-curtailment", type="number", min=0, max=100, value=100)]),
                     ], className="site-grid"),
-                    dcc.Checklist(id="site-grid-charge", options=[{"label":"Allow grid charging within POC import limit","value":"grid"}], value=["grid"]),
+                    dcc.Checklist(id="site-grid-charge", options=[{"label":"Allow grid charging within point of connection (POC) import limit","value":"grid"}], value=["grid"]),
                     html.Div(id="site-envelope-summary", className="site-envelope-summary"),
-                    html.P("Connection inputs are scenario constraints, not a DNO/TO connection offer. Co-location capacity does not create a local renewable forecast unless site data are supplied.", className="control-help"),
+                    html.P("Connection inputs are scenario constraints, not a Distribution Network Operator (DNO) or Transmission Owner (TO) connection offer. Co-location capacity does not create a local renewable forecast unless site data are supplied.", className="control-help"),
                 ], className="download-section site-realism-section"),
                 html.Section([
                     html.Div("PORTFOLIO", className="eyebrow dark-eyebrow"),
@@ -2381,8 +2545,8 @@ app.layout = html.Div(
                 ], className="download-section portfolio-benchmark-section"),
                 html.Section([
                     html.Div("MARKET DECISION", className="eyebrow dark-eyebrow"),
-                    html.H2("Pre-delivery wholesale + BM decision screen"),
-                    html.P("This section asks a practical question: before the day unfolds, how should the battery split its capacity between wholesale trading and the Balancing Mechanism? The model tests several plausible outcomes while keeping the same physical battery limits in every case.", className="section-copy"),
+                    html.H2("Pre-delivery wholesale + Balancing Mechanism (BM) decision screen"),
+                    html.P("This section asks a practical question: before the day unfolds, how should the battery split its capacity between wholesale trading and the Balancing Mechanism (BM)? The model tests several plausible outcomes while keeping the same physical battery limits in every case. Risk aversion penalises conditional value at risk (CVaR), the average loss in the selected worst-case tail.", className="section-copy"),
                     html.Div([
                         html.Div([html.Label("Wholesale uncertainty σ (£/MWh)"), dcc.Input(id="stoch-sigma", type="number", min=0, step=5, value=20)]),
                         html.Div([html.Label("BM upward activation incidence (%)"), dcc.Input(id="stoch-up-prob", type="number", min=0, max=100, value=round(BM_BATTERY_EVIDENCE.get("observed_up_pct",15),1))]),
@@ -2395,17 +2559,17 @@ app.layout = html.Div(
                     html.Button("Run stochastic bid screen", id="stoch-run", n_clicks=0, className="primary-button stoch-run"),
                     html.Div(id="stoch-summary", className="stoch-summary"),
                     dcc.Graph(id="stoch-chart", config={"displayModeBar": False}),
-                    html.P("BM boundary: the default up/down activation incidence is seeded from the bounded recent battery-BMU BOD/BOALF evidence set and remains user-adjustable. Activation values are explicit scenarios. This is not a forecast of a specific asset’s BOA acceptance, utilisation settlement or NESO dispatch instructions.", className="control-help"),
+                    html.P("Balancing Mechanism (BM) boundary: the default up/down activation incidence is seeded from a bounded recent battery Balancing Mechanism Unit (BMU) evidence set using Bid-Offer Data (BOD) and Bid-Offer Acceptance Level Flagged (BOALF) records. Activation values remain explicit user scenarios. This is not a forecast of a specific asset’s Bid-Offer Acceptance (BOA), utilisation settlement or National Energy System Operator (NESO) dispatch instruction.", className="control-help"),
                 ], className="download-section stochastic-section"),
                 html.Section([
                     html.Div("BALANCING MECHANISM EVIDENCE", className="eyebrow dark-eyebrow"),
-                    html.H2("Battery BM acceptance / activation evidence"),
-                    html.P("This section shows what recent Balancing Mechanism data actually says for a bounded sample of named battery/storage BMUs. Submitted bid/offer data are matched with accepted instructions to give the market model a more realistic starting point. It is evidence for context, not a prediction that a specific battery will be accepted.", className="section-copy"),
+                    html.H2("Battery Balancing Mechanism (BM) acceptance / activation evidence"),
+                    html.P("This section shows what recent Balancing Mechanism (BM) data says for a bounded sample of named battery/storage Balancing Mechanism Units (BMUs). Submitted Bid-Offer Data (BOD) are matched with accepted instructions to give the market model a more realistic starting point. It is evidence for context, not a prediction that a specific battery will be accepted.", className="section-copy"),
                     html.Div([
                         html.Div([html.Div("Battery BMUs with BOD",className="kpi-label"),html.Div(str(BM_BATTERY_EVIDENCE.get("battery_bmus_with_bod",0)),className="kpi-value"),html.Div("Explicit battery/storage names",className="kpi-help")],className="kpi-card"),
                         html.Div([html.Div("BOD-active periods",className="kpi-label"),html.Div(f"{BM_BATTERY_EVIDENCE.get('opportunity_periods',0):,}",className="kpi-value"),html.Div("Denominator for bounded sample",className="kpi-help")],className="kpi-card"),
                         html.Div([html.Div("Any BOA observed",className="kpi-label"),html.Div(f"{BM_BATTERY_EVIDENCE.get('observed_any_acceptance_pct',0):.1f}%",className="kpi-value"),html.Div("Battery-BMU settlement periods",className="kpi-help")],className="kpi-card"),
-                        html.Div([html.Div("Up / down incidence",className="kpi-label"),html.Div(f"{BM_BATTERY_EVIDENCE.get('observed_up_pct',0):.1f}% / {BM_BATTERY_EVIDENCE.get('observed_down_pct',0):.1f}%",className="kpi-value"),html.Div("Used as Stage 20 defaults",className="kpi-help")],className="kpi-card"),
+                        html.Div([html.Div("Up / down incidence",className="kpi-label"),html.Div(f"{BM_BATTERY_EVIDENCE.get('observed_up_pct',0):.1f}% / {BM_BATTERY_EVIDENCE.get('observed_down_pct',0):.1f}%",className="kpi-value"),html.Div("Used as stochastic-screen defaults",className="kpi-help")],className="kpi-card"),
                     ],className="kpi-grid"),
                     html.P(BM_BATTERY_EVIDENCE.get("claim_boundary","Battery BM evidence unavailable."),className="control-help"),
                     html.Div([
@@ -2415,7 +2579,7 @@ app.layout = html.Div(
                         html.Div([html.Div("Calibration",className="kpi-label"),html.Div("READY" if BM_ACCEPTANCE_SUMMARY.get('calibration_ready') else "COLLECTING",className="kpi-value"),html.Div("Storage-event evidence gate",className="kpi-help")],className="kpi-card"),
                     ],className="kpi-grid"),
                     html.P(BM_ACCEPTANCE_SUMMARY.get("boundary","BOALF acceptance archive is collecting."),className="control-help"),
-                    html.P("Official source: Elexon Insights / BMRS BOALF. Stage 20 BM probabilities remain explicit scenarios until a denominator of eligible submitted storage bids/offers is assembled; accepted instructions alone cannot identify unconditional acceptance probability.",className="section-copy"),
+                    html.P("Official source: Elexon Insights / Balancing Mechanism Reporting Service (BMRS), using Bid-Offer Acceptance Level Flagged (BOALF) data. Balancing Mechanism probabilities remain explicit scenarios until a denominator of eligible submitted storage bids/offers is assembled; accepted instructions alone cannot identify unconditional acceptance probability.",className="section-copy"),
                 ], className="download-section bm-evidence-section"),
                 html.Section([
                     html.Div("ASK THE STUDIO", className="eyebrow dark-eyebrow"),
@@ -2427,7 +2591,7 @@ app.layout = html.Div(
                         html.A("Open full methods guide", href="#models-data-validation-guide", className="secondary-button analyst-guide-link"),
                     ], className="analyst-actions"),
                     html.Div(id="analyst-answer", className="analyst-answer"),
-                    html.P("Grounding boundary: this release is deterministic retrieval + evidence composition, not an external generative LLM. If evidence is absent, it says so instead of filling the gap from general knowledge.", className="control-help"),
+                    html.P("Grounding boundary: this release is deterministic retrieval + evidence composition, not an external generative large language model (LLM). If evidence is absent, it says so instead of filling the gap from general knowledge.", className="control-help"),
                 ], className="download-section analyst-section"),
                 html.Section(
                     [
@@ -2486,7 +2650,7 @@ app.layout = html.Div(
                                     inline=True,
                                     className="radio-row",
                                 ),
-                                html.Label("Initial SOC for selected historical day (%)"),
+                                html.Label("Initial state of charge (SOC) for selected historical day (%)"),
                                 dcc.Slider(
                                     id="soc-input",
                                     min=10,
@@ -2535,7 +2699,7 @@ app.layout = html.Div(
                                 html.Div(id="kpi-grid", className="kpi-grid"),
                                 html.Div("Forecast uncertainty and battery firming", className="chart-title"),
                                 html.Div(
-                                    "Historical selected-day uncertainty uses the leakage-safe rolling residual benchmark. Forecast-day operations below use the Stage 14 conditional P10/P50/P90 layer; neither is a weather-ensemble forecast.",
+                                    "Historical selected-day uncertainty uses the leakage-safe rolling residual benchmark. Forecast-day operations below use the conditional P10/P50/P90 layer; neither is a weather-ensemble forecast.",
                                     className="chart-subtitle",
                                 ),
                                 dcc.Graph(id="generation-chart", config={"displaylogo": False}),
@@ -2594,7 +2758,7 @@ app.layout = html.Div(
                 ),
                 html.Section(
                     [
-                        html.H2("Seasonal & forecast-defined regime comparison (Stage 15)"),
+                        html.H2("Seasonal & forecast-defined regime comparison"),
                         html.P(
                             "Compare the frozen 100 MW 50/50 reference across calendar seasons and forecast-defined renewable operating regimes. Regime labels use only V2 forecast quantities; they are not formal meteorological weather-regime classifications.",
                             className="section-copy",
@@ -2652,15 +2816,15 @@ app.layout = html.Div(
                                     dcc.Input(id="risk-consequence-input", type="number", min=0, step=10, value=100),
                                 ]),
                                 html.Div([
-                                    html.Label("Selected-design CAPEX (£m)"),
+                                    html.Label("Capital expenditure (CAPEX, £m)"),
                                     dcc.Input(id="risk-capex-input", type="number", min=0, step=1, value=25),
                                 ]),
                                 html.Div([
-                                    html.Label("Selected-design fixed OPEX (£m/year)"),
+                                    html.Label("Fixed operating expenditure (OPEX, £m/year)"),
                                     dcc.Input(id="risk-fixed-opex-input", type="number", min=0, step=0.1, value=0.5),
                                 ]),
                                 html.Div([
-                                    html.Label("Variable OPEX (£/MWh throughput)"),
+                                    html.Label("Variable operating expenditure (OPEX, £/MWh throughput)"),
                                     dcc.Input(id="risk-variable-opex-input", type="number", min=0, step=0.5, value=2.0),
                                 ]),
                             ],
@@ -2688,7 +2852,7 @@ app.layout = html.Div(
                             className="design-controls",
                         ),
                         html.Div(
-                            "For comparison across battery configurations, CAPEX and fixed OPEX are scaled in proportion to candidate MWh relative to the Stage A selected design. This is a transparent screening assumption, not a supplier cost curve.",
+                            "For comparison across battery configurations, CAPEX and fixed OPEX are scaled in proportion to candidate MWh relative to the selected stable design. This is a transparent screening assumption, not a supplier cost curve.",
                             className="control-help",
                         ),
                         html.Div(id="risk-value-note", className="recommendation-box"),
@@ -2703,16 +2867,16 @@ app.layout = html.Div(
                             figure=_empty_figure("Risk-value appraisal is loading."),
                             config={"displaylogo": False},
                         ),
-                        html.Div("CAPEX and consequence-value sensitivity", className="chart-title"),
+                        html.Div("Capital expenditure (CAPEX) and consequence-value sensitivity", className="chart-title"),
                         html.Div("This heatmap varies the selected-design CAPEX by ±25% and consequence value from 50% to 150% of the entered scenario value while holding other assumptions constant.", className="chart-subtitle"),
                         dcc.Graph(id="risk-value-sensitivity", figure=_empty_figure("Sensitivity analysis is loading."), config={"displaylogo": False}),
                         _reader_explanation("How the investment result changes when battery CAPEX and the assumed value of avoiding renewable forecast error are varied.", "This separates a robust result from one that only works under a narrow set of assumptions.", "Read the heatmap from the base-case cell outward. If the result stays attractive across a wide area, the case is more resilient; if it flips quickly, the economics are assumption-sensitive."),
                         html.Button("Download risk-value scenario JSON", id="risk-value-download-button", n_clicks=0, className="secondary-button"),
                         dcc.Download(id="risk-value-download"),
                         html.Hr(),
-                        html.H3("Market-backed investment case (Stage 10)"),
+                        html.H3("Market-backed investment case"),
                         html.P(
-                            "This section replaces the abstract consequence-value benefit with the realised value of the prior-date forecast-selected wholesale battery schedule. It reuses CAPEX, fixed OPEX, asset life, discount rate and degradation entered above. The historical market dispatch already includes the frozen £2/MWh throughput-cost assumption.",
+                            "This section replaces the abstract consequence-value benefit with the realised value of the prior-date forecast-selected wholesale battery schedule. It reuses capital expenditure (CAPEX), fixed operating expenditure (OPEX), asset life, discount rate and degradation entered above. The historical market dispatch already includes the frozen £2/MWh throughput-cost assumption.",
                             className="section-copy",
                         ),
                         html.Div(
@@ -2736,9 +2900,9 @@ app.layout = html.Div(
                         ),
                         html.Div(id="market-investment-note", className="recommendation-box"),
                         html.Div(id="market-investment-kpi-grid", className="kpi-grid"),
-                        html.Div("Market-backed lifecycle NPV by evidence case", className="chart-title"),
+                        html.Div("Market-backed lifecycle net present value (NPV) by evidence case", className="chart-title"),
                         html.Div(
-                            "The 420-day wholesale cases are the core investment evidence. Quick Reserve is shown only as an Apr–Jun aligned price-taker availability upside because asset-specific EAC acceptance is not yet identified.",
+                            "The 420-day wholesale cases are the core investment evidence. Quick Reserve (QR) is shown only as an Apr–Jun aligned price-taker availability upside because asset-specific Enduring Auction Capability (EAC) acceptance is not yet identified.",
                             className="chart-subtitle",
                         ),
                         dcc.Graph(
@@ -2771,9 +2935,9 @@ app.layout = html.Div(
                         ),
                         dcc.Download(id="market-investment-download"),
                         html.Hr(),
-                        html.H3("Project-finance screening (Stage 12)"),
+                        html.H3("Project-finance screening"),
                         html.P(
-                            "This layer converts the market-backed operating evidence into a simplified debt/equity financing screen. The Stage 10 forecast-selected wholesale case is the finance base; Stage 11 multi-service values are displayed only as perfect-information upside cases.",
+                            "This layer converts the market-backed operating evidence into a simplified debt/equity financing screen. It reports net present value (NPV), internal rate of return (IRR), debt service coverage ratio (DSCR) and loan life coverage ratio (LLCR). The forecast-selected wholesale case is the finance base; multi-service values are displayed only as separately labelled perfect-information upside cases.",
                             className="section-copy",
                         ),
                         html.Div([
@@ -2786,20 +2950,20 @@ app.layout = html.Div(
                             html.Div([html.Label("Year-1 capital allowance (%)"), dcc.Input(id="finance-allowance-year1-input", type="number", min=0, max=100, step=5, value=0)]),
                             html.Div([html.Label("Remaining allowance period (years)"), dcc.Input(id="finance-allowance-years-input", type="number", min=0, step=1, value=10)]),
                             html.Div([html.Label("Equity hurdle rate (%)"), dcc.Input(id="finance-equity-hurdle-input", type="number", min=-99, step=1, value=12)]),
-                            html.Div([html.Label("DSCR covenant threshold (x)"), dcc.Input(id="finance-dscr-threshold-input", type="number", min=0.1, step=0.05, value=1.2)]),
+                            html.Div([html.Label("Debt service coverage ratio (DSCR) covenant threshold (x)"), dcc.Input(id="finance-dscr-threshold-input", type="number", min=0.1, step=0.05, value=1.2)]),
                         ], className="design-controls"),
                         html.Div(
-                            "Tax and capital-allowance inputs are transparent screening assumptions only. The model does not assert that a particular BESS qualifies for a UK allowance, and it excludes loss carry-forward, VAT, group relief, refinancing, hedging and debt sculpting.",
+                            "Tax and capital-allowance inputs are transparent screening assumptions only. The model does not assert that a particular battery energy storage system (BESS) qualifies for a UK allowance, and it excludes loss carry-forward, Value Added Tax (VAT), group relief, refinancing, hedging and debt sculpting.",
                             className="control-help",
                         ),
                         html.Div(id="project-finance-note", className="recommendation-box"),
                         html.Div(id="project-finance-kpi-grid", className="kpi-grid"),
                         html.Div("Project/equity value and base-case debt service", className="chart-title"),
                         dcc.Graph(id="project-finance-chart", figure=_empty_figure("Project-finance screening is loading."), config={"displaylogo": False}),
-                        _reader_explanation("How project value, equity value and debt service evolve under the selected financing assumptions.", "A technically profitable battery can still be difficult to finance if cash flow arrives at the wrong time or debt service is too demanding.", "Check project and equity value together, then compare operating cash flow with debt service. Weak DSCR periods matter even when headline NPV is positive."),
+                        _reader_explanation("How project value, equity value and debt service evolve under the selected financing assumptions.", "A technically profitable battery can still be difficult to finance if cash flow arrives at the wrong time or debt service is too demanding.", "Check project and equity value together, then compare operating cash flow with debt service. Weak debt service coverage ratio (DSCR) periods matter even when headline net present value (NPV) is positive."),
                         html.H4("Project-finance downside simulation"),
                         html.P(
-                            "The probabilistic finance case resamples the realised daily Stage 10 forecast-selected wholesale value in contiguous blocks and varies CAPEX, OPEX, availability, degradation and debt rate. Stage 11 ancillary-service upside is deliberately excluded from this base simulation.",
+                            "The probabilistic finance case resamples the realised daily forecast-selected wholesale value in contiguous blocks and varies CAPEX, OPEX, availability, degradation and debt rate. Perfect-information ancillary-service upside is deliberately excluded from this base simulation.",
                             className="section-copy",
                         ),
                         html.Div([
@@ -2815,9 +2979,9 @@ app.layout = html.Div(
                         html.Button("Download project-finance screening JSON", id="project-finance-download-button", n_clicks=0, className="secondary-button"),
                         dcc.Download(id="project-finance-download"),
                         html.Hr(),
-                        html.H3("Quantitative downside risk (Stage 6B)"),
+                        html.H3("Quantitative downside risk"),
                         html.P(
-                            "Run complete-day block-resampled Monte Carlo around the selected Stage A battery. Forecast-error dependence is preserved by sampling contiguous historical day blocks; CAPEX, consequence value, OPEX, availability and degradation use visible scenario distributions.",
+                            "Run complete-day block-resampled Monte Carlo around the selected stable-design battery. Forecast-error dependence is preserved by sampling contiguous historical day blocks; CAPEX, consequence value, OPEX, availability and degradation use visible scenario distributions.",
                             className="section-copy",
                         ),
                         html.Div(
@@ -2856,7 +3020,7 @@ app.layout = html.Div(
                         html.Div(id="downside-risk-kpi-grid", className="kpi-grid"),
                         html.Div("Probabilistic NPV distribution", className="chart-title"),
                         html.Div(
-                            "P10/P50/P90 are NPV quantiles. Tail loss uses the explicit convention investment loss = -NPV, so 95% CVaR is the average loss in the worst 5% of simulations.",
+                            "P10/P50/P90 are the 10th, 50th and 90th percentile net present value (NPV) quantiles. Tail loss uses the explicit convention investment loss = -NPV, so 95% conditional value at risk (CVaR) is the average loss in the worst 5% of simulations.",
                             className="chart-subtitle",
                         ),
                         dcc.Graph(
@@ -2909,7 +3073,7 @@ app.layout = html.Div(
                     [
                         html.H2("Historical grid imbalance & System Price"),
                         html.P(
-                            "For the selected historical day, the point forecast is treated as an illustrative contracted/scheduled export. Actual-minus-schedule energy is then settled at the official Elexon System Price. This is a BSC-style virtual benchmark, not an actual registered trading account or profit calculation.",
+                            "For the selected historical day, the point forecast is treated as an illustrative contracted/scheduled export. Actual-minus-schedule energy is then settled at the official Elexon System Price, with Great Britain Net Imbalance Volume (NIV) shown for context. This is a Balancing and Settlement Code (BSC)-style virtual benchmark, not an actual registered trading account or profit calculation.",
                             className="section-copy",
                         ),
                         html.Div(id="imbalance-note", className="scenario-note"),
@@ -2984,7 +3148,7 @@ app.layout = html.Div(
                         html.Hr(),
                         html.H3("Quick Reserve availability stacking"),
                         html.P(
-                            "This view adds NESO Quick Reserve availability value to the same physical battery used for wholesale arbitrage. It uses actual EAC PQR/NQR clearing prices (£/MW/h), whole-MW contracts and a configurable state-of-energy crossover guard. Utilisation revenue and activation energy are excluded.",
+                            "This view adds National Energy System Operator (NESO) Quick Reserve (QR) availability value to the same physical battery used for wholesale arbitrage. It uses actual Enduring Auction Capability (EAC) Positive Quick Reserve (PQR) / Negative Quick Reserve (NQR) clearing prices (£/MW/h), whole-MW contracts and a configurable state-of-energy crossover guard. Utilisation revenue and activation energy are excluded.",
                             className="section-copy",
                         ),
                         html.Div(
@@ -3012,7 +3176,7 @@ app.layout = html.Div(
                         html.Div(id="quick-reserve-kpi-grid", className="kpi-grid"),
                         html.Div("Quick Reserve prices, commitments and shared-battery SOC", className="chart-title"),
                         html.Div(
-                            "PQR is upward reserve and NQR is downward reserve. NQR commitments are plotted below zero only for visual separation. The wholesale schedule and reserve commitments share one BESS power and SOC budget.",
+                            "Positive Quick Reserve (PQR) is upward reserve and Negative Quick Reserve (NQR) is downward reserve. NQR commitments are plotted below zero only for visual separation. The wholesale schedule and reserve commitments share one battery energy storage system (BESS) power and state-of-charge (SOC) budget.",
                             className="chart-subtitle",
                         ),
                         dcc.Graph(
@@ -3030,13 +3194,13 @@ app.layout = html.Div(
                         html.Div(id="quick-reserve-predelivery-kpi-grid", className="kpi-grid"),
                         dcc.Graph(
                             id="quick-reserve-predelivery-chart",
-                            figure=_empty_figure("Pre-delivery QR capacity evidence is available on the locked Apr?Jun 2026 dates."),
+                            figure=_empty_figure("Pre-delivery QR capacity evidence is available on the locked Apr–Jun 2026 dates."),
                             config={"displaylogo": False},
                         ),
                         html.Hr(),
-                        html.H3("NESO multi-service stacking (Stage 11)"),
+                        html.H3("NESO multi-service stacking"),
                         html.P(
-                            "This view extends the shared-BESS optimiser to current EAC Quick Reserve, Slow Reserve, Dynamic Containment/Moderation/Regulation and, when explicitly enabled, BM-only Balancing Reserve. The same MW and SOC cannot be sold independently to simultaneous services.",
+                            "This view extends the shared battery energy storage system (BESS) optimiser to Enduring Auction Capability (EAC) Quick Reserve (QR), Slow Reserve (SR), Dynamic Containment / Moderation / Regulation and, when explicitly enabled, Balancing Mechanism (BM)-only Balancing Reserve (BR). The same MW and state-of-charge (SOC) headroom cannot be sold independently to simultaneous services.",
                             className="section-copy",
                         ),
                         dcc.Checklist(
@@ -3054,13 +3218,13 @@ app.layout = html.Div(
                         ),
                         dcc.Graph(
                             id="multiservice-chart",
-                            figure=_empty_figure("Stage 11 evidence is available for Apr-Jun 2026 historical dates."),
+                            figure=_empty_figure("Multi-service evidence is available for Apr–Jun 2026 historical dates."),
                             config={"displaylogo": False},
                         ),
                         html.Hr(),
-                        html.H3("Issue-time, acceptance-calibrated multi-service strategy (Stage 13)"),
+                        html.H3("Issue-time, acceptance-calibrated service strategy"),
                         html.P(
-                            "This view removes Stage 11 service-price perfect foresight. Capacity is chosen from prior-date wholesale and EAC price forecasts, the Stage B SOC reserve corridor and earlier-order acceptance evidence. Opportunity-cost bids are frozen before delivery and then scored against the subsequent auction outcome.",
+                            "This view removes service-price perfect foresight. Capacity is chosen from prior-date wholesale and EAC price forecasts, the reserve-readiness SOC corridor and earlier-order acceptance evidence. Opportunity-cost bids are frozen before delivery and then scored against the subsequent auction outcome.",
                             className="section-copy",
                         ),
                         html.Div([
@@ -3071,7 +3235,7 @@ app.layout = html.Div(
                         html.Div(_stage13_evidence_cards(), className="kpi-grid"),
                         html.Div("Issue-time value capture, product mix and acceptance calibration", className="chart-title"),
                         html.Div(
-                            "The top panel compares the Stage B wholesale baseline, Stage 13 obtainable-style screens and Stage 11 perfect-information upper bounds. The lower panels show non-BM ancillary value by product and held-out acceptance calibration.",
+                            "The top panel compares the reserve-aware wholesale baseline, issue-time acceptance-calibrated screens and perfect-information upper bounds. The lower panels show non-BM ancillary value by product and held-out acceptance calibration.",
                             className="chart-subtitle",
                         ),
                         dcc.Graph(id="stage13-evidence-chart", figure=_stage13_evidence_figure(), config={"displaylogo": False}),
@@ -3079,7 +3243,7 @@ app.layout = html.Div(
                         html.Hr(),
                         html.H3(f"Forecast-day market schedule · {LATEST_TARGET_DATE}"),
                         html.P(
-                            "This view combines the latest renewable forecast, the Stage B reserve corridor and a prior-data-only APX Market Index price forecast. It shows how much wholesale scheduling value is given up to preserve battery energy/headroom for renewable uncertainty.",
+                            "This view combines the latest renewable forecast, the reserve-readiness corridor and a prior-data-only APX Market Index price forecast. It shows how much wholesale scheduling value is given up to preserve battery energy/headroom for renewable uncertainty.",
                             className="section-copy",
                         ),
                         html.Div(id="forecast-market-note", className="scenario-note"),
@@ -3097,7 +3261,7 @@ app.layout = html.Div(
                     [
                         html.H2(f"Forecast-day operational planning & GB grid context · {LATEST_TARGET_DATE}"),
                         html.P(
-                            "This section carries forward the battery selected by the Future battery sizing benchmark and combines it with the latest V2 renewable forecast. Stage 14 adds a mix-aware conditional P10/P50/P90 uncertainty layer around the V2 schedule; P10/P90 drive the rolling reserve/headroom calculation while the V2 point forecast remains the scheduled export.",
+                            "This section carries forward the battery selected by the Future battery sizing benchmark and combines it with the latest V2 renewable forecast. The probabilistic layer adds a mix-aware conditional P10/P50/P90 uncertainty range around the V2 schedule; P10/P90 drive the rolling reserve/headroom calculation while the V2 point forecast remains the scheduled export.",
                             className="section-copy",
                         ),
                         html.Div(
@@ -3118,8 +3282,8 @@ app.layout = html.Div(
                         html.Button("Refresh forecast-day planning", id="tomorrow-button", n_clicks=0, className="primary-button"),
                         html.Div(id="tomorrow-note", className="scenario-note"),
                         html.Div(id="tomorrow-kpi-grid", className="kpi-grid"),
-                        html.Div("Forecast-day renewable schedule with Stage 14 P10/P50/P90", className="chart-title"),
-                        html.Div("The dashed line remains the deterministic V2 scheduled export. P10/P50/P90 come from a mix-aware conditional residual quantile model with conformal calibration. They are statistical forecast quantiles, not ECMWF ensemble members.", className="chart-subtitle"),
+                        html.Div("Forecast-day renewable schedule with P10/P50/P90", className="chart-title"),
+                        html.Div("The dashed line remains the deterministic V2 scheduled export. P10/P50/P90 come from a mix-aware conditional residual quantile model with conformal calibration. They are statistical forecast quantiles, not European Centre for Medium-Range Weather Forecasts (ECMWF) ensemble members.", className="chart-subtitle"),
                         dcc.Graph(id="tomorrow-forecast-chart", figure=_empty_figure("Forecast-day planning will load automatically."), config={"displaylogo": False}),
                         _reader_explanation("The latest wind-and-solar schedule together with P10, P50 and P90 statistical uncertainty for each half-hour.", "The distance between P10 and P90 is the uncertainty the battery may need to cover. It is more useful for reserve planning than a single point forecast alone.", "Use the dashed schedule as the planned export. A wide P10-P90 band means more uncertainty; asymmetric bands show whether the bigger risk is renewable under-production or over-production."),
                         html.Div("Rolling battery reserve and headroom requirements", className="chart-title"),
@@ -3147,7 +3311,7 @@ app.layout = html.Div(
                         html.Div(id="spatial-zone-kpi-grid", className="kpi-grid"),
                         html.Div("Weather-informed spatial renewable allocation", className="chart-title"),
                         html.Div(
-                            "The allocation combines DESNZ REPD operational-capacity proxy weights with the same ten issue-time weather locations used by V2. It is reconciled to the GB forecast and is not observed city generation.",
+                            "The allocation combines Department for Energy Security and Net Zero (DESNZ) Renewable Energy Planning Database (REPD) operational-capacity proxy weights with the same ten issue-time weather locations used by V2. It is reconciled to the Great Britain (GB) forecast and is not observed city generation.",
                             className="chart-subtitle",
                         ),
                         dcc.Graph(
@@ -3158,7 +3322,7 @@ app.layout = html.Div(
                         _reader_explanation("An indicative share of the national wind and solar forecast allocated to the selected zone using capacity and weather proxies.", "It helps compare regional timing and renewable concentration without pretending that national data is a measured city forecast.", "Use the shape and relative contribution, not the exact MW as a site forecast. The ten zones are designed to reconcile back to the national total."),
                         html.Div("Underlying demand, embedded renewables and net load", className="chart-title"),
                         html.Div(
-                            "This second chart uses the full embedded wind/solar V2 spatial allocation, not the user-scaled virtual portfolio. The underlying-demand proxy is reconstructed from NESO National Demand plus embedded wind/solar, then spatially allocated. Subtracting the same embedded forecast yields a zone net-load proxy whose ten-zone sum reconciles to NESO National Demand; it is not a measured city feeder trace.",
+                            "This second chart uses the full embedded wind/solar V2 spatial allocation, not the user-scaled virtual portfolio. The underlying-demand proxy is reconstructed from National Energy System Operator (NESO) National Demand plus embedded wind/solar, then spatially allocated. Subtracting the same embedded forecast yields a zone net-load proxy whose ten-zone sum reconciles to NESO National Demand; it is not a measured city feeder trace.",
                             className="chart-subtitle",
                         ),
                         dcc.Graph(
@@ -3214,7 +3378,7 @@ app.layout = html.Div(
                             className="section-copy",
                         ),
                         html.P(
-                            "The full 450-day out-of-sample archive supports historical analysis. Forecast-day planning now uses the Stage 14 conditional P10/P50/P90 post-processor around the latest V2 schedule, while official NESO demand provides GB system context. A future weather-ensemble layer could be compared with, not silently substituted for, this statistical uncertainty evidence.",
+                            "The full 450-day out-of-sample archive supports historical analysis. Forecast-day planning now uses the conditional P10/P50/P90 post-processor around the latest V2 schedule, while official NESO demand provides GB system context. A future weather-ensemble layer could be compared with, not silently substituted for, this statistical uncertainty evidence.",
                             className="section-copy",
                         ),
                     ],
@@ -3222,7 +3386,7 @@ app.layout = html.Div(
                 ),
             ]
         ),
-        html.Footer("Installable PWA · standalone analytical prototype · source data exchanged through a versioned file contract"),
+        html.Footer("Installable progressive web app (PWA) · research-grade analytical demonstrator · versioned evidence and data contracts"),
     ],
     className="app-shell",
 )
@@ -3232,7 +3396,7 @@ def _build_analyst_records(selected, asset_data, degradation, stochastic):
     records = []
     p14 = PROBABILISTIC_SUMMARY["locked_reference"]["mixed_50_50"]
     records.append(EvidenceRecord(
-        key="stage14_forecast", title="Stage 14 probabilistic renewable forecast",
+        key="stage14_forecast", title="Probabilistic renewable forecast",
         summary=f"The mixed 50/50 P10-P90 model is a prior-data residual post-processor around the frozen V2 schedule. Locked coverage is {p14['observed_p10_p90_coverage_pct']:.1f}% with mean width {p14['mean_p10_p90_width_cf']:.4f} CF.",
         facts={"locked days": int(p14["days"]), "P10-P90 coverage": f"{p14['observed_p10_p90_coverage_pct']:.1f}%", "P50 MAE": f"{p14['p50_mae_cf']:.4f} CF"},
         sources=("models/probabilistic_quantiles.joblib", "outputs/probabilistic/stage14_summary.json", "data/historical_backtest.csv"),
@@ -3243,30 +3407,30 @@ def _build_analyst_records(selected, asset_data, degradation, stochastic):
     asset = get_asset(asset_data, selected)
     if asset:
         records.append(EvidenceRecord(
-            key="stage18_asset", title=f"Stage 18 saved asset: {asset.asset_name}",
+            key="stage18_asset", title=f"Saved asset: {asset.asset_name}",
             summary=f"Saved technical scenario: {asset.power_mw:.1f} MW / {asset.nameplate_energy_mwh:.1f} MWh at {100*asset.state_of_health_fraction:.0f}% SOH, with {asset.grid_import_limit_mw:.1f} MW import and {asset.grid_export_limit_mw:.1f} MW export limits.",
             facts={"location": asset.location_label or "not specified", "available energy": f"{asset.available_energy_mwh:.1f} MWh", "effective charge/discharge": f"{asset.effective_charge_power_mw:.1f}/{asset.effective_discharge_power_mw:.1f} MW"},
-            sources=("browser-local Stage 18 asset-store",),
+            sources=("browser-local asset store",),
             limitations=("Technical scenario metadata only; no site metering, connection study or local error history is inferred.",),
             keywords=("asset site bess battery grid import export location saved configuration",),
         ))
 
     if degradation:
         records.append(EvidenceRecord(
-            key="stage19_degradation", title="Stage 19 degradation and SOH screen",
+            key="stage19_degradation", title="Degradation and SOH screen",
             summary=f"Current assumptions imply marginal wear cost £{degradation.get('marginal_wear_cost_gbp_per_mwh_throughput',0):.2f}/MWh throughput and indicative end-year SOH {100*degradation.get('end_state_of_health_fraction',0):.1f}%.",
             facts={"annual EFC": f"{degradation.get('equivalent_full_cycles',0):.0f}", "usable energy": f"{degradation.get('usable_energy_mwh',0):.1f} MWh", "annual wear allocation": f"£{degradation.get('estimated_wear_cost_gbp',0):,.0f}"},
-            sources=("engine/degradation.py", "Stage 19 user assumptions"),
+            sources=("engine/degradation.py", "user degradation assumptions"),
             limitations=("Throughput + calendar screen; not chemistry-, temperature- or warranty-specific.",),
             keywords=("degradation wear soh health cycle cycling lifetime replacement cost",),
             formulas=("EFC = total throughput / (2 x usable energy)", "marginal wear cost = replacement cost / assumed lifetime total throughput"),
         ))
     if stochastic:
         records.append(EvidenceRecord(
-            key="stage20_stochastic_bm", title="Stage 20 stochastic wholesale + BM screen",
+            key="stage20_stochastic_bm", title="Stochastic wholesale + BM screen",
             summary=f"Latest seven-scenario screen: expected net value £{stochastic.get('expected_net_value_gbp',0):,.0f}; P10/P50/P90 £{stochastic.get('p10_net_value_gbp',0):,.0f}/£{stochastic.get('p50_net_value_gbp',0):,.0f}/£{stochastic.get('p90_net_value_gbp',0):,.0f}; 90% CVaR loss £{stochastic.get('cvar_loss_gbp',0):,.0f}.",
             facts={"average BM up offer": f"{stochastic.get('average_bm_up_offer_mw',0):.1f} MW", "average BM down offer": f"{stochastic.get('average_bm_down_offer_mw',0):.1f} MW", "throughput cost": f"£{stochastic.get('throughput_cost_gbp_per_mwh',0):.2f}/MWh"},
-            sources=("data/latest_market_price_forecast.csv", "engine/stochastic_bidding.py", "Stage 20 user BM scenarios"),
+            sources=("data/latest_market_price_forecast.csv", "engine/stochastic_bidding.py", "user BM scenarios"),
             limitations=("BM activation probability/value are user scenarios, not BOA acceptance or utilisation forecasts.",),
             keywords=("stochastic market wholesale bm balancing mechanism bid offer cvar risk dispatch",),
             formulas=("max expected net value - risk_aversion x CVaR(loss), subject to scenario-wise SOC and shared MW constraints",),
@@ -3275,7 +3439,7 @@ def _build_analyst_records(selected, asset_data, degradation, stochastic):
     mi = MARKET_INVESTMENT_SUMMARY["scenarios"]["forecast_wholesale_420d"]
     mia = MARKET_INVESTMENT_SUMMARY["assumptions"]
     records.append(EvidenceRecord(
-        key="stage10_investment", title="Stage 10 market-backed investment case",
+        key="stage10_investment", title="Market-backed investment case",
         summary=f"The 420-day forecast-selected wholesale case provides about £{mi['annual_operating_value_gbp']/1e6:.2f}m/year but has NPV £{mi['npv_gbp']/1e6:.1f}m and BCR {mi['benefit_cost_ratio']:.2f} under the default cost assumptions. The gap is driven primarily by lifecycle cost relative to operating value.",
         facts={"CAPEX": f"£{mia['total_capex_gbp']/1e6:.1f}m", "fixed OPEX": f"£{mia['fixed_opex_gbp_per_year']/1e6:.2f}m/y", "break-even operating value": f"£{mi['minimum_annual_market_value_for_zero_npv_gbp']/1e6:.2f}m/y", "max CAPEX at NPV=0": f"£{mi['maximum_capex_for_zero_npv_gbp']/1e6:.2f}m"},
         sources=("outputs/market_investment/market_investment_summary.json", "outputs/market_optimisation/pre_delivery_strategy_daily.csv"),
@@ -3286,7 +3450,7 @@ def _build_analyst_records(selected, asset_data, degradation, stochastic):
     pf = PROJECT_FINANCE_REFERENCE["scenarios"]["forecast_wholesale_base"]
     pfa = PROJECT_FINANCE_REFERENCE["default_assumptions"]
     records.append(EvidenceRecord(
-        key="stage12_finance", title="Stage 12 project-finance screen",
+        key="stage12_finance", title="Project-finance screen",
         summary=f"The conservative wholesale finance base has project NPV £{pf['project_npv_gbp']/1e6:.1f}m, equity IRR {100*pf['equity_irr_fraction']:.1f}%, minimum DSCR {pf['minimum_dscr']:.2f}x and LLCR {pf['llcr']:.2f}x.",
         facts={"debt": f"{100*pfa['debt_fraction']:.0f}%", "interest": f"{100*pfa['debt_interest_rate']:.1f}%", "tenor": f"{pfa['debt_tenor_years']} y", "annual debt service": f"£{pf['annual_debt_service_gbp']/1e6:.2f}m"},
         sources=("outputs/project_finance/project_finance_summary.json",),
@@ -3297,7 +3461,7 @@ def _build_analyst_records(selected, asset_data, degradation, stochastic):
 
     s13 = STAGE13_SUMMARY["scenarios"]["non_bm"]
     records.append(EvidenceRecord(
-        key="stage13_ancillary", title="Stage 13 issue-time ancillary-service strategy",
+        key="stage13_ancillary", title="Issue-time ancillary-service strategy",
         summary=f"The non-BM May-Jun screen annualises to about £{s13['annualised_acceptance_calibrated_total_gbp']/1e6:.2f}m/year, including £{s13['annualised_acceptance_calibrated_ancillary_gbp']/1e6:.2f}m/year acceptance-calibrated ancillary value, capturing {s13['capture_vs_stage11_perfect_information_pct']:.1f}% of the matching perfect-information upper bound.",
         facts={"eligible days": int(s13["days"]), "mean predicted acceptance": f"{s13['mean_predicted_acceptance_pct']:.1f}%", "expected accepted MW-hours": f"{s13['expected_accepted_mw_hours']:,.0f}"},
         sources=("outputs/multiservice/stage13_issue_time_multiservice_summary.json", "outputs/multiservice/stage13_acceptance_summary.json", "NESO Enduring Auction Capability Sell Orders / clearing results"),
@@ -3465,7 +3629,7 @@ def run_stochastic_bid_screen(_clicks, selected, asset_data, degradation, sigma,
         ("P10 / P50 / P90", f"£{summary['p10_net_value_gbp']:,.0f} / £{summary['p50_net_value_gbp']:,.0f} / £{summary['p90_net_value_gbp']:,.0f}", "Scenario-value distribution"),
         ("90% CVaR loss", f"£{summary['cvar_loss_gbp']:,.0f}", "Tail cost used in risk penalty"),
         ("Avg BM up / down offer", f"{summary['average_bm_up_offer_mw']:.1f} / {summary['average_bm_down_offer_mw']:.1f} MW", "Shared with wholesale schedule"),
-        ("Wear + other throughput", f"£{summary['throughput_cost_gbp_per_mwh']:,.2f}/MWh", "Stage 19 wear carried into dispatch"),
+        ("Wear + other throughput", f"£{summary['throughput_cost_gbp_per_mwh']:,.2f}/MWh", "Battery wear carried into dispatch"),
     ]
     summary_ui = html.Div([html.Div([html.Div(a, className="kpi-label"), html.Div(b, className="kpi-value"), html.Div(c, className="kpi-help")], className="kpi-card") for a,b,c in cards], className="stoch-kpi-grid")
     fig = go.Figure()
@@ -3574,7 +3738,7 @@ def update_regime_comparison(start_date, end_date, group_column):
             className="scenario-note-line",
         ),
         html.Div(
-            f"Stage 14 P10/P90 diagnostics are available for {stage14_days} locked days inside the selected range; market-value fields are available only where the 420-day pre-delivery market backtest exists.",
+            f"P10/P90 diagnostics are available for {stage14_days} locked days inside the selected range; market-value fields are available only where the 420-day pre-delivery market backtest exists.",
             className="scenario-note-line uncertainty-line",
         ),
     ])
@@ -3711,7 +3875,7 @@ def update_risk_value(
         _kpi_card(
             "Selected design",
             f"{selected['power_mw']:.0f} MW / {selected['energy_mwh']:.0f} MWh",
-            f"Stage A {design_target_pct:.0f}% / {design_reliability_pct:.0f}% gate",
+            f"Stable-design {design_target_pct:.0f}% / {design_reliability_pct:.0f}% gate",
         ),
         _kpi_card(
             "Annual avoided exposure",
@@ -3732,7 +3896,7 @@ def update_risk_value(
         _kpi_card("Simple payback", payback_text, "Undiscounted net benefit recovery"),
         _kpi_card("Break-even consequence", break_even_text, "£/MWh required for NPV = 0"),
         _kpi_card("Max CAPEX at NPV = 0", f"£{max_capex / 1e6:.2f}m", "Switching value under current assumptions"),
-        _kpi_card("Expected availability", f"{float(availability_pct):.0f}%", "Stage 6A expected-availability scaling assumption"),
+        _kpi_card("Expected availability", f"{float(availability_pct):.0f}%", "Expected-availability scaling assumption"),
     ]
     status = str(row["frontier_status"])
     if bool(row["diminishing_return"]):
@@ -3740,11 +3904,11 @@ def update_risk_value(
     elif status == "dominated":
         decision = "Under these assumptions, at least one tested battery configuration costs no more while avoiding at least as much expected loss, so the selected technical design is economically dominated."
     else:
-        decision = "Under these assumptions, the selected Stage A technical design is not economically dominated by another tested configuration."
+        decision = "Under these assumptions, the selected stable-design battery is not economically dominated by another tested configuration."
     note = html.Div([
         html.Strong(decision),
         html.P(
-            "Monetary results are scenario-based screening outputs. The consequence value is user supplied, and candidate CAPEX/fixed OPEX are scaled from the selected design in proportion to MWh. The frontier includes all tested configurations, including some that do not meet the selected Stage A firming gate, so economic efficiency alone does not make a design technically acceptable. No actual market-revenue claim is made."
+            "Monetary results are scenario-based screening outputs. The consequence value is user supplied, and candidate CAPEX/fixed OPEX are scaled from the selected design in proportion to MWh. The frontier includes all tested configurations, including some that do not meet the selected stable-design firming gate, so economic efficiency alone does not make a design technically acceptable. No actual market-revenue claim is made."
         ),
     ])
     figure = _risk_value_frontier_figure(
@@ -3839,7 +4003,7 @@ def update_market_backed_investment(
     ):
         message = (
             "Market-backed investment evidence is currently frozen for the default "
-            "100 MW 50/50 portfolio and 90%/90% Stage A design gate. Change the controls "
+            "100 MW 50/50 portfolio and 90%/90% stable-design gate. Change the controls "
             "back to that reference case to avoid unsupported revenue scaling."
         )
         return message, [], _empty_figure(message)
@@ -3857,27 +4021,42 @@ def update_market_backed_investment(
     base = scenarios["Forecast wholesale · 420d"]
     reserve = scenarios["Reserve-aware wholesale · 420d"]
     qr_upside = scenarios["Apr–Jun wholesale + QR upside"]
+    assurance = assure_market_investment(
+        base["annual_operating_value_gbp"],
+        assumptions,
+        reported=base,
+        daily_evidence=PREDELIVERY_DAILY,
+    )
     payback = base["simple_payback_years"]
     payback_text = "Not within life" if payback is None else f"{int(payback)} years"
     cards = [
-        _kpi_card("Forecast wholesale value", f"£{base['annual_operating_value_gbp']/1e6:.2f}m/yr", "420-day forecast-selected strategy"),
-        _kpi_card("Market-backed NPV", f"£{base['npv_gbp']/1e6:.2f}m", "Core 420-day wholesale evidence"),
-        _kpi_card("Market-backed BCR", f"{base['benefit_cost_ratio']:.2f}", "PV market value / PV lifecycle cost"),
-        _kpi_card("Simple payback", payback_text, "Forecast-selected wholesale base"),
-        _kpi_card("Break-even operating value", f"£{base['minimum_annual_market_value_for_zero_npv_gbp']/1e6:.2f}m/yr", "Year-one value required for NPV = 0"),
-        _kpi_card("Max CAPEX at NPV = 0", f"£{base['maximum_capex_for_zero_npv_gbp']/1e6:.2f}m", "Wholesale base switching value"),
-        _kpi_card("Reserve-aware NPV", f"£{reserve['npv_gbp']/1e6:.2f}m", "420-day Stage B reserve-aware schedule"),
-        _kpi_card("QR upside NPV", f"£{qr_upside['npv_gbp']/1e6:.2f}m", "Apr–Jun aligned price-taker screening only"),
+        _kpi_card("Forecast-selected wholesale value", _format_gbp_m(base["annual_operating_value_gbp"], suffix="/yr"), "Annualised from 420 unique historical decision days"),
+        _kpi_card("Market-backed NPV", _format_gbp_m(base["npv_gbp"]), "Checked arithmetic; economic result below break-even"),
+        _kpi_card("Benefit-cost ratio (BCR)", f"{base['benefit_cost_ratio']:.2f}", "PV operating value / PV lifecycle cost"),
+        _kpi_card("Undiscounted payback", payback_text, "Cumulative nominal cash flow; not discounted payback"),
+        _kpi_card("Break-even operating value", _format_gbp_m(base["minimum_annual_market_value_for_zero_npv_gbp"], suffix="/yr"), "Year-one value required for NPV = 0"),
+        _kpi_card("Max CAPEX at NPV = 0", _format_gbp_m(base["maximum_capex_for_zero_npv_gbp"]), "Wholesale-base switching value"),
+        _kpi_card("Reserve-aware NPV", _format_gbp_m(reserve["npv_gbp"]), "Reserve-readiness corridor preserved"),
+        _kpi_card("QR upside NPV", _format_gbp_m(qr_upside["npv_gbp"]), "Apr–Jun price-taker screening only"),
     ]
     note = html.Div([
-        html.Strong(
-            "The market-backed base case uses the realised value of schedules selected from prior-date APX Market Index forecasts; it does not use the Stage 6 consequence-value assumption."
+        _market_assurance_panel(assurance),
+        html.P(
+            "Why it is negative: the checked present value of the forecast-selected wholesale cash flow is "
+            "well below the entered CAPEX plus lifecycle OPEX. This is an unattractive screening outcome "
+            "under the current assumptions, not a sign that the app silently failed.",
+            className="section-copy",
         ),
         html.P(
-            "The 420-day forecast-selected wholesale and reserve-aware wholesale cases are the core evidence. The £2/MWh throughput-cost assumption is already embedded in those daily operating values, so the Stage 6 variable-OPEX control is not applied again."
+            "The core evidence uses schedules selected from prior-date APX Market Index forecasts. The £2/MWh "
+            "throughput-cost assumption is already included in those daily values and is not charged twice.",
+            className="section-copy",
         ),
         html.P(
-            "Quick Reserve is shown only as an Apr–Jun aligned price-taker availability upside. It is excluded from the core valuation and probabilistic base because asset-specific EAC bid acceptance has not been identified. These remain pre-feasibility results, not bankable revenue forecasts."
+            "Quick Reserve remains a separately labelled Apr–Jun price-taker upside case. It is not injected "
+            "into the core NPV or Monte Carlo because asset-specific auction acceptance is not established. "
+            "Arithmetic assurance does not make this a bankable revenue forecast.",
+            className="section-copy",
         ),
     ])
     return note, cards, _market_investment_figure(scenarios)
@@ -3938,7 +4117,7 @@ def run_market_backed_monte_carlo(
             className="scenario-note-line",
         ),
         html.Div(
-            f"Expected availability is centred on {float(availability_pct):.0f}% with a ±5 percentage-point triangular range. CAPEX, fixed OPEX and degradation use the Stage 10 screening distributions; Quick Reserve is excluded from every draw.",
+            f"Expected availability is centred on {float(availability_pct):.0f}% with a ±5 percentage-point triangular range. CAPEX, fixed OPEX and degradation use the market-investment screening distributions; Quick Reserve is excluded from every draw.",
             className="scenario-note-line uncertainty-line",
         ),
         html.Div(
@@ -4049,7 +4228,7 @@ def update_project_finance(
     corporation_tax_pct, allowance_year1_pct, allowance_remaining_years, equity_hurdle_pct, dscr_threshold,
 ):
     if not _market_investment_reference_supported(portfolio_type, capacity_mw, wind_share_pct, design_target_pct, design_reliability_pct):
-        message = "Stage 12 finance evidence is currently frozen to the default 100 MW 50/50 portfolio and 90%/90% Stage A design gate; change controls back to that reference to view finance metrics."
+        message = "Finance evidence is currently frozen to the default 100 MW 50/50 portfolio and 90%/90% stable-design gate; change controls back to that reference to view finance metrics."
         return message, [], _empty_figure(message)
     try:
         assumptions = _project_finance_assumptions(
@@ -4065,26 +4244,30 @@ def update_project_finance(
     base = scenarios["Forecast wholesale base"]
     calibrated = scenarios["Stage 13 non-BM calibrated"]
     upside = scenarios["Stage 11 non-BM upside"]
+    assurance = assure_project_finance(base, assumptions)
+
     def irr_text(value):
         return "No finite IRR" if value is None else f"{100.0*value:.1f}%"
+
     cards = [
-        _kpi_card("Base project NPV", f"£{base['project_npv_gbp']/1e6:.2f}m", "Stage 10 forecast-selected wholesale base"),
-        _kpi_card("Base project IRR", irr_text(base["project_irr_fraction"]), f"Project discount rate {float(discount_rate_pct):.1f}%"),
-        _kpi_card("Base equity IRR", irr_text(base["equity_irr_fraction"]), f"Equity hurdle {float(equity_hurdle_pct):.1f}%"),
-        _kpi_card("Debt amount", f"£{base['debt_amount_gbp']/1e6:.2f}m", f"{float(debt_share_pct):.0f}% debt share"),
-        _kpi_card("Annual debt service", f"£{base['annual_debt_service_gbp']/1e6:.2f}m/yr", "Constant-annuity debt screening"),
+        _kpi_card("Wholesale-base project NPV", _format_gbp_m(base["project_npv_gbp"]), "Full project cash-flow series independently reconciled"),
+        _kpi_card("Wholesale-base project IRR", irr_text(base["project_irr_fraction"]), f"Project discount rate {float(discount_rate_pct):.1f}%"),
+        _kpi_card("Wholesale-base equity IRR", irr_text(base["equity_irr_fraction"]), f"Equity hurdle {float(equity_hurdle_pct):.1f}%"),
+        _kpi_card("Debt amount", _format_gbp_m(base["debt_amount_gbp"]), f"{float(debt_share_pct):.0f}% debt share"),
+        _kpi_card("Annual debt service", _format_gbp_m(base["annual_debt_service_gbp"], suffix="/yr"), "Constant-annuity debt screening"),
         _kpi_card("Minimum DSCR", f"{base['minimum_dscr']:.2f}x", f"Threshold {float(dscr_threshold):.2f}x"),
-        _kpi_card("LLCR", f"{base['llcr']:.2f}x", "PV of loan-life CFADS / initial debt"),
-        _kpi_card("Stage 13 calibrated NPV", f"£{calibrated['project_npv_gbp']/1e6:.2f}m", "Issue-time non-BM acceptance-calibrated screen"),
-        _kpi_card("Stage 13 equity IRR", irr_text(calibrated["equity_irr_fraction"]), f"Minimum DSCR {calibrated['minimum_dscr']:.2f}x"),
-        _kpi_card("Stage 11 upside project NPV", f"£{upside['project_npv_gbp']/1e6:.2f}m", "Perfect-information non-BM upper bound"),
-        _kpi_card("Stage 11 upside equity IRR", irr_text(upside["equity_irr_fraction"]), "Not bankable revenue evidence"),
+        _kpi_card("Loan life coverage ratio (LLCR)", f"{base['llcr']:.2f}x", "PV of loan-life CFADS / initial debt"),
+        _kpi_card("Issue-time calibrated NPV", _format_gbp_m(calibrated["project_npv_gbp"]), "Acceptance-calibrated non-BM screen"),
+        _kpi_card("Issue-time equity IRR", irr_text(calibrated["equity_irr_fraction"]), f"Minimum DSCR {calibrated['minimum_dscr']:.2f}x"),
+        _kpi_card("Perfect-information upper NPV", _format_gbp_m(upside["project_npv_gbp"]), "Non-BM service upper bound; not bankable revenue"),
+        _kpi_card("Perfect-information equity IRR", irr_text(upside["equity_irr_fraction"]), "Optimistic comparison only"),
     ]
     note = html.Div([
-        html.Div("The finance base remains the realised value of schedules selected from prior-date Stage 10 wholesale price forecasts.", className="scenario-note-line"),
-        html.Div("Stage 13 is shown as the stronger ancillary-service evidence case: capacity and bids are issue-time, and acceptance is calibrated from held-out historical orders. It is still a counterfactual expected-acceptance screen, not bankable debt-service revenue.", className="scenario-note-line uncertainty-warning"),
-        html.Div("Stage 11 remains a perfect-information upper bound. The gap between Stage 13 and Stage 11 shows how forecasting and auction acceptance materially reduce the apparent finance case.", className="scenario-note-line uncertainty-line"),
-        html.Div("Tax is a simplified scenario: interest reduces taxable income, capital allowance follows the entered screening schedule, and tax losses are not carried forward. This is not tax, accounting or lending advice.", className="scenario-note-line uncertainty-line"),
+        _project_finance_assurance_panel(assurance),
+        html.Div("The finance base uses the realised value of wholesale schedules selected from prior-date price forecasts.", className="scenario-note-line"),
+        html.Div("The issue-time service case adds empirical expected acceptance. It is a stronger evidence screen than perfect foresight, but remains counterfactual and is not contracted debt-service revenue.", className="scenario-note-line uncertainty-warning"),
+        html.Div("The perfect-information service case is retained only as an upper bound. The gap shows how forecasting and auction acceptance reduce the apparent finance case.", className="scenario-note-line uncertainty-line"),
+        html.Div("Tax remains a simplified scenario with no loss carry-forward. Calculation checks do not constitute tax, accounting, lending or investment advice.", className="scenario-note-line uncertainty-line"),
     ])
     return note, cards, _project_finance_figure(scenarios, assumptions)
 
@@ -4120,7 +4303,7 @@ def run_project_finance_mc_callback(
     if not _market_investment_reference_supported(
         portfolio_type, capacity_mw, wind_share_pct, design_target_pct, design_reliability_pct,
     ):
-        message = "Stage 12 Monte Carlo is available only for the frozen 100 MW 50/50, 90%/90% reference case."
+        message = "Project-finance Monte Carlo is available only for the frozen 100 MW 50/50, 90%/90% reference case."
         return message, [], _empty_figure(message), None
     try:
         assumptions = _project_finance_assumptions(
@@ -4155,7 +4338,7 @@ def run_project_finance_mc_callback(
             className="scenario-note-line",
         ),
         html.Div(
-            "The probabilistic finance base uses only realised value from the Stage 10 prior-date forecast-selected wholesale strategy. Stage 11 ancillary-service upside is excluded.",
+            "The probabilistic finance base uses only realised value from the prior-date forecast-selected wholesale strategy. Perfect-information ancillary-service upside is excluded.",
             className="scenario-note-line uncertainty-warning",
         ),
         html.Div(
@@ -4170,8 +4353,8 @@ def run_project_finance_mc_callback(
         "simulation_settings": {
             "simulations": int(simulations), "block_days": int(block_days), "seed": int(seed),
         },
-        "base_case": "Stage 10 forecast-selected wholesale operating value only",
-        "excluded_from_base": "Stage 11 multi-service availability upside",
+        "base_case": "forecast-selected wholesale operating value only",
+        "excluded_from_base": "perfect-information multi-service availability upside",
     }
     return note, cards, _project_finance_mc_figure(draws, summary), payload
 
@@ -4223,7 +4406,7 @@ def download_project_finance(
     payload = {
         "schema_version": "1.0",
         "stage": "12_project_finance_screening",
-        "reference_case": "100 MW mixed 50/50; 90%/90% Stage A gate; 25 MW / 200 MWh",
+        "reference_case": "100 MW mixed 50/50; 90%/90% stable-design gate; 25 MW / 200 MWh",
         "assumptions": {
             "total_capex_gbp": assumptions.total_capex_gbp,
             "fixed_opex_gbp_per_year": assumptions.fixed_opex_gbp_per_year,
@@ -4244,9 +4427,9 @@ def download_project_finance(
         "deterministic_scenarios": deterministic,
         "monte_carlo": mc_payload,
         "boundaries": [
-            "Stage 10 forecast-selected wholesale is the finance-base revenue case",
-            "Stage 13 multi-service cases use issue-time decisions and empirical expected acceptance; they are counterfactual screening evidence, not bankable contracted revenue",
-            "Stage 11 multi-service cases are perfect-information price-taker upper-bound screens",
+            "Forecast-selected wholesale is the finance-base revenue case",
+            "Issue-time multi-service cases use prior-data decisions and empirical expected acceptance; they are counterfactual screening evidence, not bankable contracted revenue",
+            "Perfect-information multi-service cases are price-taker upper-bound screens",
             "screening tax only; no loss carry-forward, VAT, group relief or legal eligibility opinion",
             "no refinancing, hedging, sculpted debt, working-capital or reserve-account model",
         ],
@@ -4576,15 +4759,15 @@ def run_quick_reserve_stacking(
     mean_pqr = float(triple["pqr_contracted_mw_hours"]) / hours
     mean_nqr = float(triple["nqr_contracted_mw_hours"]) / hours
     cards = [
-        _kpi_card("Installed design", f"{selected['power_mw']:.0f} MW / {selected['energy_mwh']:.0f} MWh", "Stage A selected battery"),
-        _kpi_card("Arbitrage-only value", f"?{arb['net_arbitrage_margin_gbp']:,.0f}", "Perfect-information APX MIP benchmark"),
-        _kpi_card("Firming + arbitrage", f"?{firm_arb['net_cooptimised_value_gbp']:,.0f}", "Renewable firming plus wholesale"),
-        _kpi_card("QR-only availability", f"?{qr_only['net_stacked_value_gbp']:,.0f}", "PQR + NQR availability only"),
-        _kpi_card("Arbitrage + QR", f"?{stacked['net_stacked_value_gbp']:,.0f}", "Two-use shared-battery stack"),
-        _kpi_card("Firming + market + QR", f"?{triple['net_triple_stacked_value_gbp']:,.0f}", "Three uses sharing one battery"),
+        _kpi_card("Installed design", f"{selected['power_mw']:.0f} MW / {selected['energy_mwh']:.0f} MWh", "Selected stable-design battery"),
+        _kpi_card("Arbitrage-only value", f"£{arb['net_arbitrage_margin_gbp']:,.0f}", "Perfect-information APX MIP benchmark"),
+        _kpi_card("Firming + arbitrage", f"£{firm_arb['net_cooptimised_value_gbp']:,.0f}", "Renewable firming plus wholesale"),
+        _kpi_card("QR-only availability", f"£{qr_only['net_stacked_value_gbp']:,.0f}", "PQR + NQR availability only"),
+        _kpi_card("Arbitrage + QR", f"£{stacked['net_stacked_value_gbp']:,.0f}", "Two-use shared-battery stack"),
+        _kpi_card("Firming + market + QR", f"£{triple['net_triple_stacked_value_gbp']:,.0f}", "Three uses sharing one battery"),
         _kpi_card("Triple-stack firming", f"{triple['error_reduction_pct']:.1f}%", "Renewable forecast-error reduction retained"),
-        _kpi_card("QR availability in triple", f"?{triple['quick_reserve_availability_payment_gbp']:,.0f}", "Utilisation revenue excluded"),
-        _kpi_card("Triple independent-sum overstatement", f"?{triple_double_count:,.0f}", "Double-count avoided by shared-battery optimisation"),
+        _kpi_card("QR availability in triple", f"£{triple['quick_reserve_availability_payment_gbp']:,.0f}", "Utilisation revenue excluded"),
+        _kpi_card("Triple independent-sum overstatement", f"£{triple_double_count:,.0f}", "Double-count avoided by shared-battery optimisation"),
         _kpi_card("Mean PQR / NQR", f"{mean_pqr:.1f} / {mean_nqr:.1f} MW", "Positive / negative reserve commitment"),
     ]
     default_reference = (
@@ -4612,7 +4795,7 @@ def run_quick_reserve_stacking(
     if default_reference:
         ref = QUICK_RESERVE_SUMMARY["guard_sensitivity"][str(int(guard_windows))]
         note_lines.append(html.Div(
-            f"Frozen Apr?Jun 2026 default reference: full firming + arbitrage + QR ?{ref['triple_stacked_annualised_gbp']/1e6:.2f}m/yr versus firming + arbitrage ?{ref['firming_arbitrage_annualised_gbp']/1e6:.2f}m/yr. The na?ve independent sum overstates triple-stack value by about ?{ref['triple_double_count_avoided_annualised_gbp']/1e6:.2f}m/yr, while mean renewable-error reduction remains {ref['mean_triple_error_reduction_pct']:.1f}%. This annualisation describes that 90-day regime only.",
+            f"Frozen Apr–Jun 2026 default reference: full firming + arbitrage + QR ?{ref['triple_stacked_annualised_gbp']/1e6:.2f}m/yr versus firming + arbitrage ?{ref['firming_arbitrage_annualised_gbp']/1e6:.2f}m/yr. The naïve independent sum overstates triple-stack value by about ?{ref['triple_double_count_avoided_annualised_gbp']/1e6:.2f}m/yr, while mean renewable-error reduction remains {ref['mean_triple_error_reduction_pct']:.1f}%. This annualisation describes that 90-day regime only.",
             className="scenario-note-line",
         ))
     return html.Div(note_lines), cards, _quick_reserve_figure(analysis)
@@ -4662,7 +4845,7 @@ def run_multiservice_stacking(
     mode = "BM-eligible" if assume_bm else "non-BM"
     note = html.Div([
         html.Div(
-            f"{mode} Stage 11 scenario. Balancing Reserve is {'enabled' if assume_bm else 'excluded'}; all enabled services share one physical battery MW/SOC budget.",
+            f"{mode} multi-service scenario. Balancing Reserve is {'enabled' if assume_bm else 'excluded'}; all enabled services share one physical battery MW/SOC budget.",
             className="scenario-note-line",
         ),
         html.Div(
@@ -4745,7 +4928,7 @@ def run_market_optimisation(
         _kpi_card(
             "Installed design",
             f"{selected['power_mw']:.0f} MW / {selected['energy_mwh']:.0f} MWh",
-            "Selected by the current Stage A technical design gate",
+            "Selected by the current stable-design technical gate",
         ),
         _kpi_card(
             "APX market VWAP",
@@ -4908,7 +5091,7 @@ def run_tomorrow_planning(
     forecast_figure = _tomorrow_forecast_figure(forecast)
     reserve_figure = (
         _reserve_plan_figure(forecast, reserve)
-        if reserve else _empty_figure("Stage 14 probabilistic reserve evidence is unavailable.")
+        if reserve else _empty_figure("Probabilistic reserve evidence is unavailable.")
     )
     issue = pd.Timestamp(LATEST_FORECAST["forecast_created_utc"].iloc[0]).strftime(
         "%Y-%m-%d %H:%M UTC"
@@ -4959,7 +5142,7 @@ def run_tomorrow_planning(
         ]
         locked_ref = matching.iloc[0].to_dict()
         note_parts.append(html.Div(
-            f"Stage 14 uncertainty: conditional P10/P50/P90 with an 80% central target. The current mix uses a "
+            f"Probabilistic uncertainty: conditional P10/P50/P90 with an 80% central target. The current mix uses a "
             f"{uncertainty['conformal_correction_cf']:.4f} CF conformal correction and has mean P10–P90 width "
             f"{uncertainty['mean_p10_p90_width_mw']:.2f} MW. The locked reference coverage is "
             f"{locked_ref['observed_p10_p90_coverage_pct']:.1f}% for the displayed reference technology/mix. "
@@ -4968,7 +5151,7 @@ def run_tomorrow_planning(
         ))
     else:
         note_parts.append(html.Div(
-            "Stage 14 probabilistic uncertainty is unavailable for the selected mix or forecast bundle.",
+            "Probabilistic uncertainty is unavailable for the selected mix or forecast bundle.",
             className="scenario-note-line uncertainty-warning",
         ))
 
@@ -5190,7 +5373,7 @@ def download_full_results_excel(
         sheets["Market Index Selected Day"] = pd.DataFrame({"status": ["No market-index data for selected date."]})
     sheets["Design Evidence"] = scaled_design_grid(DESIGN_GRID, portfolio_type, float(capacity_mw), float(wind_share_pct))
     sheets["BM Evidence Summary"] = _payload_frame(BM_BATTERY_EVIDENCE)
-    sheets["Stage 13 Summary"] = _payload_frame(STAGE13_SUMMARY)
+    sheets["Issue-Time Service Summary"] = _payload_frame(STAGE13_SUMMARY)
     sheets["Saved Assets"] = _payload_frame(normalise_asset_store(asset_store or []))
     sheets["Degradation Result"] = _payload_frame(degradation)
     sheets["Stochastic Result"] = _payload_frame(stochastic)
@@ -5246,7 +5429,7 @@ def download_scenario(_clicks: int, stored: str | None):
 
 @app.callback(Output("product-tabs", "value"), Input("url-state", "hash"), prevent_initial_call=False)
 def open_tab_from_hash(hash_value: str | None):
-    if hash_value == "#models-data-validation-guide":
+    if hash_value in {"#models-data-validation-guide", "#terminology-abbreviations"}:
         return "evidence"
     return no_update
 
@@ -5255,11 +5438,11 @@ def open_tab_from_hash(hash_value: str | None):
 def update_tab_intro(tab: str):
     copy = {
         "overview": ("Overview", "A quick read of the latest forecast, uncertainty, market signal and investment picture. Start here, then open a tab when you want the detail behind a number."),
-        "assets": ("Assets", "Describe the battery or renewable-plus-storage site you want to test. These inputs set the physical limits used elsewhere, so you can see how connection limits, battery health and warranties change the answer."),
-        "forecast": ("Forecast & Risk", "See what wind and solar are expected to do, how wide the uncertainty range is, and what that means for reserve and state of charge. The aim is to show the decision, not just the forecast curve."),
-        "markets": ("Markets", "Explore how the battery could earn value across wholesale, imbalance, ancillary services and the Balancing Mechanism. Evidence-backed results are separated from scenario assumptions so it is clear what is observed and what is modelled."),
-        "investment": ("Investment", "Move from daily operation to the business case. This tab brings together revenue, downside risk, cycling cost and project-finance assumptions to show what is driving value."),
-        "evidence": ("Evidence", "Use this tab when you want to check where a result came from. It brings together the model guide, assumptions, equations, validation, source provenance and the Ask the Studio evidence assistant."),
+        "assets": ("Assets", "Describe the battery energy storage system (BESS) or renewable-plus-storage site you want to test. These inputs set the physical limits used elsewhere, including state of health (SOH), connection limits and warranty constraints."),
+        "forecast": ("Forecast & Risk", "See what wind and solar are expected to do, how wide the 10th / 50th / 90th percentile (P10/P50/P90) uncertainty range is, and what that means for reserve and state of charge (SOC). The aim is to show the decision, not just the forecast curve."),
+        "markets": ("Markets", "Explore how the battery could earn value across wholesale, imbalance, ancillary services and the Balancing Mechanism (BM). Evidence-backed results are separated from scenario assumptions so it is clear what is observed and what is modelled."),
+        "investment": ("Investment", "Move from daily operation to the business case. This tab brings together net present value (NPV), internal rate of return (IRR), debt service coverage ratio (DSCR), revenue, downside risk, cycling cost and project-finance assumptions."),
+        "evidence": ("Evidence", "Use this tab when you want to check where a result came from. It brings together terminology and abbreviations, the model guide, assumptions, equations, validation, source provenance and the Ask the Studio evidence assistant."),
     }
     title, text = copy.get(tab, copy["overview"])
     return html.Div([html.H2(title), html.P(text), html.P("Tip: technical details are still available, but the first explanation is written in plain English.", className="tab-intro-tip")])
@@ -5272,7 +5455,7 @@ app.clientside_callback(
             overview: ["What matters now"],
             assets: ["My asset / site scenario", "Battery health and marginal cycling cost", "Connection, warranty and co-location envelope", "Saved-asset portfolio view"],
             forecast: ["Configure the scenario", "Future battery sizing benchmark", "Seasonal & forecast-defined regime comparison", "Forecast-day operational planning", "Renewable-only continuous-SOC stress test"],
-            markets: ["Pre-delivery wholesale + BM decision screen", "Battery BM acceptance / activation evidence", "Historical grid imbalance & System Price", "GB market-linked battery optimisation"],
+            markets: ["Pre-delivery wholesale + Balancing Mechanism (BM) decision screen", "Battery Balancing Mechanism (BM) acceptance / activation evidence", "Historical grid imbalance & System Price", "GB market-linked battery optimisation"],
             investment: ["Risk & Value decision layer", "Selected-day battery sizing (exploratory)"],
             evidence: ["Ask the Studio", "Export and inspect", "Interpretation and limits"]
         };
@@ -5285,9 +5468,10 @@ app.clientside_callback(
         });
         const guide = document.getElementById('evidence');
         if (guide) guide.style.display = tab === 'evidence' ? '' : 'none';
-        if (tab === 'evidence' && window.location.hash === '#models-data-validation-guide') {
+        if (tab === 'evidence' && ['#models-data-validation-guide', '#terminology-abbreviations'].includes(window.location.hash)) {
             window.setTimeout(function() {
-                const target = document.getElementById('models-data-validation-guide');
+                const targetId = window.location.hash.slice(1);
+                const target = document.getElementById(targetId);
                 if (target) target.scrollIntoView({behavior: 'smooth', block: 'start'});
             }, 80);
         }

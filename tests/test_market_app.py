@@ -61,7 +61,7 @@ def test_forecast_day_market_schedule_uses_price_forecast_and_stage_b_reserve() 
     assert values["Recommended start SOC"] == "50.0%"
     assert "Reserve-aware signal value" in values
     assert "Reserve opportunity cost" in values
-    assert values["Price history"] == "90 days"
+    assert values["Price history"] == f"{app.LATEST_MARKET_FORECAST_MANIFEST['retrieved_history_days']} days"
     assert len(figure.data) == 6
     names = [trace.name for trace in figure.data]
     assert "Forecast APX MIP" in names and "Reserve-aware schedule" in names and "Reserve SOC floor" in names
