@@ -35,6 +35,9 @@ def _assumption_table() -> html.Table:
         ("Availability", "95%", "User scenario", "Applied as operational uncertainty in Monte Carlo."),
         ("Debt structure", "60% debt, 6%, 10 y", "User scenario", "Constant-annuity Stage 12 screening convention."),
         ("Tax / equity hurdle / DSCR", "25% / 12% / 1.20×", "User scenario", "Simplified financing screen, not tax or lending advice."),
+        ("Stage 19 cycle-life / reference DoD", "6,000 cycles / 80%", "User scenario", "Generic throughput-wear screening default, not a supplier warranty curve."),
+        ("Stage 19 calendar fade / replacement cost", "1.5%/y / £100/kWh", "User scenario", "Used only to derive screening SOH and marginal wear cost."),
+        ("Stage 20 stochastic market screen", "7 scenarios; σ £20/MWh; 15% up/down BM activation", "User scenario", "Finite-scenario decision experiment; BM activation is not a BOA forecast."),
     ]
     return html.Table([
         html.Thead(html.Tr([html.Th("Input / convention"), html.Th("Default"), html.Th("Class"), html.Th("Interpretation")])),
@@ -183,6 +186,25 @@ def build_models_data_validation_guide(
         ], className="guide-limit-list"),
     ])
 
+    asset_workspace = _details("14. Stage 18 asset / site workspace", [
+        html.P("A saved asset is browser-local technical scenario metadata: name, location label, MW, duration, grid import/export limits and SOH. Saving a site does not create local forecast or metering evidence.", className="section-copy"),
+        _equation("Nameplate and available energy", r"E_{nameplate}=P_{BESS}h,\qquad E_{available}=E_{nameplate}\times SOH", "Grid import/export limits are retained explicitly; the generic symmetric BatteryConfig uses the conservative minimum of charge/discharge/site power when a single MW limit is required."),
+    ])
+    degradation = _details("15. Stage 19 degradation and SOH screening", [
+        html.P("The degradation layer converts transparent cycle-life, DoD, calendar-fade and replacement-cost assumptions into an indicative annual SOH trajectory and marginal throughput wear cost.", className="section-copy"),
+        _equation("Equivalent full cycles", r"EFC=\frac{Throughput_{charge+discharge}}{2E_{usable}}", "Throughput counts charge plus discharge energy. This is a generic energy-throughput measure, not chemistry-specific rainflow counting."),
+        _equation("Marginal wear cost", r"c_{wear}=\frac{Replacement\ cost}{2E_{usable}\,DoD_{ref}\,N_{cycles}}", "The result is carried into Stage 20 as an incremental £/MWh throughput penalty."),
+    ])
+    stochastic = _details("16. Stage 20 stochastic wholesale + Balancing Mechanism screen", [
+        html.P("One pre-delivery wholesale schedule and one set of BM upward/downward reserve offers are selected before a finite realised scenario is known. Scenario-wise SOC includes only the BM activations accepted in that scenario.", className="section-copy"),
+        _equation("Risk-adjusted objective", r"\max\;E[V]-\lambda\,CVaR_{\alpha}(Loss)", "All scenarios share the same offered MW and base schedule. SOC and terminal-restoration cost are checked separately in each scenario."),
+        html.P("The generic UI's BM activation probabilities and activation values are user assumptions. They are not BOA acceptance probabilities, utilisation instructions or BM settlement forecasts.", className="section-copy"),
+    ])
+    analyst = _details("17. Stage 21 explainable evidence analyst", [
+        html.P("Ask the Studio performs deterministic natural-language evidence retrieval over curated current outputs and scenario stores. It returns the supporting evidence keys, provenance and limitations with each answer.", className="section-copy"),
+        html.P("No external generative model or web search is used inside this release. An unsupported question returns a low-confidence evidence-gap response instead of inventing an answer.", className="section-copy"),
+    ])
+
     return html.Section([
         html.Div([
             html.Div("TECHNICAL TRANSPARENCY", className="eyebrow"),
@@ -192,4 +214,5 @@ def build_models_data_validation_guide(
         html.Div(workflow, className="guide-workflow-wrap"),
         probabilistic, battery, reserve, market, acceptance, economics, finance,
         spatial, controls, provenance, assumptions, limits, reproducibility,
+        asset_workspace, degradation, stochastic, analyst,
     ], id="models-data-validation-guide", className="download-section methodology-guide")

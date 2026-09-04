@@ -28,6 +28,7 @@ from engine.battery import BatteryConfig, simulate_reactive_firming
 from engine.asset_workspace import AssetConfig, delete_asset, get_asset, normalise_asset_store, upsert_asset
 from engine.degradation import DegradationConfig, annual_degradation_screen
 from engine.stochastic_bidding import StochasticBiddingConfig, build_stochastic_market_scenarios, optimise_stochastic_wholesale_bm
+from engine.analyst import EvidenceRecord, answer_evidence_question
 from engine.design_sizing import select_stable_design
 from engine.frontier import build_risk_value_frontier
 from engine.forecast_handoff import assess_forecast_freshness, select_forecast_bundle, validate_national_forecast
@@ -2254,6 +2255,18 @@ app.layout = html.Div(
                     dcc.Graph(id="stoch-chart", config={"displayModeBar": False}),
                     html.P("BM boundary: activation probabilities and activation values are explicit user scenarios in this generic release. They are not a forecast of actual BOA acceptance, utilisation settlement or National Grid ESO dispatch instructions.", className="control-help"),
                 ], className="download-section stochastic-section"),
+                html.Section([
+                    html.Div("STAGE 21 · EXPLAINABLE EVIDENCE ANALYST", className="eyebrow dark-eyebrow"),
+                    html.H2("Ask the Studio"),
+                    html.P("Ask a natural-language question about forecast uncertainty, a saved asset, degradation, stochastic market bidding, ancillary services, investment, project finance, spatial modelling, assumptions or sources. Answers are retrieved only from the Studio evidence registry and always expose provenance and limitations.", className="section-copy"),
+                    dcc.Input(id="analyst-question", type="text", debounce=True, placeholder="e.g. Why is the default NPV negative, and what is the source?", className="analyst-input"),
+                    html.Div([
+                        html.Button("Ask evidence analyst", id="analyst-ask", n_clicks=0, className="primary-button"),
+                        html.A("Open full methods guide", href="#models-data-validation-guide", className="secondary-button analyst-guide-link"),
+                    ], className="analyst-actions"),
+                    html.Div(id="analyst-answer", className="analyst-answer"),
+                    html.P("Grounding boundary: this release is deterministic retrieval + evidence composition, not an external generative LLM. If evidence is absent, it says so instead of filling the gap from general knowledge.", className="control-help"),
+                ], className="download-section analyst-section"),
                 html.Section(
                     [
                         html.Div(
@@ -3033,6 +3046,136 @@ app.layout = html.Div(
     className="app-shell",
 )
 
+
+def _build_analyst_records(selected, asset_data, degradation, stochastic):
+    records = []
+    p14 = PROBABILISTIC_SUMMARY["locked_reference"]["mixed_50_50"]
+    records.append(EvidenceRecord(
+        key="stage14_forecast", title="Stage 14 probabilistic renewable forecast",
+        summary=f"The mixed 50/50 P10-P90 model is a prior-data residual post-processor around the frozen V2 schedule. Locked coverage is {p14['observed_p10_p90_coverage_pct']:.1f}% with mean width {p14['mean_p10_p90_width_cf']:.4f} CF.",
+        facts={"locked days": int(p14["days"]), "P10-P90 coverage": f"{p14['observed_p10_p90_coverage_pct']:.1f}%", "P50 MAE": f"{p14['p50_mae_cf']:.4f} CF"},
+        sources=("models/probabilistic_quantiles.joblib", "outputs/probabilistic/stage14_summary.json", "data/historical_backtest.csv"),
+        limitations=("Statistical residual quantiles, not ECMWF ensemble-member probabilities.",),
+        keywords=("forecast uncertainty p10 p50 p90 quantile residual reserve soc",),
+        formulas=("P_q(t) = clip(V2 forecast + conditional residual quantile +/- conformal correction, 0, 1)",),
+    ))
+    asset = get_asset(asset_data, selected)
+    if asset:
+        records.append(EvidenceRecord(
+            key="stage18_asset", title=f"Stage 18 saved asset: {asset.asset_name}",
+            summary=f"Saved technical scenario: {asset.power_mw:.1f} MW / {asset.nameplate_energy_mwh:.1f} MWh at {100*asset.state_of_health_fraction:.0f}% SOH, with {asset.grid_import_limit_mw:.1f} MW import and {asset.grid_export_limit_mw:.1f} MW export limits.",
+            facts={"location": asset.location_label or "not specified", "available energy": f"{asset.available_energy_mwh:.1f} MWh", "effective charge/discharge": f"{asset.effective_charge_power_mw:.1f}/{asset.effective_discharge_power_mw:.1f} MW"},
+            sources=("browser-local Stage 18 asset-store",),
+            limitations=("Technical scenario metadata only; no site metering, connection study or local error history is inferred.",),
+            keywords=("asset site bess battery grid import export location saved configuration",),
+        ))
+
+    if degradation:
+        records.append(EvidenceRecord(
+            key="stage19_degradation", title="Stage 19 degradation and SOH screen",
+            summary=f"Current assumptions imply marginal wear cost £{degradation.get('marginal_wear_cost_gbp_per_mwh_throughput',0):.2f}/MWh throughput and indicative end-year SOH {100*degradation.get('end_state_of_health_fraction',0):.1f}%.",
+            facts={"annual EFC": f"{degradation.get('equivalent_full_cycles',0):.0f}", "usable energy": f"{degradation.get('usable_energy_mwh',0):.1f} MWh", "annual wear allocation": f"£{degradation.get('estimated_wear_cost_gbp',0):,.0f}"},
+            sources=("engine/degradation.py", "Stage 19 user assumptions"),
+            limitations=("Throughput + calendar screen; not chemistry-, temperature- or warranty-specific.",),
+            keywords=("degradation wear soh health cycle cycling lifetime replacement cost",),
+            formulas=("EFC = total throughput / (2 x usable energy)", "marginal wear cost = replacement cost / assumed lifetime total throughput"),
+        ))
+    if stochastic:
+        records.append(EvidenceRecord(
+            key="stage20_stochastic_bm", title="Stage 20 stochastic wholesale + BM screen",
+            summary=f"Latest seven-scenario screen: expected net value £{stochastic.get('expected_net_value_gbp',0):,.0f}; P10/P50/P90 £{stochastic.get('p10_net_value_gbp',0):,.0f}/£{stochastic.get('p50_net_value_gbp',0):,.0f}/£{stochastic.get('p90_net_value_gbp',0):,.0f}; 90% CVaR loss £{stochastic.get('cvar_loss_gbp',0):,.0f}.",
+            facts={"average BM up offer": f"{stochastic.get('average_bm_up_offer_mw',0):.1f} MW", "average BM down offer": f"{stochastic.get('average_bm_down_offer_mw',0):.1f} MW", "throughput cost": f"£{stochastic.get('throughput_cost_gbp_per_mwh',0):.2f}/MWh"},
+            sources=("data/latest_market_price_forecast.csv", "engine/stochastic_bidding.py", "Stage 20 user BM scenarios"),
+            limitations=("BM activation probability/value are user scenarios, not BOA acceptance or utilisation forecasts.",),
+            keywords=("stochastic market wholesale bm balancing mechanism bid offer cvar risk dispatch",),
+            formulas=("max expected net value - risk_aversion x CVaR(loss), subject to scenario-wise SOC and shared MW constraints",),
+        ))
+
+    mi = MARKET_INVESTMENT_SUMMARY["scenarios"]["forecast_wholesale_420d"]
+    mia = MARKET_INVESTMENT_SUMMARY["assumptions"]
+    records.append(EvidenceRecord(
+        key="stage10_investment", title="Stage 10 market-backed investment case",
+        summary=f"The 420-day forecast-selected wholesale case provides about £{mi['annual_operating_value_gbp']/1e6:.2f}m/year but has NPV £{mi['npv_gbp']/1e6:.1f}m and BCR {mi['benefit_cost_ratio']:.2f} under the default cost assumptions. The gap is driven primarily by lifecycle cost relative to operating value.",
+        facts={"CAPEX": f"£{mia['total_capex_gbp']/1e6:.1f}m", "fixed OPEX": f"£{mia['fixed_opex_gbp_per_year']/1e6:.2f}m/y", "break-even operating value": f"£{mi['minimum_annual_market_value_for_zero_npv_gbp']/1e6:.2f}m/y", "max CAPEX at NPV=0": f"£{mi['maximum_capex_for_zero_npv_gbp']/1e6:.2f}m"},
+        sources=("outputs/market_investment/market_investment_summary.json", "outputs/market_optimisation/pre_delivery_strategy_daily.csv"),
+        limitations=("Pre-feasibility valuation; not a bankable revenue forecast or supplier cost quote.",),
+        keywords=("investment npv bcr capex opex break even economics market value negative npv",),
+        formulas=("NPV = -CAPEX + discounted operating value - discounted OPEX/replacement",),
+    ))
+    pf = PROJECT_FINANCE_REFERENCE["scenarios"]["forecast_wholesale_base"]
+    pfa = PROJECT_FINANCE_REFERENCE["default_assumptions"]
+    records.append(EvidenceRecord(
+        key="stage12_finance", title="Stage 12 project-finance screen",
+        summary=f"The conservative wholesale finance base has project NPV £{pf['project_npv_gbp']/1e6:.1f}m, equity IRR {100*pf['equity_irr_fraction']:.1f}%, minimum DSCR {pf['minimum_dscr']:.2f}x and LLCR {pf['llcr']:.2f}x.",
+        facts={"debt": f"{100*pfa['debt_fraction']:.0f}%", "interest": f"{100*pfa['debt_interest_rate']:.1f}%", "tenor": f"{pfa['debt_tenor_years']} y", "annual debt service": f"£{pf['annual_debt_service_gbp']/1e6:.2f}m"},
+        sources=("outputs/project_finance/project_finance_summary.json",),
+        limitations=("Simplified tax/debt screen; no refinancing, hedging, sculpting or lender credit decision.",),
+        keywords=("finance debt equity irr dscr llcr lender tax project finance",),
+        formulas=("DSCR = CFADS / debt service", "LLCR = PV of loan-life CFADS at debt rate / initial debt"),
+    ))
+
+    s13 = STAGE13_SUMMARY["scenarios"]["non_bm"]
+    records.append(EvidenceRecord(
+        key="stage13_ancillary", title="Stage 13 issue-time ancillary-service strategy",
+        summary=f"The non-BM May-Jun screen annualises to about £{s13['annualised_acceptance_calibrated_total_gbp']/1e6:.2f}m/year, including £{s13['annualised_acceptance_calibrated_ancillary_gbp']/1e6:.2f}m/year acceptance-calibrated ancillary value, capturing {s13['capture_vs_stage11_perfect_information_pct']:.1f}% of the matching perfect-information upper bound.",
+        facts={"eligible days": int(s13["days"]), "mean predicted acceptance": f"{s13['mean_predicted_acceptance_pct']:.1f}%", "expected accepted MW-hours": f"{s13['expected_accepted_mw_hours']:,.0f}"},
+        sources=("outputs/multiservice/stage13_issue_time_multiservice_summary.json", "outputs/multiservice/stage13_acceptance_summary.json", "NESO Enduring Auction Capability Sell Orders / clearing results"),
+        limitations=("Counterfactual expected acceptance; utilisation/performance settlement is excluded.",),
+        keywords=("ancillary quick reserve qr slow reserve dynamic response acceptance neso service bid clearing",),
+        formulas=("expected accepted MW = min(offered MW, cleared volume) x predicted acceptance x price-eligibility indicator",),
+    ))
+    records.append(EvidenceRecord(
+        key="spatial", title="Ten-zone spatial supply, demand and net-load proxy",
+        summary=f"The spatial layer allocates the authoritative national forecast across {SPATIAL_DEMAND_MANIFEST['zones']} zones using DESNZ renewable-capacity proxies, issue-time weather and DESNZ/Elexon demand-shape evidence, then reconciles zone net load back to NESO National Demand.",
+        facts={"zones": SPATIAL_DEMAND_MANIFEST["zones"], "method": SPATIAL_DEMAND_MANIFEST["method"]},
+        sources=("data/latest_spatial_forecast.csv", "data/latest_spatial_demand_forecast.csv", "DESNZ REPD", "DESNZ subnational electricity consumption", "Elexon CDCA-I029", "NESO National Demand Forecast"),
+        limitations=("Planning allocation zones, not municipal metering, feeder power flow or site-specific BESS sizing.",),
+        keywords=("spatial zone city demand net load local weather repd gsp location",),
+    ))
+    records.append(EvidenceRecord(
+        key="sources_assumptions", title="Studio sources, assumptions and evidence boundaries",
+        summary="The Studio separates authoritative GB system/settlement evidence from user assumptions and modelling proxies. The Models, Data & Validation Guide lists equations, data sources, assumptions, validation and claim boundaries.",
+        facts={"historical evidence": "V2 OOF + locked test", "wholesale reference": "Elexon APX Market Index", "ancillary source": "NESO EAC", "spatial sources": "DESNZ + Elexon + NESO"},
+        sources=("manual.py", "README.md", "data and outputs manifests/checksums"),
+        limitations=("A displayed number is not automatically an observed market value; inspect its class and source.",),
+        keywords=("source reference provenance assumption evidence methodology validation manual data",),
+    ))
+    return records
+
+
+@app.callback(
+    Output("analyst-answer", "children"),
+    Input("analyst-ask", "n_clicks"),
+    State("analyst-question", "value"), State("asset-select", "value"),
+    State("asset-store", "data"), State("degradation-store", "data"),
+    State("stochastic-store", "data"), prevent_initial_call=True,
+)
+def ask_evidence_analyst(_clicks, question, selected, asset_data, degradation, stochastic):
+    if not question or not str(question).strip():
+        return html.Div("Enter a question first.", className="uncertainty-warning")
+    answer = answer_evidence_question(
+        str(question), _build_analyst_records(selected, asset_data, degradation, stochastic)
+    )
+    evidence_items = [
+        html.Li([html.Strong(item["title"]), html.Span(" · "), html.Code(item["key"])])
+        for item in answer["evidence"]
+    ]
+    source_items = [html.Li(html.Code(source)) for source in answer["sources"]]
+    limit_items = [html.Li(limit) for limit in answer["limitations"]]
+    formula_items = [html.Li(html.Code(formula)) for formula in answer["formulas"]]
+    children = [
+        html.Div([html.Span(f"Grounding confidence: {answer['confidence'].upper()}", className=f"analyst-confidence analyst-{answer['confidence']}")]),
+        html.P(answer["answer"], className="analyst-main-answer"),
+    ]
+    if evidence_items:
+        children.extend([html.H4("Evidence used"), html.Ul(evidence_items)])
+    if formula_items:
+        children.extend([html.H4("Formulation"), html.Ul(formula_items)])
+    if source_items:
+        children.extend([html.H4("Provenance"), html.Ul(source_items)])
+    if limit_items:
+        children.extend([html.H4("Limits"), html.Ul(limit_items)])
+    return html.Div(children)
 
 @app.callback(
     Output("stoch-summary", "children"), Output("stoch-chart", "figure"), Output("stochastic-store", "data"),

@@ -258,7 +258,7 @@ Stage 17 moves the Studio from a generic dashboard aesthetic toward a compact GB
 - direct comparison against the prior rolling residual envelope;
 - forecast-day reserve/headroom and safe-SOC planning driven by P10/P90 tails.
 
-### Stage 16 - validated cross-repository forecast handoff (in progress)
+### Stage 16 - validated cross-repository forecast handoff (implemented)
 
 - schema/period/target-date validation before a V2 bundle is accepted;
 - explicit CURRENT / STALE_TARGET / STALE_ISSUE health status;
@@ -271,6 +271,31 @@ Stage 17 moves the Studio from a generic dashboard aesthetic toward a compact GB
 - frozen regime thresholds derived from development-OOF forecast quantities only;
 - regime-level firming, Stage 14 interval and market-value diagnostics;
 - explicit warning that these are operational forecast regimes, not formal meteorological weather-regime classifications.
+
+### Stage 18 - asset / site workspace (implemented)
+
+- browser-local saved technical asset profiles with MW, MWh/duration, location label, grid import/export limits and SOH;
+- explicit separation between site assumptions and national/proxy evidence;
+- conservative conversion to the common physical battery contract when a symmetric limit is required.
+
+### Stage 19 - degradation and SOH (implemented)
+
+- usable-energy tracking from nameplate capacity and state of health;
+- equivalent-full-cycle, calendar-fade and replacement-cost screening;
+- marginal £/MWh throughput wear cost passed into the Stage 20 dispatch objective.
+
+### Stage 20 - stochastic wholesale + BM bidding (implemented)
+
+- finite pre-delivery wholesale-price and BM-activation scenarios;
+- one common wholesale schedule and BM reserve offer across all scenarios;
+- scenario-wise SOC feasibility, terminal restoration cost and CVaR risk penalty;
+- BM activation probabilities/values remain explicit user scenarios, not a BOA forecast.
+
+### Stage 21 - explainable evidence analyst (implemented)
+
+- natural-language retrieval over current Studio evidence and saved scenario state;
+- answers expose supporting evidence keys, internal source artefacts/formulations and limitations;
+- no external generative model is used; evidence gaps are returned explicitly.
 
 ### Release 4
 
