@@ -59,6 +59,17 @@ Versioned historical forecast bundle
 
 The `engine/` package contains no Dash code. This makes the equations independently testable and leaves a clean path to a future API or alternative frontend.
 
+
+## Installable PWA
+
+The deployed Studio is also an installable Progressive Web App. It keeps the existing Dash/Python analytical backend, while adding a mobile-app shell with a web manifest, home-screen icons, standalone display mode, service-worker registration, connectivity status and an explicit offline fallback page.
+
+- **iPhone/iPad:** open the Studio in Safari, tap **Share**, then **Add to Home Screen**.
+- **Android/Chromium:** use the in-app **Install app** button when the browser install prompt is available, or choose **Install app / Add to Home screen** from the browser menu.
+- **Desktop Chromium:** the same install control can create a standalone desktop app window.
+
+The PWA does **not** claim full offline optimisation. Live forecasts, market refreshes and Dash callbacks still require a network connection. The offline page makes that boundary explicit instead of presenting stale results as current.
+
 ## Reactive firming strategy
 
 For each half-hour:

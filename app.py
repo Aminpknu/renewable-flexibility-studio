@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from dash import Dash, Input, Output, State, ctx, dcc, html, no_update
+from flask import make_response, send_from_directory
 from plotly.subplots import make_subplots
 
 from adapters.design_grid import load_design_grid, scaled_design_grid
@@ -196,6 +197,47 @@ SPATIAL_ZONE_OPTIONS = sorted(LATEST_SPATIAL_FORECAST["zone"].dropna().unique().
 
 app = Dash(__name__, title="Renewable Flexibility Studio")
 server = app.server
+
+app.index_string = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  {%metas%}
+  <meta name="theme-color" content="#102b2a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Flex Studio">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+  <title>{%title%}</title>
+  {%favicon%}
+  {%css%}
+</head>
+<body>
+  {%app_entry%}
+  <footer>{%config%}{%scripts%}{%renderer%}</footer>
+</body>
+</html>"""
+
+
+@server.route("/manifest.webmanifest")
+def pwa_manifest():
+    response = make_response(send_from_directory(ROOT / "assets", "manifest.webmanifest", mimetype="application/manifest+json"))
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+@server.route("/service-worker.js")
+def pwa_service_worker():
+    response = make_response(send_from_directory(ROOT / "pwa", "service-worker.js", mimetype="application/javascript"))
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Service-Worker-Allowed"] = "/"
+    return response
+
+
+@server.route("/offline.html")
+def pwa_offline_page():
+    return send_from_directory(ROOT / "assets", "offline.html", mimetype="text/html")
 
 
 def _empty_figure(message: str) -> go.Figure:
@@ -2205,6 +2247,15 @@ app.layout = html.Div(
         dcc.Store(id="stochastic-store"),
         dcc.Download(id="scenario-download"),
         dcc.Download(id="full-excel-download"),
+        html.Div([
+            html.Div([
+                html.Div("INSTALL FLEX STUDIO", className="eyebrow dark-eyebrow"),
+                html.H3("Add the Studio to your home screen"),
+                html.P("Install it for a full-screen app experience. Live forecasts and calculations still need an internet connection."),
+                html.P("Use your browser's install option.", id="pwa-install-help-text", className="control-help"),
+                html.Button("Close", id="pwa-install-close", n_clicks=0, className="secondary-button"),
+            ], className="pwa-install-card"),
+        ], id="pwa-install-help", className="pwa-install-help", style={"display": "none"}),
         html.Header(
             [
                 html.Div("RENEWABLE FLEXIBILITY STUDIO", className="eyebrow"),
@@ -2213,11 +2264,15 @@ app.layout = html.Div(
                     "A GB renewable and storage decision workspace linking forecast uncertainty, battery readiness, market opportunity and investment evidence.",
                     className="subtitle",
                 ),
-                html.A(
-                    "Models, Data & Validation Guide",
-                    href="#models-data-validation-guide",
-                    className="secondary-button guide-jump-link",
-                ),
+                html.Div([
+                    html.A(
+                        "Models, Data & Validation Guide",
+                        href="#models-data-validation-guide",
+                        className="secondary-button guide-jump-link",
+                    ),
+                    html.Button("Install app", id="pwa-install-button", n_clicks=0, className="secondary-button pwa-install-button"),
+                    html.Span("Online", id="pwa-connectivity", className="pwa-connectivity"),
+                ], className="hero-actions"),
                 html.Div([
                     html.Div([html.Strong("01 Forecast"), "Wind / solar schedule"], className="decision-step"),
                     html.Div([html.Strong("02 Uncertainty"), "P10 / P50 / P90"], className="decision-step"),
@@ -3167,7 +3222,7 @@ app.layout = html.Div(
                 ),
             ]
         ),
-        html.Footer("Standalone analytical prototype · source data exchanged through a versioned file contract"),
+        html.Footer("Installable PWA · standalone analytical prototype · source data exchanged through a versioned file contract"),
     ],
     className="app-shell",
 )
