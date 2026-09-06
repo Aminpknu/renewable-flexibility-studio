@@ -169,7 +169,7 @@ def test_operational_market_forecast_pipeline_artifacts() -> None:
     canonical = csv_path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
     assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == manifest["sha256"]
     assert status["pipeline_status"] in {
-        "PUBLISHED", "RETAINED_PRE_DELIVERY_BUNDLE", "FALLBACK_RETAINED",
+        "PUBLISHED", "RETAINED_LIVE_BUNDLE", "RETAINED_PRE_DELIVERY_BUNDLE", "FALLBACK_RETAINED",
         "FALLBACK_RESTORED", "RENEWABLE_TARGET_STALE",
     }
     assert status["bundle_health"]["status"] in {
