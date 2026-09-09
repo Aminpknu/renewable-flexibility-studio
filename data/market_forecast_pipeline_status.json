@@ -1,13 +1,17 @@
 {
-  "pipeline_status": "RETAINED_LIVE_BUNDLE",
+  "pipeline_status": "PUBLISHED",
+  "publication_mode": {
+    "csv": "ATOMIC_REPLACE",
+    "manifest": "ATOMIC_REPLACE"
+  },
   "bundle_health": {
     "status": "LIVE",
-    "target_date": "2026-09-09",
-    "expected_target_date": "2026-09-09",
-    "forecast_created_utc": "2026-09-08T14:31:53.822675+00:00",
-    "target_start_utc": "2026-09-08T23:00:00+00:00",
+    "target_date": "2026-09-10",
+    "expected_target_date": "2026-09-10",
+    "forecast_created_utc": "2026-09-09T20:55:40.720949+00:00",
+    "target_start_utc": "2026-09-09T23:00:00+00:00",
     "issued_before_target_start": true,
-    "age_hours_at_target_start": 8.468382590277779
+    "age_hours_at_target_start": 2.0720219586111113
   },
-  "expected_target_date": "2026-09-09"
+  "expected_target_date": "2026-09-10"
 }
