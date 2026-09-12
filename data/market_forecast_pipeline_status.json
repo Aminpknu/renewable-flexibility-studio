@@ -1,9 +1,5 @@
 {
-  "pipeline_status": "PUBLISHED",
-  "publication_mode": {
-    "csv": "ATOMIC_REPLACE",
-    "manifest": "ATOMIC_REPLACE"
-  },
+  "pipeline_status": "RETAINED_LIVE_BUNDLE",
   "bundle_health": {
     "status": "LIVE",
     "target_date": "2026-09-13",
