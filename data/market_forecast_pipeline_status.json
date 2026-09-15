@@ -1,13 +1,22 @@
 {
-  "pipeline_status": "RETAINED_LIVE_BUNDLE",
+  "pipeline_status": "RENEWABLE_TARGET_STALE",
   "bundle_health": {
-    "status": "LIVE",
+    "status": "STALE_TIME",
     "target_date": "2026-09-14",
     "expected_target_date": "2026-09-14",
     "forecast_created_utc": "2026-09-13T20:46:36.011929+00:00",
     "target_start_utc": "2026-09-13T23:00:00+00:00",
     "issued_before_target_start": true,
     "age_hours_at_target_start": 2.2233300197222223
+  },
+  "candidate_health": {
+    "status": "STALE_TIME",
+    "target_date": "2026-09-14",
+    "expected_target_date": "2026-09-14",
+    "forecast_created_utc": "2026-09-15T14:58:52.416308+00:00",
+    "target_start_utc": "2026-09-13T23:00:00+00:00",
+    "issued_before_target_start": false,
+    "age_hours_at_target_start": -39.98122675222223
   },
   "expected_target_date": "2026-09-14"
 }
