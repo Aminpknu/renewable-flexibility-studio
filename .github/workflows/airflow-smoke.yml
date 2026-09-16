@@ -33,6 +33,13 @@ jobs:
         run: python -m pip install "boto3>=1.40,<2"
       - name: Initialise Airflow metadata database
         run: airflow db migrate
+      - name: Show DAG diagnostics
+        run: |
+          echo "DAGS_FOLDER=$AIRFLOW__CORE__DAGS_FOLDER"
+          find "$AIRFLOW__CORE__DAGS_FOLDER" -maxdepth 2 -type f -print
+          python airflow/dags/rfs_cloud_pipeline.py || true
+          airflow dags list-import-errors || true
+          airflow dags list || true
       - name: Verify DAG discovery
         run: airflow dags list | grep rfs_validated_bundle_to_s3
       - name: Execute validation task
