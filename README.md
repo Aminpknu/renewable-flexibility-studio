@@ -1,6 +1,7 @@
 # Renewable Flexibility Studio
 
 [![Tests](https://github.com/Aminpknu/renewable-flexibility-studio/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/Aminpknu/renewable-flexibility-studio/actions/workflows/tests.yml)
+[![Airflow DAG smoke](https://github.com/Aminpknu/renewable-flexibility-studio/actions/workflows/airflow-smoke.yml/badge.svg?branch=main)](https://github.com/Aminpknu/renewable-flexibility-studio/actions/workflows/airflow-smoke.yml)
 [![Live PWA](https://img.shields.io/badge/Live-PWA-0d6b5f)](https://renewable-flexibility-studio.onrender.com/)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
@@ -351,6 +352,7 @@ Stage 17 moves the Studio from a generic dashboard aesthetic toward a compact GB
 
 - `cloud/s3_publish.py` publishes a compact validated release to a private S3 prefix with size/SHA-256 provenance and a versioned manifest;
 - `airflow/dags/rfs_cloud_pipeline.py` orchestrates validate → publish → verify with retries while passing only compact manifest metadata between tasks;
+- the complete DAG is executed in Ubuntu CI on Airflow 3.3.1 against an isolated S3-compatible test service, including release publication and checksum verification;
 - no AWS credentials are stored in the repository; local development can use temporary profiles and hosted AWS deployments should use IAM roles;
 - the Dash/Render application remains usable without S3, Airflow or Bedrock. See `docs/AWS_AGENTIC_UPGRADE.md`.
 
