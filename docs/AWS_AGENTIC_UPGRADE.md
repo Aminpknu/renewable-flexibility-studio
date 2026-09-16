@@ -103,4 +103,4 @@ On 16 September 2026 the local integration was exercised against the `energy-ops
 - Bedrock/Nova Lite successfully selected `search_studio_evidence` and returned a supplementary grounded interpretation while the deterministic answer remained visible.
 - The cloud publisher uploaded 13 compact forecast, reserve, market, investment, finance and risk artefacts to the private S3 release prefix.
 - Post-publish verification re-read all 13 objects and confirmed both byte size and SHA-256 checksum integrity.
-- The Airflow DAG is syntax-checked in this repository; runtime execution remains environment-dependent and should be performed in Linux/WSL/container or managed Airflow before claiming deployed Airflow operation.
+- The Airflow 3.3.1 DAG is exercised in Ubuntu CI: metadata-database migration, DAG reserialization/discovery and `validate_bundle` task execution pass. The live S3 publish/verify path is validated separately under the least-privilege `energy-ops-dev` IAM identity; CI stores no AWS credentials.
