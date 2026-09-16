@@ -20,26 +20,60 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Configure Airflow environment
+      - name: Configure Airflow and local S3 test environment
         run: |
           echo "AIRFLOW_HOME=$RUNNER_TEMP/airflow" >> "$GITHUB_ENV"
           echo "AIRFLOW__CORE__DAGS_FOLDER=$GITHUB_WORKSPACE/airflow/dags" >> "$GITHUB_ENV"
           echo "PYTHONPATH=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+          echo "RFS_S3_BUCKET=rfs-ci" >> "$GITHUB_ENV"
+          echo "RFS_S3_PREFIX=ci/renewable-flexibility-studio" >> "$GITHUB_ENV"
+          echo "RFS_RELEASE_REVISION=$GITHUB_SHA" >> "$GITHUB_ENV"
+          echo "RFS_AWS_REGION=eu-west-2" >> "$GITHUB_ENV"
+          echo "RFS_S3_ENDPOINT_URL=http://127.0.0.1:5000" >> "$GITHUB_ENV"
+          echo "AWS_ACCESS_KEY_ID=testing" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=testing" >> "$GITHUB_ENV"
       - name: Install Airflow
         run: >-
           python -m pip install apache-airflow==3.3.1
           --constraint https://raw.githubusercontent.com/apache/airflow/constraints-3.3.1/constraints-3.12.txt
-      - name: Install boto3
-        run: python -m pip install "boto3>=1.40,<2"
+      - name: Install cloud test dependencies
+        run: python -m pip install "boto3>=1.40,<2" "moto[server]>=5,<6"
+      - name: Start local S3-compatible test service
+        run: |
+          moto_server -H 127.0.0.1 -p 5000 > "$RUNNER_TEMP/moto.log" 2>&1 &
+          python - <<'PY'
+          import time, urllib.request
+          for _ in range(30):
+              try:
+                  urllib.request.urlopen("http://127.0.0.1:5000", timeout=1)
+                  break
+              except Exception:
+                  time.sleep(1)
+          else:
+              raise SystemExit("Moto server did not start")
+          PY
+      - name: Create CI bucket
+        run: |
+          python - <<'PY'
+          import boto3
+          s3 = boto3.client("s3", endpoint_url="http://127.0.0.1:5000", region_name="eu-west-2")
+          s3.create_bucket(Bucket="rfs-ci", CreateBucketConfiguration={"LocationConstraint": "eu-west-2"})
+          PY
       - name: Initialise Airflow metadata database
         run: airflow db migrate
       - name: Parse and serialize DAGs
         run: airflow dags reserialize
-      - name: Show DAG diagnostics
-        run: |
-          airflow dags list-import-errors || true
-          airflow dags list
       - name: Verify DAG discovery
         run: airflow dags list | grep rfs_validated_bundle_to_s3
-      - name: Execute validation task
-        run: airflow tasks test rfs_validated_bundle_to_s3 validate_bundle 2026-09-15
+      - name: Execute complete DAG
+        run: airflow dags test rfs_validated_bundle_to_s3 2026-09-15
+      - name: Verify published manifest exists
+        run: |
+          python - <<'PY'
+          import boto3, os
+          s3 = boto3.client("s3", endpoint_url=os.environ["RFS_S3_ENDPOINT_URL"], region_name="eu-west-2")
+          key = "ci/renewable-flexibility-studio/manifests/latest.json"
+          body = s3.get_object(Bucket="rfs-ci", Key=key)["Body"].read()
+          assert b'"artifact_count": 13' in body
+          print("AIRFLOW_FULL_DAG_S3_VERIFY_OK")
+          PY

@@ -79,7 +79,10 @@ def _build_s3_client():
     kwargs = {"region_name": region}
     if profile:
         kwargs["profile_name"] = profile
-    return boto3.Session(**kwargs).client("s3")
+    session = boto3.Session(**kwargs)
+    endpoint_url = os.getenv("RFS_S3_ENDPOINT_URL") or os.getenv("AWS_ENDPOINT_URL_S3") or None
+    client_kwargs = {"endpoint_url": endpoint_url} if endpoint_url else {}
+    return session.client("s3", **client_kwargs)
 
 
 def _object_key(prefix: str, relative_path: str) -> str:
