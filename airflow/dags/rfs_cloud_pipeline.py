@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 
 import pendulum
-from airflow.decorators import dag, task
+from airflow.sdk import dag, task
 
 from cloud.s3_publish import DEFAULT_ARTIFACTS, build_release_manifest, publish_release, verify_release
 
