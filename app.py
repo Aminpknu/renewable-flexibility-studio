@@ -32,6 +32,7 @@ from engine.degradation import DegradationConfig, annual_degradation_screen
 from engine.site_constraints import SiteConstraintConfig, site_capability
 from engine.stochastic_bidding import StochasticBiddingConfig, build_stochastic_market_scenarios, optimise_stochastic_wholesale_bm
 from engine.analyst import EvidenceRecord, answer_evidence_question
+from engine.bedrock_analyst import BedrockAnalystConfig, answer_with_bedrock
 from engine.design_sizing import select_stable_design
 from engine.frontier import build_risk_value_frontier
 from engine.forecast_handoff import assess_forecast_freshness, select_forecast_bundle, validate_national_forecast
@@ -2584,14 +2585,14 @@ app.layout = html.Div(
                 html.Section([
                     html.Div("ASK THE STUDIO", className="eyebrow dark-eyebrow"),
                     html.H2("Ask the Studio"),
-                    html.P("Ask the Studio a normal question, for example: Why is the NPV negative? What is driving the reserve recommendation? Where did this assumption come from? The answer is grounded in the Studio evidence and shows the source and limitations instead of guessing.", className="section-copy"),
+                    html.P("Ask the Studio a normal question, for example: Why is the NPV negative? What is driving the reserve recommendation? Where did this assumption come from? Validated Studio evidence remains authoritative; when the optional AWS Bedrock copilot is enabled, it can select the evidence tool and add a concise interpretation without replacing the facts, sources or limitations.", className="section-copy"),
                     dcc.Input(id="analyst-question", type="text", debounce=True, placeholder="e.g. Why is the default NPV negative, and what is the source?", className="analyst-input"),
                     html.Div([
-                        html.Button("Ask evidence analyst", id="analyst-ask", n_clicks=0, className="primary-button"),
+                        html.Button("Ask evidence copilot", id="analyst-ask", n_clicks=0, className="primary-button"),
                         html.A("Open full methods guide", href="#models-data-validation-guide", className="secondary-button analyst-guide-link"),
                     ], className="analyst-actions"),
                     html.Div(id="analyst-answer", className="analyst-answer"),
-                    html.P("Grounding boundary: this release is deterministic retrieval + evidence composition, not an external generative large language model (LLM). If evidence is absent, it says so instead of filling the gap from general knowledge.", className="control-help"),
+                    html.P("Grounding boundary: the deterministic baseline is not an external generative large language model (LLM) and remains the source of truth. The AWS Bedrock layer is optional and feature-gated; if disabled, unavailable or unsupported by the evidence, the Studio falls back to the deterministic answer instead of filling gaps from general knowledge.", className="control-help"),
                 ], className="download-section analyst-section"),
                 html.Section(
                     [
@@ -3570,8 +3571,10 @@ def update_site_envelope(power, duration, imp, exp, soh, ramp, aux, grid_charge,
 def ask_evidence_analyst(_clicks, question, selected, asset_data, degradation, stochastic):
     if not question or not str(question).strip():
         return html.Div("Enter a question first.", className="uncertainty-warning")
-    answer = answer_evidence_question(
-        str(question), _build_analyst_records(selected, asset_data, degradation, stochastic)
+    answer = answer_with_bedrock(
+        str(question),
+        _build_analyst_records(selected, asset_data, degradation, stochastic),
+        config=BedrockAnalystConfig.from_env(),
     )
     evidence_items = [
         html.Li([html.Strong(item["title"]), html.Span(" · "), html.Code(item["key"])])
@@ -3580,10 +3583,23 @@ def ask_evidence_analyst(_clicks, question, selected, asset_data, degradation, s
     source_items = [html.Li(html.Code(source)) for source in answer["sources"]]
     limit_items = [html.Li(limit) for limit in answer["limitations"]]
     formula_items = [html.Li(html.Code(formula)) for formula in answer["formulas"]]
+    mode_label = "AWS BEDROCK + VALIDATED EVIDENCE" if answer.get("mode") == "hybrid" else "DETERMINISTIC VALIDATED EVIDENCE"
     children = [
-        html.Div([html.Span(f"Grounding confidence: {answer['confidence'].upper()}", className=f"analyst-confidence analyst-{answer['confidence']}")]),
+        html.Div([
+            html.Span(f"Grounding confidence: {answer['confidence'].upper()}", className=f"analyst-confidence analyst-{answer['confidence']}"),
+            html.Span(f" · {mode_label}", className="control-help"),
+        ]),
+        html.H4("Validated answer"),
         html.P(answer["answer"], className="analyst-main-answer"),
     ]
+    if answer.get("ai_explanation"):
+        children.extend([
+            html.H4("Bedrock interpretation"),
+            html.P(answer["ai_explanation"], className="analyst-main-answer"),
+            html.P("Validated Studio facts above remain authoritative; the generative text is supplementary.", className="control-help"),
+        ])
+    elif answer.get("bedrock_error") and BedrockAnalystConfig.from_env().enabled:
+        children.append(html.P("Bedrock was unavailable, so the deterministic evidence answer was used.", className="uncertainty-warning"))
     if evidence_items:
         children.extend([html.H4("Evidence used"), html.Ul(evidence_items)])
     if formula_items:

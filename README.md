@@ -29,6 +29,7 @@ A user can:
 - identify power-limited and energy-limited periods;
 - search a controlled 1h/2h/4h battery grid for the smallest tested configuration meeting a target;
 - download half-hourly calculations as CSV and export the wider result/evidence package as a multi-sheet Excel workbook;
+- ask the evidence copilot natural-language questions with deterministic facts/provenance always shown and an optional Amazon Bedrock tool-calling interpretation;
 - run a separate 450-day **continuous-SOC** benchmark and extended storage-duration diagnostic from the command line.
 
 The application now uses a **450-day out-of-sample V2 bundle** from 1 April 2025 to 30 June 2026: 360 expanding-window out-of-fold development days plus 90 locked-test days. The original one-day file is retained only as a compact unit-test fixture.
@@ -86,6 +87,16 @@ Versioned historical forecast bundle
 
 The `engine/` package contains no Dash code. This makes the equations independently testable and leaves a clean path to a future API or alternative frontend.
 
+Optional cloud/agentic extension:
+
+```text
+validated local bundles ──→ Airflow validate/publish/verify ──→ private Amazon S3
+          │
+          └──→ deterministic Stage 21 evidence tool ──→ optional Amazon Bedrock copilot
+                                                       └──→ supplementary explanation
+```
+
+The deterministic engine/evidence layer remains authoritative; S3, Airflow and Bedrock are additive and feature-gated.
 
 ## Installable PWA
 
@@ -331,9 +342,17 @@ Stage 17 moves the Studio from a generic dashboard aesthetic toward a compact GB
 
 ### Stage 21 - explainable evidence analyst (implemented)
 
-- natural-language retrieval over current Studio evidence and saved scenario state;
+- deterministic natural-language retrieval over current Studio evidence and saved scenario state remains the authoritative baseline;
 - answers expose supporting evidence keys, internal source artefacts/formulations and limitations;
-- no external generative model is used; evidence gaps are returned explicitly.
+- an optional Amazon Bedrock tool-calling copilot can select the controlled Studio evidence tool and add supplementary interpretation;
+- Bedrock is feature-gated and falls back to the deterministic answer if disabled or unavailable; evidence gaps are still returned explicitly instead of being filled from general knowledge.
+
+### Optional AWS cloud + Airflow extension (implemented)
+
+- `cloud/s3_publish.py` publishes a compact validated release to a private S3 prefix with size/SHA-256 provenance and a versioned manifest;
+- `airflow/dags/rfs_cloud_pipeline.py` orchestrates validate → publish → verify with retries while passing only compact manifest metadata between tasks;
+- no AWS credentials are stored in the repository; local development can use temporary profiles and hosted AWS deployments should use IAM roles;
+- the Dash/Render application remains usable without S3, Airflow or Bedrock. See `docs/AWS_AGENTIC_UPGRADE.md`.
 
 ### Release 4
 

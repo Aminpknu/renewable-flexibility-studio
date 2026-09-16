@@ -24,3 +24,11 @@
 - Do not mutate shared global state inside callbacks.
 - Validate external bundles against a versioned data contract.
 - Keep dependencies minimal and run pytest after substantive changes.
+
+## Cloud and generative-AI rules
+
+- Deterministic Studio calculations and evidence records remain the authoritative source of numerical truth.
+- Any LLM layer must use validated tools/evidence and must fall back cleanly when cloud access is disabled or unavailable.
+- Never hard-code AWS credentials, access keys or tokens; use profiles/temporary credentials locally and IAM roles in hosted AWS environments.
+- Keep Airflow and S3 optional to the core Dash runtime; orchestration failures must not silently alter validated local evidence.
+- Large artefacts stay in S3/files; Airflow tasks should pass compact manifests or object references instead of whole datasets.
