@@ -2586,7 +2586,7 @@ app.layout = html.Div(
                     html.Div("ASK THE STUDIO", className="eyebrow dark-eyebrow"),
                     html.H2("Ask the Studio"),
                     html.P("Ask the Studio a normal question, for example: Why is the NPV negative? What is driving the reserve recommendation? Where did this assumption come from? Validated Studio evidence remains authoritative; when the optional AWS Bedrock copilot is enabled, it can select the evidence tool and add a concise interpretation without replacing the facts, sources or limitations.", className="section-copy"),
-                    dcc.Input(id="analyst-question", type="text", debounce=True, placeholder="e.g. Why is the default NPV negative, and what is the source?", className="analyst-input"),
+                    dcc.Textarea(id="analyst-question", placeholder="Ask a question about the forecast, battery, market, risk or investment results...", className="analyst-input", rows=4, spellCheck=True),
                     html.Div([
                         html.Button("Ask evidence copilot", id="analyst-ask", n_clicks=0, className="primary-button"),
                         html.A("Open full methods guide", href="#models-data-validation-guide", className="secondary-button analyst-guide-link"),
