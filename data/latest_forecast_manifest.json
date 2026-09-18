@@ -3,14 +3,14 @@
   "bundle_type": "latest_day_ahead_forecast",
   "source_repository": "https://github.com/Aminpknu/gb-renewable-forecast",
   "source_file": "latest_forecast.csv",
-  "source_revision": "c9ba065e690e35ef5ee34626a4c3f68ee5416e40",
-  "target_date": "2026-09-18",
-  "forecast_created_utc": "2026-09-17T12:40:49+00:00",
+  "source_revision": "ca93fb3f542fc4686000a964de5eaf0958544428",
+  "target_date": "2026-09-19",
+  "forecast_created_utc": "2026-09-18T12:18:43+00:00",
   "row_count": 48,
-  "sha256": "a0f1c521a1337df89bddd8bd67318d5ad3a66a22d1f11e096006e4264922d9a0",
+  "sha256": "21298734a8ea15abd8994711b330d9f6f8f17d06ae9a49ae656d1353e34655cb",
   "health_at_publication": {
     "status": "CURRENT",
-    "issue_age_hours": 4.362681193611111,
+    "issue_age_hours": 4.1457711816666665,
     "target_lag_days": -1
   },
   "source_summary_file": "latest_forecast_summary.json"
