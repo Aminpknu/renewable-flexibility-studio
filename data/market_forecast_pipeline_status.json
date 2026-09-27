@@ -6,12 +6,12 @@
   },
   "bundle_health": {
     "status": "LIVE",
-    "target_date": "2026-09-27",
-    "expected_target_date": "2026-09-27",
-    "forecast_created_utc": "2026-09-26T21:06:18.387752+00:00",
-    "target_start_utc": "2026-09-26T23:00:00+00:00",
+    "target_date": "2026-09-28",
+    "expected_target_date": "2026-09-28",
+    "forecast_created_utc": "2026-09-27T15:10:15.489415+00:00",
+    "target_start_utc": "2026-09-27T23:00:00+00:00",
     "issued_before_target_start": true,
-    "age_hours_at_target_start": 1.8948922911111112
+    "age_hours_at_target_start": 7.829030718055556
   },
-  "expected_target_date": "2026-09-27"
+  "expected_target_date": "2026-09-28"
 }
