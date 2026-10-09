@@ -1,7 +1,7 @@
 {
   "schema_version": "1.1",
   "target_date": "2026-10-09",
-  "forecast_created_utc": "2026-10-08T23:19:12.848872+00:00",
+  "forecast_created_utc": "2026-10-09T16:59:52.425220+00:00",
   "source": "Elexon APXMIDP Market Index Data",
   "semantic_label": "forecast of short-term GB wholesale market reference; not day-ahead auction price",
   "history_start": "2026-07-11",
@@ -20,7 +20,7 @@
   },
   "period_count": 48,
   "row_count": 48,
-  "sha256": "e9f9b563a55cc15e01f37626945363ff02960ea9c396393c5d3a95cf548dcb79",
+  "sha256": "31d67691ce61425329f90b7511598aecffe45678cf5bed5f3a84fc3c92b9a5e1",
   "sha256_normalisation": "UTF-8 text with LF line endings",
   "target_start_utc": "2026-10-08T23:00:00+00:00",
   "issued_before_target_start": false,
