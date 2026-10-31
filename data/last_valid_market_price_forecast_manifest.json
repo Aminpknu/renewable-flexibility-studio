@@ -1,15 +1,15 @@
 {
   "schema_version": "1.1",
-  "target_date": "2026-10-30",
-  "forecast_created_utc": "2026-10-29T16:54:42.992888+00:00",
+  "target_date": "2026-10-31",
+  "forecast_created_utc": "2026-10-30T22:15:54.936166+00:00",
   "source": "Elexon APXMIDP Market Index Data",
   "semantic_label": "forecast of short-term GB wholesale market reference; not day-ahead auction price",
-  "history_start": "2026-08-01",
-  "history_end": "2026-10-28",
+  "history_start": "2026-08-02",
+  "history_end": "2026-10-29",
   "retrieved_history_days": 89,
   "method": {
     "method": "expanding_ridge_calendar_and_prior_price_lags",
-    "target_date": "2026-10-30",
+    "target_date": "2026-10-31",
     "history_days": 89,
     "training_rows": 3938,
     "training_days_with_complete_features": 82,
@@ -20,9 +20,9 @@
   },
   "period_count": 48,
   "row_count": 48,
-  "sha256": "957864cdf0249bcb801496f6729bc660d0725edebb91e69ad81575382b19fdaf",
+  "sha256": "df297b16e9b24239f3743bac9e1795a6367d662020b37a71fa8ac8db5d890390",
   "sha256_normalisation": "UTF-8 text with LF line endings",
-  "target_start_utc": "2026-10-30T00:00:00+00:00",
+  "target_start_utc": "2026-10-31T00:00:00+00:00",
   "issued_before_target_start": true,
   "operational_status": "pre_delivery_issue"
 }
