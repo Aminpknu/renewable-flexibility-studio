@@ -5,13 +5,13 @@
     "manifest": "ATOMIC_REPLACE"
   },
   "bundle_health": {
-    "status": "RECONSTRUCTED",
-    "target_date": "2026-11-10",
-    "expected_target_date": "2026-11-10",
-    "forecast_created_utc": "2026-11-10T17:46:14.684322+00:00",
-    "target_start_utc": "2026-11-10T00:00:00+00:00",
-    "issued_before_target_start": false,
-    "age_hours_at_target_start": -17.770745645
+    "status": "LIVE",
+    "target_date": "2026-11-11",
+    "expected_target_date": "2026-11-11",
+    "forecast_created_utc": "2026-11-10T23:15:35.075640+00:00",
+    "target_start_utc": "2026-11-11T00:00:00+00:00",
+    "issued_before_target_start": true,
+    "age_hours_at_target_start": 0.7402567666666666
   },
-  "expected_target_date": "2026-11-10"
+  "expected_target_date": "2026-11-11"
 }
