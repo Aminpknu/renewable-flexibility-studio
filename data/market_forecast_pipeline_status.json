@@ -1,13 +1,14 @@
 {
-  "pipeline_status": "RETAINED_LIVE_BUNDLE",
+  "pipeline_status": "FALLBACK_RETAINED",
   "bundle_health": {
-    "status": "LIVE",
+    "status": "STALE_TARGET",
     "target_date": "2026-11-15",
-    "expected_target_date": "2026-11-15",
+    "expected_target_date": "2026-11-16",
     "forecast_created_utc": "2026-11-14T22:19:38.848412+00:00",
     "target_start_utc": "2026-11-15T00:00:00+00:00",
     "issued_before_target_start": true,
     "age_hours_at_target_start": 1.6725421077777778
   },
-  "expected_target_date": "2026-11-15"
+  "expected_target_date": "2026-11-16",
+  "refresh_error": "TimeoutError: The read operation timed out"
 }
